@@ -241,9 +241,11 @@ Thresholds, weighting, and industry adjustment are defined by the Constitution. 
 
 ## Implementation Status
 
-Implemented so far: shared domain models (`models/`), evidence domain models (`evidence/`), engine contracts (`contracts/`), a deterministic placeholder evidence pipeline (`pipeline/`), the reusable evaluation framework (`evaluation/`), the first complete vertical slice (`core/`) that runs evidence into a category score, an overall assessment and a recommendation, and the asset analysis flow (`analysis/`) that orchestrates that slice for a single asset, alongside configuration, logging, shared constants, and the exception hierarchy.
+Implemented so far: shared domain models (`models/`), evidence domain models (`evidence/`), engine contracts (`contracts/`), a deterministic placeholder evidence pipeline (`pipeline/`), the reusable evaluation framework (`evaluation/`), the first complete vertical slice (`core/`) that runs evidence into a category score, an overall assessment and a recommendation, the asset analysis flow (`analysis/`) that orchestrates that slice for a single asset, live market data (`data/`), and the notification channels (`communication/`), alongside configuration, logging, shared constants, and the exception hierarchy.
 
-The overall evaluation, the recommendation and the analysis flow are placeholders. The remaining category evaluators, the AIS standard scale, allocation, and data collection are not implemented yet.
+Live market data is retrieved by a provider that holds every vendor detail, so no other layer knows which source is used. A metric a source cannot provide is recorded as evidence that states why it is missing, and the rule that needs it fails; no value is ever invented to fill a gap. Because a discounted cash flow fair value is the output of a valuation model rather than a published market datum, it is reported as unavailable by nature and no placeholder number stands in for it.
+
+The overall evaluation, the recommendation, the score normalizer and the analysis flow remain placeholders: live measurements now feed a placeholder scale, so the scores they produce are not yet meaningful. The remaining category evaluators, the AIS standard scale, and allocation are not implemented yet.
 
 ---
 

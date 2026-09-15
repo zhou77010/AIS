@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from contracts.market_data_provider import MarketDataSnapshot
 from models.asset import Asset
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
@@ -24,8 +25,14 @@ class AnalysisResult:
         asset: Asset that was analysed.
         assessment: Overall assessment reached for the asset.
         recommendation: Recommendation derived from the assessment.
+        market_data: Market data the analysis was built on, or None when no
+            market data source was consulted. It is the input the run started
+            from, not a copy of anything the assessment owns, and it is what
+            lets the report and the notification state truthfully whether live
+            market data was used.
     """
 
     asset: Asset
     assessment: OverallAssessment
     recommendation: Recommendation
+    market_data: MarketDataSnapshot | None = None

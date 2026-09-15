@@ -8,9 +8,11 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from datetime import datetime
 
+from analysis.analysis_result import AnalysisResult
 from analysis.analyzer import AssetAnalyzer
-from analysis.report import generate_report
+from analysis.report import describe_data_source, generate_report
 from communication.bark import BarkNotifier
 from communication.pushplus import PushPlusNotifier
 from communication.serverchan import ServerChanNotifier
@@ -18,9 +20,9 @@ from communication.wechat import WeChatNotifier, build_message
 from communication.wecom_app import WeComAppNotifier
 from config.config import Config
 from config.logging_config import configure_logging, get_logger
+from data.yahoo_market_data_provider import YahooMarketDataProvider
 from models.asset import Asset
 from models.asset_profile import AssetProfile
-from models.recommendation import Recommendation
 from utils.constants import APP_NAME, APP_VERSION, LoggerName
 from utils.exceptions import AISException
 
@@ -57,23 +59,31 @@ class Application:
             profile=AssetProfile.UNKNOWN,
         )
 
-        result = AssetAnalyzer().analyze_result(asset)
+        result = AssetAnalyzer(YahooMarketDataProvider()).analyze_result(asset)
         for line in generate_report(result).splitlines():
             logger.info("%s", line)
 
-        self._notify(logger, result.recommendation, ticker)
+        self._notify(logger, result)
 
-    def _notify(
-        self, logger: logging.Logger, recommendation: Recommendation, symbol: str
-    ) -> None:
+    def _notify(self, logger: logging.Logger, result: AnalysisResult) -> None:
         """Send the recommendation through every configured channel.
 
         Channels are additive: configuring another channel never replaces an
         existing one. A failing channel is logged and does not stop the others;
         the run only fails when every configured channel failed.
         """
+        recommendation = result.recommendation
+        symbol = result.asset.ticker
+        generated_at = datetime.now()
+        data_source = describe_data_source(result)
+
         title = f"AIS Recommendation {symbol}"
-        message = build_message(recommendation, symbol)
+        message = build_message(
+            recommendation,
+            symbol,
+            generated_at=generated_at,
+            data_source=data_source,
+        )
         config = self._config
 
         channels: list[tuple[str, Callable[[], None]]] = []
@@ -104,7 +114,10 @@ class Application:
                 (
                     "wechat",
                     lambda: WeChatNotifier(config.wechat_webhook_url).send(
-                        recommendation, symbol
+                        recommendation,
+                        symbol,
+                        generated_at=generated_at,
+                        data_source=data_source,
                     ),
                 )
             )

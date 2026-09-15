@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from datetime import datetime
 
 from config.logging_config import get_logger
 from models.recommendation import Recommendation
@@ -18,14 +19,27 @@ _SEPARATOR = "-" * 32
 _DEFAULT_TIMEOUT_SECONDS = 10.0
 _LOGGER_NAME = "wechat"
 _CONTENT_TYPE = "application/json"
+_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-def build_message(recommendation: Recommendation, symbol: str) -> str:
-    """Build the temporary text message for one recommendation.
+def build_message(
+    recommendation: Recommendation,
+    symbol: str,
+    *,
+    generated_at: datetime,
+    data_source: str,
+) -> str:
+    """Build the text message for one recommendation.
+
+    The message states which market data the recommendation was built on, so a
+    result computed from placeholder evidence can never be mistaken for one
+    computed from live data.
 
     Args:
         recommendation: Recommendation to render.
         symbol: Symbol of the asset the recommendation is about.
+        generated_at: Moment the recommendation was produced.
+        data_source: Label describing the market data the run used.
 
     Returns:
         Message text.
@@ -37,6 +51,8 @@ def build_message(recommendation: Recommendation, symbol: str) -> str:
             f"Asset: {symbol}",
             f"Decision: {recommendation.decision_state.value}",
             f"Confidence: {recommendation.confidence:.2f}",
+            f"Data: {data_source}",
+            f"Generated: {generated_at.strftime(_TIMESTAMP_FORMAT)}",
             "Investment Thesis:",
             recommendation.investment_thesis,
             _SEPARATOR,
@@ -63,7 +79,14 @@ class WeChatNotifier:
         self._timeout_seconds = timeout_seconds
         self._logger = get_logger(_LOGGER_NAME)
 
-    def send(self, recommendation: Recommendation, symbol: str) -> None:
+    def send(
+        self,
+        recommendation: Recommendation,
+        symbol: str,
+        *,
+        generated_at: datetime,
+        data_source: str,
+    ) -> None:
         """Send one recommendation message.
 
         When no webhook is configured the message is not sent and a clear
@@ -74,6 +97,8 @@ class WeChatNotifier:
         Args:
             recommendation: Recommendation to send.
             symbol: Symbol of the asset the recommendation is about.
+            generated_at: Moment the recommendation was produced.
+            data_source: Label describing the market data the run used.
 
         Raises:
             AISException: When the webhook rejects the message.
@@ -86,12 +111,13 @@ class WeChatNotifier:
             )
             return
 
-        payload = json.dumps(
-            {
-                "msgtype": "text",
-                "text": {"content": build_message(recommendation, symbol)},
-            }
+        content = build_message(
+            recommendation,
+            symbol,
+            generated_at=generated_at,
+            data_source=data_source,
         )
+        payload = json.dumps({"msgtype": "text", "text": {"content": content}})
         request = urllib.request.Request(
             self._webhook_url,
             data=payload.encode("utf-8"),
