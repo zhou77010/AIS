@@ -1,8 +1,8 @@
 """Valuation evaluator.
 
 The first concrete evaluator. It declares the reusable valuation rules, lets the
-rule engine execute them, and delegates the assembly of the category score to
-the category assembler.
+rule engine execute them, normalizes the successful results, and delegates the
+assembly of the category score to the category assembler.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from evaluation.base_evaluator import BaseEvaluator
 from evaluation.category_assembler import CategoryAssembler
 from evaluation.evaluation_result import EvaluationResult
 from evaluation.rule_engine import RuleEngine
+from evaluation.score_normalizer import ScoreNormalizer
 from evaluation.valuation import (
     dcf_rule,
     ev_ebitda_rule,
@@ -38,6 +39,7 @@ class ValuationEvaluator(BaseEvaluator):
             dcf_rule.RULE,
         )
         self._engine = RuleEngine()
+        self._normalizer = ScoreNormalizer()
         self._assembler = CategoryAssembler(
             category=Category.VALUATION, confidence=_PLACEHOLDER_CONFIDENCE
         )
@@ -54,7 +56,7 @@ class ValuationEvaluator(BaseEvaluator):
         return self._engine.run(self._rules, evidence)
 
     def evaluate(self, evidence: EvidenceCollection) -> CategoryScore:
-        """Execute the valuation rules and assemble their category score.
+        """Execute the rules, normalize their results and assemble the score.
 
         Args:
             evidence: Evidence collected for the asset.
@@ -63,4 +65,7 @@ class ValuationEvaluator(BaseEvaluator):
             CategoryScore for the VALUATION category.
         """
         evaluation = self.collect_results(evidence)
-        return self._assembler.assemble(evaluation.results)
+        normalized = tuple(
+            self._normalizer.normalize_result(result) for result in evaluation.results
+        )
+        return self._assembler.assemble(normalized)

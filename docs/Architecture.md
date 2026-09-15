@@ -122,6 +122,7 @@ External Providers
 | Folder | Responsibility |
 | --- | --- |
 | `app/` | Application entry. |
+| `analysis/` | Asset analysis: orchestrates one analysis flow for a single asset. |
 | `config/` | Configuration management. |
 | `contracts/` | Engine contracts: the interfaces between engines. |
 | `core/` | AIS Core Engine. |
@@ -142,6 +143,8 @@ External Providers
 
 **`app/`** — Application entry. Starts the system and wires the layers together. Contains no business logic.
 
+**`analysis/`** — Asset analysis. Orchestrates one complete analysis flow for a single asset: evidence, category score, overall assessment and recommendation. Contains no business logic.
+
 **`config/`** — Configuration management. Holds all runtime configuration, including credentials and file paths. No secrets or paths are hardcoded elsewhere.
 
 **`contracts/`** — Engine contracts. The stable interfaces between engines, defined as typing protocols with no implementation.
@@ -156,7 +159,7 @@ External Providers
 
 **`pipeline/`** — Evidence pipeline. Orchestrates evidence providers and assembles their items into an evidence collection.
 
-**`evaluation/`** — Core Engine subsystem. The reusable evaluation framework (rule engine, category assembler, normalizer, base evaluator) plus the concrete category evaluators, starting with valuation.
+**`evaluation/`** — Core Engine subsystem. The reusable evaluation framework (rule engine, score normalizer, normalized score, category assembler, base evaluator) plus the concrete category evaluators, starting with valuation.
 
 **`dashboard/`** — Dashboard generation. Builds the dashboards and reports the Presentation Layer displays.
 
@@ -204,11 +207,43 @@ This pipeline must never be bypassed. Any change to it is an architecture change
 
 ---
 
+## Scoring Pipeline
+
+Inside the Core Engine, evaluation follows one pipeline:
+
+```text
+RuleResult
+    ↓
+ScoreNormalizer
+    ↓
+NormalizedScore
+    ↓
+CategoryAssembler
+    ↓
+CategoryScore
+```
+
+A rule reports a raw measurement. The score normalizer converts that measurement into a `NormalizedScore` on the AIS standard scale. The category assembler builds the `CategoryScore` from normalized scores only: raw measurements are never aggregated into an investment score.
+
+Thresholds, weighting, and industry adjustment are defined by the Constitution. They are not part of this framework.
+
+---
+
+## Evidence Traceability Rule
+
+- Evidence is a first-class object.
+- Structured EvidenceReference objects are owned exclusively by the Evidence Layer.
+- The Core Engine carries only lightweight evidence identifiers (`tuple[str, ...]`).
+- Evidence references must never be silently discarded while a decision is propagated through the analysis pipeline.
+- Intermediate models should avoid redundant copies unless required by downstream consumers.
+
+---
+
 ## Implementation Status
 
-Implemented so far: shared domain models (`models/`), evidence domain models (`evidence/`), engine contracts (`contracts/`), a deterministic placeholder evidence pipeline (`pipeline/`), the reusable evaluation framework with its rule engine and category assembler (`evaluation/`), and the first concrete evaluator (`evaluation/valuation/`), alongside configuration, logging, shared constants, and the exception hierarchy.
+Implemented so far: shared domain models (`models/`), evidence domain models (`evidence/`), engine contracts (`contracts/`), a deterministic placeholder evidence pipeline (`pipeline/`), the reusable evaluation framework (`evaluation/`), the first complete vertical slice (`core/`) that runs evidence into a category score, an overall assessment and a recommendation, and the asset analysis flow (`analysis/`) that orchestrates that slice for a single asset, alongside configuration, logging, shared constants, and the exception hierarchy.
 
-The remaining category evaluators, the overall evaluation, scoring, recommendation, allocation, and data collection are not implemented yet.
+The overall evaluation, the recommendation and the analysis flow are placeholders. The remaining category evaluators, the AIS standard scale, allocation, and data collection are not implemented yet.
 
 ---
 

@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from evaluation.category_assembler import CategoryAssembler
-from evaluation.rule_result import RuleResult
+from evaluation.normalized_score import NormalizedScore
 from models.category import Category
 from models.category_score import CategoryScore
 
 
-def _result(rule_id: str, score: float, reference: str) -> RuleResult:
-    """Return a rule result for the given rule, score and reference."""
-    return RuleResult(
-        rule_id=rule_id,
-        score=score,
-        reason=f"{rule_id} measured {score}",
+def _normalized(value: float, reason: str, reference: str) -> NormalizedScore:
+    """Return a normalized score for the given value, reason and reference."""
+    return NormalizedScore(
+        raw_value=value,
+        normalized_value=value,
+        confidence=1.0,
+        reason=reason,
         evidence_references=(reference,),
     )
 
@@ -24,24 +25,43 @@ def _assembler(confidence: float = 1.0) -> CategoryAssembler:
 
 
 def test_assembles_a_category_score_for_the_configured_category() -> None:
-    score = _assembler().assemble((_result("a", 2.0, "ref-a"),))
+    score = _assembler().assemble((_normalized(2.0, "a measured 2.0", "ref-a"),))
 
     assert isinstance(score, CategoryScore)
     assert score.category is Category.VALUATION
     assert score.confidence == 1.0
 
 
-def test_aggregates_normalized_scores_as_placeholder_mean() -> None:
+def test_aggregates_normalized_values_as_placeholder_mean() -> None:
     score = _assembler().assemble(
-        (_result("a", 1.0, "ref-a"), _result("b", 3.0, "ref-b"))
+        (
+            _normalized(1.0, "a measured 1.0", "ref-a"),
+            _normalized(3.0, "b measured 3.0", "ref-b"),
+        )
     )
 
     assert score.score == 2.0
 
 
+def test_aggregates_normalized_values_and_ignores_raw_values() -> None:
+    scores = (
+        NormalizedScore(
+            raw_value=100.0, normalized_value=1.0, confidence=1.0, reason="a"
+        ),
+        NormalizedScore(
+            raw_value=200.0, normalized_value=3.0, confidence=1.0, reason="b"
+        ),
+    )
+
+    assert _assembler().assemble(scores).score == 2.0
+
+
 def test_summary_preserves_rule_order() -> None:
     score = _assembler().assemble(
-        (_result("a", 1.0, "ref-a"), _result("b", 3.0, "ref-b"))
+        (
+            _normalized(1.0, "a measured 1.0", "ref-a"),
+            _normalized(3.0, "b measured 3.0", "ref-b"),
+        )
     )
 
     assert score.summary == "a measured 1.0; b measured 3.0"
@@ -49,13 +69,16 @@ def test_summary_preserves_rule_order() -> None:
 
 def test_evidence_references_are_merged_and_deduplicated() -> None:
     score = _assembler().assemble(
-        (_result("a", 1.0, "ref-a"), _result("b", 3.0, "ref-a"))
+        (
+            _normalized(1.0, "a measured 1.0", "ref-a"),
+            _normalized(3.0, "b measured 3.0", "ref-a"),
+        )
     )
 
     assert score.evidence_references == ("ref-a",)
 
 
-def test_empty_results_produce_an_empty_score() -> None:
+def test_empty_scores_produce_an_empty_score() -> None:
     score = _assembler(confidence=0.5).assemble(())
 
     assert score.score == 0.0
@@ -66,6 +89,9 @@ def test_empty_results_produce_an_empty_score() -> None:
 
 def test_repeated_assembly_is_deterministic() -> None:
     assembler = _assembler()
-    results = (_result("a", 1.0, "ref-a"), _result("b", 3.0, "ref-b"))
+    scores = (
+        _normalized(1.0, "a measured 1.0", "ref-a"),
+        _normalized(3.0, "b measured 3.0", "ref-b"),
+    )
 
-    assert assembler.assemble(results) == assembler.assemble(results)
+    assert assembler.assemble(scores) == assembler.assemble(scores)

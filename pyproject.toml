@@ -16,6 +16,7 @@ version = { attr = "utils.constants.APP_VERSION" }
 [tool.setuptools.packages.find]
 where = ["."]
 include = [
+    "analysis*",
     "app*",
     "communication*",
     "config*",

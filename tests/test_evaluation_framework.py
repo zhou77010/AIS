@@ -43,8 +43,23 @@ def _execute(evidence: EvidenceCollection) -> RuleResult:
 def test_score_normalizer_is_an_identity_placeholder() -> None:
     normalizer = ScoreNormalizer()
 
-    assert normalizer.normalize(3.7) == 3.7
-    assert normalizer.normalize(-1.0) == -1.0
+    assert normalizer.normalize(3.7).raw_value == 3.7
+    assert normalizer.normalize(3.7).normalized_value == 3.7
+    assert normalizer.normalize(-1.0).normalized_value == -1.0
+
+
+def test_score_normalizer_converts_a_rule_result() -> None:
+    normalizer = ScoreNormalizer()
+    result = RuleResult(
+        rule_id="r1", score=2.5, reason="measured", evidence_references=("ev-1",)
+    )
+
+    normalized = normalizer.normalize_result(result)
+
+    assert normalized.raw_value == 2.5
+    assert normalized.normalized_value == 2.5
+    assert normalized.reason == "measured"
+    assert normalized.evidence_references == ("ev-1",)
 
 
 def test_base_evaluator_is_abstract() -> None:
