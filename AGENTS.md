@@ -111,6 +111,41 @@ CategoryScore must only be produced through CategoryAssembler.
 
 ---
 
+# Component Boundaries
+
+The architecture review froze these owners. Each component answers one question, and no component may take over another's.
+
+| Component | Owns | Must never |
+| --- | --- | --- |
+| Scheduler (`app/scheduler.py`) | The runtime. It decides when work runs. | Hold analysis, delivery, or presentation logic. |
+| Analyzer (`analysis/analyzer.py`) | Orchestration. It runs the stages in order. | Judge, evaluate, or render. |
+| Evaluators (`evaluation/`) | Business judgement. They turn evidence into category scores. | Retrieve data, deliver messages, or assemble a report. |
+| Pipeline (`pipeline/`) | Evidence transformation. It turns retrieved data into evidence. | Evaluate, score, or decide. |
+| Communication (`communication/`) | Delivery. It carries a message outward. | Build or reinterpret report content. |
+| Renderer (`analysis/report.py`, `analysis/mobile_report.py`) | Presentation. They turn a result into text. | Send anything, or read a vendor. |
+| Transport (`data/http.py`, the notifier internals) | The network. It moves bytes. | Know what a report is. |
+
+Rules an agent must never break:
+
+1. **Report Model → Renderer → Transport.** A report is rendered once and every transport carries that same text. A notifier only ever receives rendered text; never a recommendation, an assessment, or any other model.
+2. **Every renderer renders the same report model.** No channel gets its own report structure.
+3. **Only the Data Layer names a market data vendor.** Everything else depends on the `MarketDataProvider` contract, and never on a vendor specific field. Add a provider through `data/market_data.py`.
+4. **Scheduler is the only runtime owner.** No loop and no waiting may appear in `main.py`, the application, or the analyzer.
+
+These are enforced by `tests/test_architecture_boundaries.py`. If a change makes that test fail, the change is wrong, not the test.
+
+---
+
+# Frozen Designs
+
+These have passed architecture review and must not be redesigned without explicit approval:
+
+Domain Models · Rule Engine · CategoryAssembler · Evidence Pipeline · Analyzer · Scheduler · Provider abstraction · Renderer to Transport separation · Configuration strategy
+
+Architecture is approved and framework work is in maintenance mode. Prefer methodology work over structural work, and report an architecture defect instead of fixing it silently.
+
+---
+
 # Constitution Rules
 
 The following concepts must never be changed without approval.

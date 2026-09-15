@@ -28,7 +28,7 @@ from communication.wechat import WeChatNotifier
 from communication.wecom_app import WeComAppNotifier
 from config.config import Config
 from config.logging_config import configure_logging, get_logger
-from data.yahoo_market_data_provider import YahooMarketDataProvider
+from data.market_data import build_market_data_provider
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from utils.constants import APP_NAME, APP_VERSION, CycleStatus, LoggerName
@@ -59,7 +59,7 @@ class Application:
         self._analyzer = (
             analyzer
             if analyzer is not None
-            else AssetAnalyzer(YahooMarketDataProvider())
+            else AssetAnalyzer(build_market_data_provider())
         )
         self._change_detector = ChangeDetector()
         self._scheduler = Scheduler(self._config.analysis_interval_minutes)

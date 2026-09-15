@@ -186,6 +186,35 @@ External Providers
 5. Evidence Layer must never generate Buy/Sell decisions.
 6. Portfolio Engine must not evaluate business quality.
 7. Architecture changes require explicit approval.
+8. Scheduler is the only runtime owner. No loop may appear in `main.py`, the application, or the analyzer.
+9. The report model is authoritative, and every renderer is a projection of it. No notifier, channel, or transport may build report content.
+10. AIS depends only on the `MarketDataProvider` contract. Only the Data Layer may name a market data vendor, and no component outside it may depend on a vendor specific field.
+11. A component must not take over another component's responsibility. The owners are listed under Component Boundaries.
+
+---
+
+## Component Boundaries
+
+Each component answers one question, and no component may take over another's. These boundaries were frozen by the architecture review.
+
+| Component | Owns | Must never |
+| --- | --- | --- |
+| Scheduler (`app/scheduler.py`) | The runtime. It decides when work runs. | Hold analysis, delivery, or presentation logic. |
+| Analyzer (`analysis/analyzer.py`) | Orchestration. It runs the stages in order. | Judge, evaluate, or render. |
+| Evaluators (`evaluation/`) | Business judgement. They turn evidence into category scores. | Retrieve data, deliver messages, or assemble a report. |
+| Pipeline (`pipeline/`) | Evidence transformation. It turns retrieved data into evidence. | Evaluate, score, or decide. |
+| Communication (`communication/`) | Delivery. It carries a message outward and reports whether it arrived. | Build or reinterpret report content. |
+| Renderer (`analysis/report.py`, `analysis/mobile_report.py`) | Presentation. They turn a result into text. | Send anything, or read a vendor. |
+| Transport (`data/http.py`, the notifier internals) | The network. It moves bytes. | Know what a report is. |
+
+The rules these boundaries produce:
+
+- **Report Model → Renderer → Transport.** A report is rendered once, by a renderer, and every transport carries that same text. A notifier only ever receives rendered text; it cannot receive a recommendation, an assessment, or any other model.
+- **Two renderers, one model.** Every renderer renders the same report model. A channel that wants different content does not get a second model, it gets a projection of the one that exists.
+- **One provider contract.** The Data Layer implements `MarketDataProvider` and exposes a factory. Nothing else names a vendor, so a new provider plugs into the same interface.
+- **One runtime.** The scheduler owns the loop. Everything above it is called, and never waits.
+
+These boundaries are enforced structurally by `tests/test_architecture_boundaries.py`. A boundary that is only written down is a wish; that test is what makes it true.
 
 ---
 
@@ -246,6 +275,37 @@ Implemented so far: shared domain models (`models/`), evidence domain models (`e
 Live market data is retrieved by a provider that holds every vendor detail, so no other layer knows which source is used. A metric a source cannot provide is recorded as evidence that states why it is missing, and the rule that needs it fails; no value is ever invented to fill a gap. Because a discounted cash flow fair value is the output of a valuation model rather than a published market datum, it is reported as unavailable by nature and no placeholder number stands in for it.
 
 The overall evaluation, the recommendation, the score normalizer and the analysis flow remain placeholders: live measurements now feed a placeholder scale, so the scores they produce are not yet meaningful. The remaining category evaluators, the AIS standard scale, and allocation are not implemented yet.
+
+### Architecture review
+
+Phases 1 to 3 of the architecture review are complete and the architecture is approved. Framework work is now in maintenance mode: no subsystem is to be rewritten, and no framework expansion is to be done before methodology work begins.
+
+The boundaries above are frozen. The designs frozen with them are the domain models, the rule engine, the category assembler, the evidence pipeline, the analyzer, the scheduler, the provider abstraction, the renderer to transport separation, and the configuration strategy.
+
+### Deferred architecture work
+
+Recorded so the decisions are not lost, and explicitly **not** scheduled. Each is worth doing only when its trigger appears; until then the current, simpler design is the correct one.
+
+| # | Deferred | Trigger |
+| --- | --- | --- |
+| B1 | `NotificationPolicy` | Notification rules become more complex than "the recommendation changed". `ChangeDetector` is sufficient today. |
+| B2 | A `Renderer` interface | The number of renderers exceeds two. Today the renderers are plain functions, and an interface would be ceremony. |
+| B3 | A trigger strategy | The runtime gains trigger types beyond a fixed interval. The interval scheduler is sufficient today. |
+| B4 | Dependency injection for the analyzer | The evaluator count grows enough that constructor wiring stops being readable. Constructor wiring is acceptable today. |
+| B5 | A health status endpoint | Someone needs to observe the system remotely. It should report last run, last success, last notification, provider, and scheduler state. Not implemented. |
+
+### Where the next work belongs
+
+Architecture is no longer the bottleneck. Further work should improve investment intelligence rather than software structure, in this order:
+
+1. Constitution
+2. AIS Standard Score
+3. Decision Thresholds
+4. Risk Methodology
+5. Category Evaluators
+6. Portfolio Intelligence
+
+Every category currently renders `NOT EVALUATED` except Valuation. Turning those into `EVALUATED` is the point of the next stage, not making the report nicer.
 
 ---
 
