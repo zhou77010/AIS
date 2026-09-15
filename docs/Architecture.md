@@ -294,18 +294,26 @@ Recorded so the decisions are not lost, and explicitly **not** scheduled. Each i
 | B4 | Dependency injection for the analyzer | The evaluator count grows enough that constructor wiring stops being readable. Constructor wiring is acceptable today. |
 | B5 | A health status endpoint | Someone needs to observe the system remotely. It should report last run, last success, last notification, provider, and scheduler state. Not implemented. |
 
-### Where the next work belongs
+### Stage 2 — Investment Intelligence
 
-Architecture is no longer the bottleneck. Further work should improve investment intelligence rather than software structure, in this order:
+The architecture review is closed. Architecture is no longer the bottleneck, and framework expansion is not to be done unless an architectural defect is discovered. The primary objective is no longer the quality of the software structure but the quality of the investment decisions it produces.
 
-1. Constitution
-2. AIS Standard Score
-3. Decision Thresholds
-4. Risk Methodology
-5. Category Evaluators
+Work proceeds in this order:
+
+1. Constitution — vocabulary and semantics only. It defines what each term means, not how it is computed. It is built up incrementally rather than specified in full up front.
+2. Risk Evaluator
+3. AIS Standard Score
+4. Decision Thresholds
+5. Remaining Category Evaluators
 6. Portfolio Intelligence
 
-Every category currently renders `NOT EVALUATED` except Valuation. Turning those into `EVALUATED` is the point of the next stage, not making the report nicer.
+Two consequences of this order are deliberate and worth stating.
+
+**Semantics before scale.** The Constitution lands before the standard score, so the Risk evaluator is built while the scale is still undefined. That is intentional: a measurement whose meaning is settled can be normalized later, whereas a measurement whose meaning is unsettled cannot. Risk will therefore report raw measurements on a placeholder scale, exactly as Valuation does today, and the report already says so.
+
+**Risk before the score it feeds.** Risk is evaluated before the standard score exists, which means the overall score will briefly be the mean of two categories on an undefined scale. Adding a second evaluated category makes the average look more authoritative without making it more meaningful. The report must keep stating that the scale is undefined until the standard score lands.
+
+Every category currently renders `NOT EVALUATED` except Valuation. Turning those into `EVALUATED` is the point of this stage, not making the report nicer.
 
 ---
 
