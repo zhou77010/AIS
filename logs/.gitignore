@@ -1,0 +1,2 @@
+# Runtime log files are written here by the logging configuration.
+*.log

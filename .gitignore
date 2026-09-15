@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test, lint and formatting caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime output
+*.log
+
+# IDE and editor state
+.idea/
+.vscode/
+*.swp
+
+# Operating system
+Thumbs.db
+Desktop.ini
+.DS_Store
