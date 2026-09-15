@@ -69,16 +69,27 @@ class RecommendationFingerprint:
 
 
 class ChangeDetector:
-    """Remembers the last recommendation fingerprint it was shown."""
+    """Remembers the last recommendation fingerprint of every symbol it saw.
+
+    One fingerprint is kept per symbol, because AIS watches several assets at
+    once: a single slot would be overwritten by each asset in turn, so every
+    cycle would look like a change and nothing would ever be suppressed.
+    """
 
     def __init__(self) -> None:
         """Create a detector that has seen no recommendation yet."""
-        self._last: RecommendationFingerprint | None = None
+        self._last: dict[str, RecommendationFingerprint] = {}
 
-    @property
-    def last(self) -> RecommendationFingerprint | None:
-        """Return the last fingerprint recorded, or None before any is."""
-        return self._last
+    def last(self, symbol: str) -> RecommendationFingerprint | None:
+        """Return the last fingerprint recorded for a symbol, or None.
+
+        Args:
+            symbol: Symbol to look up.
+
+        Returns:
+            The last fingerprint recorded for the symbol, or None when none is.
+        """
+        return self._last.get(symbol)
 
     def observe(self, fingerprint: RecommendationFingerprint) -> bool:
         """Record a fingerprint and report whether it differs from the last one.
@@ -87,9 +98,9 @@ class ChangeDetector:
             fingerprint: Fingerprint of the recommendation just produced.
 
         Returns:
-            True when the fingerprint differs from the last recorded one, which
-            is also the case for the first fingerprint ever observed.
+            True when the fingerprint differs from the last one recorded for the
+            same symbol, which is also the case for the first one ever observed.
         """
-        changed = fingerprint != self._last
-        self._last = fingerprint
+        changed = fingerprint != self._last.get(fingerprint.symbol)
+        self._last[fingerprint.symbol] = fingerprint
         return changed

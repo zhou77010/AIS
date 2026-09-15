@@ -11,6 +11,7 @@ what it did.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -75,7 +76,7 @@ class Application:
         self._logger.info("%s %s started", APP_NAME, APP_VERSION)
         self._logger.info(
             "analysing %s on a %d minute interval",
-            self._config.ticker,
+            ", ".join(self._config.tickers),
             self._config.analysis_interval_minutes,
         )
         try:
@@ -85,7 +86,10 @@ class Application:
         self._logger.info("%s stopped", APP_NAME)
 
     def _run_cycle(self) -> CycleStatus:
-        """Run one evaluation cycle and report exactly one outcome.
+        """Run one evaluation cycle over every configured asset.
+
+        Each asset is evaluated and decided on its own, and reports its own
+        outcome. The status returned is the one outcome of the cycle as a whole.
 
         Returns:
             The single status describing what this cycle did.
@@ -95,36 +99,50 @@ class Application:
             self._logger.info("Skipped evaluation: %s", status.reason)
             return CycleStatus.MARKET_CLOSED
 
-        asset = self._asset()
+        outcomes = [self._run_asset(ticker) for ticker in self._config.tickers]
+        summary = _summarise(outcomes)
+        self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
+        return summary
+
+    def _run_asset(self, ticker: str) -> CycleStatus:
+        """Evaluate one asset and notify when its recommendation changed.
+
+        Args:
+            ticker: Symbol to evaluate.
+
+        Returns:
+            The outcome of this asset within the cycle.
+        """
+        asset = self._asset(ticker)
         try:
             result = self._analyzer.analyze_result(asset)
-        except Exception as error:  # noqa: BLE001 - a failed cycle must not stop AIS
-            self._logger.exception("Evaluation failed: %s", error)
+        except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
+            self._logger.exception("Evaluation failed for %s: %s", ticker, error)
             return CycleStatus.EVALUATION_FAILED
 
         for line in generate_report(result).splitlines():
             self._logger.info("%s", line)
 
-        fingerprint = RecommendationFingerprint.of(result.recommendation, asset.ticker)
+        fingerprint = RecommendationFingerprint.of(result.recommendation, ticker)
         if not self._change_detector.observe(fingerprint):
             self._logger.info(
-                "Skipped notification: recommendation unchanged (%s)",
+                "Skipped notification for %s: recommendation unchanged (%s)",
+                ticker,
                 fingerprint.describe(),
             )
             return CycleStatus.RECOMMENDATION_UNCHANGED
 
         try:
             self._notify(result)
-        except Exception as error:  # noqa: BLE001 - a failed send must not stop AIS
-            self._logger.error("Notification failed: %s", error)
+        except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
+            self._logger.error("Notification failed for %s: %s", ticker, error)
             return CycleStatus.EVALUATION_FAILED
 
         self._logger.info("Notification sent (%s)", fingerprint.describe())
         return CycleStatus.NOTIFICATION_SENT
 
-    def _asset(self) -> Asset:
-        """Return the asset the configuration asks AIS to analyse."""
-        ticker = self._config.ticker
+    def _asset(self, ticker: str) -> Asset:
+        """Return the asset for one configured symbol."""
         return Asset(
             ticker=ticker,
             name=ticker,
@@ -216,3 +234,32 @@ class Application:
             raise AISException(
                 "every notification channel failed: " + "; ".join(failures)
             )
+
+
+def _summarise(outcomes: list[CycleStatus]) -> CycleStatus:
+    """Reduce the outcomes of every asset to the outcome of the cycle.
+
+    A failure anywhere is reported as a failure, because a cycle that could not
+    finish its work must not look like one that did. Otherwise a notification
+    makes the cycle a notifying one, and a cycle where nothing changed is
+    reported as unchanged.
+
+    Args:
+        outcomes: Outcome of each asset evaluated in the cycle.
+
+    Returns:
+        The single status describing the cycle.
+    """
+    if CycleStatus.EVALUATION_FAILED in outcomes:
+        return CycleStatus.EVALUATION_FAILED
+    if CycleStatus.NOTIFICATION_SENT in outcomes:
+        return CycleStatus.NOTIFICATION_SENT
+    return CycleStatus.RECOMMENDATION_UNCHANGED
+
+
+def _describe_outcomes(outcomes: list[CycleStatus]) -> str:
+    """Return the counts of one cycle's outcomes, for the log line."""
+    counts = Counter(outcomes)
+    return ", ".join(
+        f"{count} {status.value}" for status, count in sorted(counts.items())
+    )

@@ -271,23 +271,23 @@ class _Analyzer:
         return self._result
 
 
-def _config(interval_minutes: int = 30) -> Config:
+def _config(interval_minutes: int = 30, tickers: tuple[str, ...] = ("AAPL",)) -> Config:
     """Return a configuration with no notification channel configured."""
     return Config(
         environment=Environment.TEST,
         log_level=LogLevel.INFO,
         log_dir=Path("logs"),
         log_file_name="ais.log",
-        ticker="AAPL",
+        tickers=tickers,
         analysis_interval_minutes=interval_minutes,
     )
 
 
-def _analysis_result() -> AnalysisResult:
+def _analysis_result(ticker: str = "AAPL") -> AnalysisResult:
     """Return a minimal analysis result for a cycle to report on."""
     asset = Asset(
-        ticker="AAPL",
-        name="AAPL",
+        ticker=ticker,
+        name=ticker,
         exchange="UNKNOWN",
         currency="USD",
         profile=AssetProfile.UNKNOWN,
@@ -297,7 +297,7 @@ def _analysis_result() -> AnalysisResult:
         score=1.0,
         confidence=1.0,
         summary="summary",
-        evidence_references=("ev-1",),
+        evidence_references=(f"{ticker}.ev-1",),
     )
     assessment = OverallAssessment(
         overall_score=1.0,
@@ -312,12 +312,43 @@ def _analysis_result() -> AnalysisResult:
     )
 
 
+class _PerTickerAnalyzer:
+    """Analyzer stand-in answering per symbol, and counting the symbols seen."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.seen: list[str] = []
+        self._error = error
+
+    def analyze_result(self, asset: Asset) -> AnalysisResult:
+        self.seen.append(asset.ticker)
+        if self._error is not None:
+            raise self._error
+        return _analysis_result(asset.ticker)
+
+
+class _FailingAnalyzer:
+    """Analyzer stand-in that fails for one symbol and answers for the rest."""
+
+    def __init__(self, failing: str) -> None:
+        self._failing = failing
+        self.seen: list[str] = []
+
+    def analyze_result(self, asset: Asset) -> AnalysisResult:
+        self.seen.append(asset.ticker)
+        if asset.ticker == self._failing:
+            raise RuntimeError("market data exploded")
+        return _analysis_result(asset.ticker)
+
+
 def _application(
-    clock: _Clock, analyzer: _Analyzer, monkeypatch: pytest.MonkeyPatch
+    clock: _Clock,
+    analyzer: object,
+    monkeypatch: pytest.MonkeyPatch,
+    config: Config | None = None,
 ) -> Application:
     """Return an application wired to stand-ins, with notification faked out."""
     application = Application(
-        config=_config(),
+        config=config if config is not None else _config(),
         market_clock=clock,  # type: ignore[arg-type]
         analyzer=analyzer,  # type: ignore[arg-type]
     )
@@ -387,6 +418,95 @@ def test_every_cycle_status_is_distinct() -> None:
     values = [status.value for status in CycleStatus]
 
     assert len(values) == len(set(values)) == 4
+
+
+# --------------------------------------------------------------------------
+# Several symbols per cycle
+# --------------------------------------------------------------------------
+
+
+def test_change_detector_keeps_one_fingerprint_per_symbol() -> None:
+    detector = ChangeDetector()
+    aapl = RecommendationFingerprint.of(_recommendation(), "AAPL")
+    rklb = RecommendationFingerprint.of(_recommendation(), "RKLB")
+
+    assert detector.observe(aapl) is True
+    assert detector.observe(rklb) is True
+    assert detector.observe(aapl) is False
+    assert detector.observe(rklb) is False
+
+
+def test_cycle_evaluates_every_configured_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "BABA", "RKLB")),
+    )
+
+    assert application._run_cycle() is CycleStatus.NOTIFICATION_SENT
+    assert analyzer.seen == ["AAPL", "BABA", "RKLB"]
+
+
+def test_cycle_notifies_once_per_changed_symbol(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[str] = []
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "RKLB")),
+    )
+    monkeypatch.setattr(
+        application, "_notify", lambda result: sent.append(result.asset.ticker)
+    )
+
+    assert application._run_cycle() is CycleStatus.NOTIFICATION_SENT
+    assert sent == ["AAPL", "RKLB"]
+
+    assert application._run_cycle() is CycleStatus.RECOMMENDATION_UNCHANGED
+    assert sent == ["AAPL", "RKLB"]
+
+
+def test_one_failing_symbol_does_not_stop_the_others(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[str] = []
+    analyzer = _FailingAnalyzer(failing="BABA")
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "BABA", "RKLB")),
+    )
+    monkeypatch.setattr(
+        application, "_notify", lambda result: sent.append(result.asset.ticker)
+    )
+
+    assert application._run_cycle() is CycleStatus.EVALUATION_FAILED
+    assert analyzer.seen == ["AAPL", "BABA", "RKLB"]
+    assert sent == ["AAPL", "RKLB"]
+
+
+def test_cycle_is_unchanged_only_when_every_symbol_is_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "RKLB")),
+    )
+
+    application._run_cycle()
+
+    assert application._run_cycle() is CycleStatus.RECOMMENDATION_UNCHANGED
 
 
 # --------------------------------------------------------------------------

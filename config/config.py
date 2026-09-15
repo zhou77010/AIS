@@ -20,7 +20,7 @@ DEFAULT_ENVIRONMENT = Environment.DEVELOPMENT
 DEFAULT_LOG_LEVEL = LogLevel.INFO
 DEFAULT_LOG_DIR_NAME = "logs"
 DEFAULT_LOG_FILE_NAME = "ais.log"
-DEFAULT_TICKER = "AAPL"
+DEFAULT_TICKERS: tuple[str, ...] = ("AAPL",)
 DEFAULT_ANALYSIS_INTERVAL_MINUTES = 30
 
 
@@ -32,7 +32,7 @@ class Config:
     log_level: LogLevel
     log_dir: Path
     log_file_name: str
-    ticker: str = DEFAULT_TICKER
+    tickers: tuple[str, ...] = DEFAULT_TICKERS
     bark_url: str | None = None
     wechat_webhook_url: str | None = None
     wecom_corp_id: str | None = None
@@ -55,7 +55,7 @@ class Config:
             log_level=_read_log_level(),
             log_dir=_resolve_log_dir(),
             log_file_name=_read_value(EnvVar.LOG_FILE_NAME) or DEFAULT_LOG_FILE_NAME,
-            ticker=_read_value(EnvVar.TICKER) or DEFAULT_TICKER,
+            tickers=_read_tickers(),
             bark_url=_read_value(EnvVar.BARK_URL),
             wechat_webhook_url=_read_value(EnvVar.WECHAT_WEBHOOK_URL),
             wecom_corp_id=_read_value(EnvVar.WECOM_CORP_ID),
@@ -102,6 +102,30 @@ def _read_log_level() -> LogLevel:
             f"Invalid {EnvVar.LOG_LEVEL.value}={raw!r}: "
             f"expected one of {_allowed_values(LogLevel)}."
         ) from error
+
+
+def _read_tickers() -> tuple[str, ...]:
+    """Return the symbols to analyse, in the order they should be analysed.
+
+    The value is a comma separated list, so that watching several assets needs
+    no second setting. Symbols are upper cased and duplicates are dropped while
+    the given order is kept.
+
+    Raises:
+        ConfigurationError: When the variable is set but names no symbol.
+    """
+    name = EnvVar.TICKER.value
+    raw = _read_value(EnvVar.TICKER)
+    if raw is None:
+        return DEFAULT_TICKERS
+    tickers = tuple(
+        dict.fromkeys(part.strip().upper() for part in raw.split(",") if part.strip())
+    )
+    if not tickers:
+        raise ConfigurationError(
+            f"Invalid {name}={raw!r}: expected at least one symbol."
+        )
+    return tickers
 
 
 def _read_analysis_interval_minutes() -> int:

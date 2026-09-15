@@ -85,6 +85,29 @@ def test_invalid_environment_is_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
         Config.from_environment()
 
 
+def test_config_defaults_to_one_ticker(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_environment(monkeypatch)
+
+    assert Config.from_environment().tickers == ("AAPL",)
+
+
+def test_config_reads_several_tickers(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_environment(monkeypatch)
+    monkeypatch.setenv(EnvVar.TICKER.value, " aapl, RKLB ,aapl,baba ")
+
+    assert Config.from_environment().tickers == ("AAPL", "RKLB", "BABA")
+
+
+def test_config_rejects_a_ticker_list_without_symbols(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_environment(monkeypatch)
+    monkeypatch.setenv(EnvVar.TICKER.value, " , ")
+
+    with pytest.raises(ConfigurationError):
+        Config.from_environment()
+
+
 def test_invalid_log_level_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_environment(monkeypatch)
     monkeypatch.setenv(EnvVar.LOG_LEVEL.value, "verbose")
