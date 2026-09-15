@@ -1,67 +1,30 @@
 """AIS WeChat notification.
 
-Sends one Recommendation to a WeChat group robot webhook. It is deliberately
-the simplest synchronous implementation: one POST, no retries, no queue.
+Sends one already rendered report to a WeChat group robot webhook. It is
+deliberately the simplest synchronous implementation: one POST, no retries, no
+queue.
+
+The notifier transports the message it is given and never composes one: the
+Communication layer must not create or reinterpret the content it delivers, and
+every channel must carry the same report.
 """
 
 from __future__ import annotations
 
 import json
 import urllib.request
-from datetime import datetime
 
 from config.logging_config import get_logger
-from models.recommendation import Recommendation
 from utils.constants import EnvVar
 from utils.exceptions import AISException
 
-_SEPARATOR = "-" * 32
 _DEFAULT_TIMEOUT_SECONDS = 10.0
 _LOGGER_NAME = "wechat"
 _CONTENT_TYPE = "application/json"
-_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-
-def build_message(
-    recommendation: Recommendation,
-    symbol: str,
-    *,
-    generated_at: datetime,
-    data_source: str,
-) -> str:
-    """Build the text message for one recommendation.
-
-    The message states which market data the recommendation was built on, so a
-    result computed from placeholder evidence can never be mistaken for one
-    computed from live data.
-
-    Args:
-        recommendation: Recommendation to render.
-        symbol: Symbol of the asset the recommendation is about.
-        generated_at: Moment the recommendation was produced.
-        data_source: Label describing the market data the run used.
-
-    Returns:
-        Message text.
-    """
-    return "\n".join(
-        [
-            _SEPARATOR,
-            "AIS Recommendation",
-            f"Asset: {symbol}",
-            f"Decision: {recommendation.decision_state.value}",
-            f"Confidence: {recommendation.confidence:.2f}",
-            f"Data: {data_source}",
-            f"Generated: {generated_at.strftime(_TIMESTAMP_FORMAT)}",
-            "Investment Thesis:",
-            recommendation.investment_thesis,
-            _SEPARATOR,
-        ]
-    )
 
 
 class WeChatNotifier:
-    """Sends a recommendation message to a WeChat webhook."""
+    """Sends a rendered report to a WeChat webhook."""
 
     def __init__(
         self,
@@ -79,15 +42,8 @@ class WeChatNotifier:
         self._timeout_seconds = timeout_seconds
         self._logger = get_logger(_LOGGER_NAME)
 
-    def send(
-        self,
-        recommendation: Recommendation,
-        symbol: str,
-        *,
-        generated_at: datetime,
-        data_source: str,
-    ) -> None:
-        """Send one recommendation message.
+    def send(self, content: str) -> None:
+        """Send one rendered report.
 
         When no webhook is configured the message is not sent and a clear
         warning is logged instead. When the webhook answers with an error code
@@ -95,10 +51,7 @@ class WeChatNotifier:
         never look like a delivered one.
 
         Args:
-            recommendation: Recommendation to send.
-            symbol: Symbol of the asset the recommendation is about.
-            generated_at: Moment the recommendation was produced.
-            data_source: Label describing the market data the run used.
+            content: Report text to send.
 
         Raises:
             AISException: When the webhook rejects the message.
@@ -111,12 +64,6 @@ class WeChatNotifier:
             )
             return
 
-        content = build_message(
-            recommendation,
-            symbol,
-            generated_at=generated_at,
-            data_source=data_source,
-        )
         payload = json.dumps({"msgtype": "text", "text": {"content": content}})
         request = urllib.request.Request(
             self._webhook_url,
@@ -135,4 +82,4 @@ class WeChatNotifier:
             )
             self._logger.error("%s", message)
             raise AISException(message)
-        self._logger.info("recommendation for %s sent to WeChat", symbol)
+        self._logger.info("report sent to WeChat")

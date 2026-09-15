@@ -2,39 +2,55 @@
 
 Renders one analysis result as plain text for console or log output. It uses no
 formatting framework and prints nothing itself.
+
+This module also owns the vocabulary that states where the numbers in a report
+came from, so that every renderer labels the same run the same way.
 """
 
 from __future__ import annotations
 
 from analysis.analysis_result import AnalysisResult
 
-_NO_SOURCE_LABEL = "No market data source"
-_UNAVAILABLE_LABEL = "Market data unavailable"
-_LIVE_LABEL = "Live Market Data"
+LIVE_DATA_LABEL = "LIVE MARKET DATA"
+PLACEHOLDER_DATA_LABEL = "PLACEHOLDER DATA"
+NO_DATA_LABEL = "NO MARKET DATA"
+
+
+def data_quality_label(result: AnalysisResult) -> str:
+    """Return the one label stating where the numbers of a run came from.
+
+    The label never claims live data when none was retrieved, so a reader is
+    never left to guess whether a figure was measured or defaulted.
+
+    Args:
+        result: Analysis result to classify.
+
+    Returns:
+        One of :data:`LIVE_DATA_LABEL`, :data:`PLACEHOLDER_DATA_LABEL` or
+        :data:`NO_DATA_LABEL`.
+    """
+    snapshot = result.market_data
+    if snapshot is None:
+        return PLACEHOLDER_DATA_LABEL
+    if not snapshot.is_live:
+        return NO_DATA_LABEL
+    return LIVE_DATA_LABEL
 
 
 def describe_data_source(result: AnalysisResult) -> str:
-    """Return a truthful one line label for the market data a run used.
-
-    The label never claims live data when none was retrieved, so a notification
-    can be trusted about where its numbers came from.
+    """Return a detailed one line description of the data behind a run.
 
     Args:
         result: Analysis result to describe.
 
     Returns:
-        Label naming the source and how much of it answered.
+        Description naming the source and how much of it answered.
     """
     snapshot = result.market_data
     if snapshot is None:
-        return _NO_SOURCE_LABEL
-    if not snapshot.is_live:
-        return f"{_UNAVAILABLE_LABEL} ({snapshot.source})"
+        return "no market data source was connected"
     retrieved = len(snapshot.available_points)
-    return (
-        f"{_LIVE_LABEL} ({snapshot.source}; "
-        f"{retrieved} of {len(snapshot.points)} metrics)"
-    )
+    return f"{snapshot.source}, {retrieved} of {len(snapshot.points)} inputs retrieved"
 
 
 def generate_report(result: AnalysisResult) -> str:
@@ -53,7 +69,8 @@ def generate_report(result: AnalysisResult) -> str:
     lines = [
         "AIS analysis report",
         f"  Asset: {asset.ticker} ({asset.name}) - {asset.exchange}, {asset.currency}",
-        f"  Market data: {describe_data_source(result)}",
+        f"  Market data: {data_quality_label(result)}"
+        f" ({describe_data_source(result)})",
         *data_provenance_lines(result),
         f"  Overall score: {assessment.overall_score}",
         f"  Grade: {assessment.grade}",

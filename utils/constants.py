@@ -55,3 +55,16 @@ class LoggerName(StrEnum):
 
     AIS = "ais"
     APPLICATION = "application"
+
+
+class CycleStatus(StrEnum):
+    """Outcome of one evaluation cycle.
+
+    Every cycle ends with exactly one of these, so that a cycle can never finish
+    without saying what it did.
+    """
+
+    NOTIFICATION_SENT = "notification sent"
+    RECOMMENDATION_UNCHANGED = "recommendation unchanged"
+    MARKET_CLOSED = "market closed"
+    EVALUATION_FAILED = "evaluation failed"
