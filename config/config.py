@@ -20,6 +20,8 @@ DEFAULT_ENVIRONMENT = Environment.DEVELOPMENT
 DEFAULT_LOG_LEVEL = LogLevel.INFO
 DEFAULT_LOG_DIR_NAME = "logs"
 DEFAULT_LOG_FILE_NAME = "ais.log"
+DEFAULT_TICKER = "AAPL"
+DEFAULT_ANALYSIS_INTERVAL_MINUTES = 0
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,15 @@ class Config:
     log_level: LogLevel
     log_dir: Path
     log_file_name: str
+    ticker: str = DEFAULT_TICKER
+    bark_url: str | None = None
+    wechat_webhook_url: str | None = None
+    wecom_corp_id: str | None = None
+    wecom_app_secret: str | None = None
+    wecom_agent_id: str | None = None
+    serverchan_url: str | None = None
+    pushplus_token: str | None = None
+    analysis_interval_minutes: int = DEFAULT_ANALYSIS_INTERVAL_MINUTES
 
     @property
     def log_file_path(self) -> Path:
@@ -44,6 +55,15 @@ class Config:
             log_level=_read_log_level(),
             log_dir=_resolve_log_dir(),
             log_file_name=_read_value(EnvVar.LOG_FILE_NAME) or DEFAULT_LOG_FILE_NAME,
+            ticker=_read_value(EnvVar.TICKER) or DEFAULT_TICKER,
+            bark_url=_read_value(EnvVar.BARK_URL),
+            wechat_webhook_url=_read_value(EnvVar.WECHAT_WEBHOOK_URL),
+            wecom_corp_id=_read_value(EnvVar.WECOM_CORP_ID),
+            wecom_app_secret=_read_value(EnvVar.WECOM_APP_SECRET),
+            wecom_agent_id=_read_value(EnvVar.WECOM_AGENT_ID),
+            serverchan_url=_read_value(EnvVar.SERVERCHAN_URL),
+            pushplus_token=_read_value(EnvVar.PUSHPLUS_TOKEN),
+            analysis_interval_minutes=_read_analysis_interval_minutes(),
         )
 
 
@@ -82,6 +102,25 @@ def _read_log_level() -> LogLevel:
             f"Invalid {EnvVar.LOG_LEVEL.value}={raw!r}: "
             f"expected one of {_allowed_values(LogLevel)}."
         ) from error
+
+
+def _read_analysis_interval_minutes() -> int:
+    """Return the analysis interval in minutes; zero means run once."""
+    name = EnvVar.ANALYSIS_INTERVAL_MINUTES.value
+    raw = _read_value(EnvVar.ANALYSIS_INTERVAL_MINUTES)
+    if raw is None:
+        return DEFAULT_ANALYSIS_INTERVAL_MINUTES
+    try:
+        interval = int(raw)
+    except ValueError as error:
+        raise ConfigurationError(
+            f"Invalid {name}={raw!r}: expected a whole number of minutes."
+        ) from error
+    if interval < 0:
+        raise ConfigurationError(
+            f"Invalid {name}={raw!r}: expected zero or more minutes."
+        )
+    return interval
 
 
 def _read_value(name: EnvVar) -> str | None:
