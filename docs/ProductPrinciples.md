@@ -54,6 +54,14 @@ So the report leads with change: a grade moving, a measurement turning, an
 assumption starting to fail. Standing facts are the support for that, not the
 message.
 
+**The first fifteen seconds decide whether the rest is read.** Opening the report
+must answer one question immediately: **why is this stock worth attention today,
+or why is it not?** Not what the data is — whether today matters.
+
+Every optimisation from here on is judged first by what it does to those first
+fifteen seconds. A change that improves paragraph nine and costs the opening is
+a regression, however much better paragraph nine is.
+
 ---
 
 ## 3. Decision Philosophy
@@ -97,6 +105,20 @@ seconds, and the conclusion should be readable in the first few lines.
 
 Anything that only works on a large screen, or that needs the reader to scroll
 back and forth, has been designed for the wrong reader.
+
+**Density is not the same as value.** A longer report is not a better one. The
+rule for anything new is:
+
+> Does this sentence help an investment decision?
+
+If it does not, it does not go in the daily report — however true it is, and
+however interesting it is to the person who built it. Facts that a reader can
+look up elsewhere, or that do not change what they would do, are not the
+report's business.
+
+The corollary matters just as much: when something is added, something else
+usually has to go. A report that grows every round until nobody finishes it has
+stopped being a report, and the reader will go back to their own screen.
 
 ---
 
@@ -193,6 +215,65 @@ tell which part was measured and which part was decided.
 So each layer is allowed to say only what it can support, and each is allowed to
 say that it does not know. When a lower layer is missing, the higher layer says
 it could not be judged rather than quietly proceeding without it.
+
+---
+
+## 10. Market Explains the Environment
+
+**Market is not the index.** Its question is not "how did the market do", it is:
+
+> What does the current environment mean for **this** stock?
+
+An index change is one input to that and never the answer. Every asset sits in an
+environment of its own — a sector, a set of policies that bear on it, a style the
+market is currently paying for, a level of appetite for risk, money moving in or
+out of the things it competes with — and a report that says the same sentence
+about a bank, a rocket company and a gold miner has said nothing about any of
+them.
+
+So Market draws on the macro backdrop, the industry, market style, risk appetite
+and flows, and answers in the reader's language. It is the category that explains
+**what the environment means**, which is a different job from reporting what the
+environment is.
+
+**Market explains impact; Catalyst lists what is coming.** These are two
+questions and they must not be merged:
+
+| | Question | Tense |
+| --- | --- | --- |
+| **Catalyst** | What could change the investment case, and when? | What is coming. |
+| **Market** | What does the environment mean for this stock? | What is true now, and what just happened. |
+
+An event that has already happened and moved the environment is Market's
+business: explaining its effect belongs there and nowhere else. A future event on
+the calendar is Catalyst's business. Neither may do the other's job, and in
+particular:
+
+- Catalyst does not explain what the environment means — it does not have the
+  industry, style or flow evidence that would take.
+- Market does not list what is coming — a second calendar inside the report
+  would be a second answer to a question that already has one.
+- **No third section is created for this.** A separate "market brief" next to
+  Market would split one question across two places, and the reader would have to
+  join them up.
+
+---
+
+## 11. Reading Before Building
+
+AIS reads its own numbers with conventions: a price to earnings ratio of twelve
+reads cheap, a volatility of forty five per cent reads high. Those conventions
+are provisional, and they are the one thing every part of the product leans on —
+the grade, the sentences, and the opportunity judgement all measure against them.
+
+**They are one layer, and they are replaced as one.** When the AIS Standard Score
+finally defines what a reading means, it replaces a single place, not three that
+have to be reconciled with each other first.
+
+Until then they are provisional together, and they may not be adjusted one at a
+time. A number changed in one place and not the others is how a report starts
+contradicting itself — and a report that disagrees with itself is worse than one
+that is merely wrong, because the reader cannot tell which half to believe.
 
 ---
 

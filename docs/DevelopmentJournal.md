@@ -611,4 +611,82 @@ against what those sources show.
 
 ---
 
+### Market was repositioned from an index reading to an environment reading
+
+**Context.** Market reported the broad index's change over a year, so every asset
+got the same sentence. A bank, a rocket company and a gold miner were told they
+lived in the same environment, which is not true and is not useful.
+
+**Decision.** Market answers what the current environment means *for this stock*.
+It draws on the macro backdrop, the industry, market style, risk appetite and
+flows, and it answers in the reader's language rather than by listing an index
+number.
+
+**Reason.** The index is one input and never the answer. What an investor needs
+from this category is the context their position sits in — whether the money is
+currently paying for what this company sells, and what the backdrop is doing to
+it. That is a different question from how the market did, and the difference is
+the whole value of the category.
+
+**Impact.** Recorded as a product principle and in the backlog. The work is not
+started: the evidence it needs — industry, style, flows — is not connected, and
+none of it will be inferred from a ticker. The Constitution needs no amendment:
+Section 4 already asks what the environment in which this asset is being judged
+is, and this sharpens the answer rather than the question.
+
+**Revisit.** When industry and macro evidence is connected.
+
+---
+
+### Catalyst lists what is coming; Market explains what it means
+
+**Context.** Catalyst can now answer what events are ahead. It cannot answer what
+has just happened and what that does to the environment. Both are questions an
+investor has, and they arrived close enough together to be confused.
+
+**Decision.** Give them different tenses and forbid each from doing the other's
+job. Catalyst is what is coming. Market is what is true now, including the effect
+of what has already happened. Event outcomes belong in Market. No third section
+is created for either.
+
+**Reason.** Two sections answering overlapping questions is how a report starts
+contradicting itself, and the reader is left to work out which one to believe.
+Market is also the only category with a chance of holding the evidence an
+explanation of impact needs — industry, style, flows — while Catalyst holds only
+dates. A separate market brief would split one question across two places for no
+gain.
+
+**Impact.** Recorded as a principle and in the backlog. The boundary is stated in
+terms of tense, which is checkable, rather than in terms of topic, which is not.
+
+**Revisit.** When Market starts reading event outcomes, to confirm it explains
+rather than relists.
+
+---
+
+### The report is governed by its first fifteen seconds
+
+**Context.** The report grew a layer per round — grades, movement, events,
+insights — and reached about forty eight lines. Every addition was defensible on
+its own. Nobody was accountable for the whole.
+
+**Decision.** Two rules now govern anything added to the daily report. The
+opening must answer why today matters for this stock, and every new sentence must
+help an investment decision or it does not go in.
+
+**Reason.** A report nobody finishes is worth less than a short one that is read,
+and the failure is invisible from inside: each round's addition looks like
+progress, and the reader's experience only degrades in aggregate. Writing the
+rule down gives the next addition something to fail against.
+
+**Impact.** Recorded as product principles. It also sets a constraint on the work
+already planned: the Reading Layer and the Market rework both have to earn their
+lines, and what they add may have to displace something. The line budget itself is
+not yet fixed, and it is in the backlog.
+
+**Revisit.** When the report is next measured end to end against a reader's
+thirty seconds.
+
+---
+
 End of Document

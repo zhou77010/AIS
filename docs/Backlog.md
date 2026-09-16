@@ -81,19 +81,81 @@ replaced. None of them is Constitution semantics today.
 
 ## Market must describe the asset's own environment
 
-Market currently reports the broad market's change over a year, and every asset
-therefore reports the same thing. NVDA, HSBC and RKLB sit in different
-environments — semiconductors, banks, space — and a report that says the same
-sentence about all three is not telling an investor anything about the asset.
+**Confirmed direction.** Market currently reports the broad market's change over a
+year, and every asset therefore reports the same thing. NVDA, HSBC and RKLB sit
+in different environments — semiconductors, banks, space — and a report that says
+the same sentence about all three is not telling an investor anything about the
+asset.
 
-The broad index is one piece of evidence, not the answer. Market should describe
-the environment this particular asset is being judged in: its industry, its
-sector, the money flowing through it, the prevailing style, and the macro
-backdrop.
+Market's question is not "how did the market do" but **"what does the current
+environment mean for this stock"**. The broad index is one input, never the
+answer. What Market must eventually combine:
+
+| Input | State |
+| --- | --- |
+| Macro backdrop — Fed, CPI, payrolls, rates | Only the meeting calendar is connected, and that is Catalyst's. Realised readings are not. |
+| Industry environment — policy, competition, cycle | Nothing connected. |
+| Market style — growth, dividend, AI, space | Nothing connected. |
+| Risk appetite | Nothing connected beyond the index's yearly change. |
+| Flows — where money is moving | Nothing connected. |
+
+The output is natural language about what the environment means, not a list of
+index numbers.
 
 Not built today because the evidence is not connected. Naming an industry by
 inference from a ticker would be guessing, and stating an environment AIS cannot
 see would be worse than saying nothing.
+
+**The boundary with Catalyst must hold while this is built.** Catalyst lists what
+is coming; Market explains what the environment means, including the effect of
+what has already happened. A separate market brief section is not to be created:
+it would split one question across two places.
+
+---
+
+## Reading Layer — the near-term priority
+
+**Highest priority.** The conventions AIS uses to read its own numbers are
+currently written down in three places that do not know about each other:
+
+| Where | What it decides |
+| --- | --- |
+| `analysis/category_grade.py` | The star grade. |
+| `analysis/insight/*.py` | What each sentence claims. |
+| `evaluation/hpo/opportunity_conditions.py` | Whether an opportunity condition holds. |
+
+They already disagree in public. Two examples taken from real reports:
+
+- HPO said **"有近期催化"** while the catalyst block said **"近期暂无明确催化"** —
+  the opportunity condition counts ninety days as near, the sentence counts thirty.
+- HPO said **"估值具备吸引力"** beside a valuation insight saying **"自由现金流为负，
+  估值缺少现金收益支撑"** — the condition reads a rounded star, the sentence reads the
+  measurements.
+
+The work: one module owns what a reading means — the bands, their words and the
+grade they imply — and the grade, the insights and HPO all read it. The eventual
+AIS Standard Score then replaces one place instead of reconciling three first.
+Alongside it, a test that fails when the report contradicts itself.
+
+Neither the Constitution nor any method changes: the thresholds stay exactly as
+provisional as they are, in one place instead of three.
+
+---
+
+## Report first impression and density
+
+Two rules agreed and not yet applied to the report as it stands:
+
+- **The first fifteen seconds.** Opening the report must say why today matters
+  for this stock, or why it does not. Today it opens with an opportunity grade and
+  a decision, and the reader has to assemble the answer from eight category blocks.
+- **Density.** Every sentence must help an investment decision. The report has
+  grown a layer per round to roughly forty eight lines, and no round has removed
+  anything.
+
+This needs a decision before it needs code: **what is the line budget, and what
+gets cut when something new arrives?** Until that exists, every later round will
+add and nothing will ever leave.
 
 ---
 
