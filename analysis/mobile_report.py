@@ -38,6 +38,7 @@ from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import grade_for_category, stars
+from analysis.insight.builder import insight_for
 from analysis.labels import (
     DAY_METRICS,
     PERCENT_METRICS,
@@ -46,6 +47,7 @@ from analysis.labels import (
     catalyst_kind_label,
     catalyst_kind_reason,
     catalyst_scope_label,
+    catalyst_when,
     category_label,
     decision_label,
     driver_phrase,
@@ -81,6 +83,10 @@ _NO_CATALYST_SENTENCE = "近期暂无明确催化。"
 _EVENT_WINDOW_DAYS = 90
 _MAX_EVENTS = 6
 _MAX_EVENTS_PER_SCOPE = 3
+
+# Punctuation that may not begin a line. Chinese punctuation hangs off what it
+# follows, so a break in front of it reads as a mistake.
+_NEVER_STARTS_A_LINE = "，。；：、？！）》”’%"
 
 _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 _TIMEZONE_NOTE = "北京时间"
@@ -183,8 +189,10 @@ def _catalyst_block(
     gets an answer from this block and not from a number.
 
     The grade is shown above all of it and answers a different question — how
-    soon the nearest of them falls. An empty calendar is an answer too, and it is
-    written as one rather than left as a category nothing was done about.
+    soon the nearest of them falls. Which of them matters most is answered by the
+    insight, which reads priority and not distance. An empty calendar is an
+    answer too, and it is written as one rather than left as a category nothing
+    was done about.
     """
     assessed = category in _assessed_categories(result)
     grade = grade_for_category(result, category) if assessed else None
@@ -192,10 +200,27 @@ def _catalyst_block(
     if assessed:
         lines.extend(_movement_lines(result, category, moment))
 
-    sentence = sentence_for(result, category) or _NO_CATALYST_SENTENCE
-    lines.extend(_pack([sentence], separator="", trailing=""))
+    commentary = _catalyst_commentary(result, category)
+    lines.extend(commentary)
     lines.extend(_event_lines(result, moment))
     return lines
+
+
+def _catalyst_commentary(result: AnalysisResult, category: Category) -> list[str]:
+    """Return what the calendar means, or the sentence saying there is none.
+
+    An insight says which of the events matters most. When there is nothing to
+    interpret — an empty calendar, or one holding nothing but a dividend date —
+    the block says so in words rather than leaving the reader with a heading and
+    a list of measurements that do not exist.
+    """
+    insight = _insight_lines(result, category)
+    if insight:
+        return insight
+    sentence = sentence_for(result, category)
+    if sentence is not None:
+        return _wrap(sentence)
+    return _wrap(_NO_CATALYST_SENTENCE)
 
 
 def _event_lines(result: AnalysisResult, moment: datetime) -> list[str]:
@@ -239,19 +264,8 @@ def _event_line(event: CatalystEvent, moment: datetime) -> str:
     name = catalyst_kind_label(event.kind, event.description)
     reason = catalyst_kind_reason(event.kind)
     confirmation = "" if event.confirmed else "（未确认）"
-    return f"{_INDENT}· {_when(event, moment)}{name}{confirmation} — {reason}"
-
-
-def _when(event: CatalystEvent, moment: datetime) -> str:
-    """Return when an event falls, in the words a reader would use."""
-    days = event.days_from(moment)
-    if days <= 0:
-        return "今日 "
-    if days == 1:
-        return "明日 "
-    if days <= 14:
-        return f"{days} 天后 "
-    return f"{event.occurs_on.month}月{event.occurs_on.day}日 "
+    when = catalyst_when(event, moment)
+    return f"{_INDENT}· {when} {name}{confirmation} — {reason}"
 
 
 def _opportunity_block(result: AnalysisResult) -> list[str]:
@@ -349,13 +363,21 @@ def _change_note(rating: CategoryRating) -> str:
 def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
     """Return what a category says, in the reader's language.
 
-    A category whose measurements read better as a sentence is written as one.
-    The measurements themselves stay in the evidence, where they support the
-    conclusion rather than being the thing the reader is asked to interpret.
+    What a category means is written by the insight layer, and this only shows
+    it: a renderer that composed its own explanation would be interpreting
+    evidence, which is analysis and belongs on the other side of the line.
+
+    A category the insight layer had nothing to say about falls back to the
+    measurements themselves, because a reader is owed the figures even when AIS
+    cannot tell them what the figures amount to.
     """
+    insight = _insight_lines(result, category)
+    if insight:
+        return insight
+
     sentence = sentence_for(result, category)
     if sentence is not None:
-        return _pack([sentence], separator="", trailing="")
+        return _wrap(sentence)
 
     phrases = [
         _measurement_phrase(point)
@@ -365,6 +387,14 @@ def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
     if not phrases:
         return [_INDENT + "尚未取得该类别所需的测量。"]
     return _pack(phrases, separator="、", trailing="。")
+
+
+def _insight_lines(result: AnalysisResult, category: Category) -> list[str]:
+    """Return the interpretation of one category, wrapped for the screen."""
+    insight = insight_for(result, category)
+    if insight is None:
+        return []
+    return [line for entry in insight.lines for line in _wrap(entry.text)]
 
 
 def _measurement_phrase(point: MarketDataPoint) -> str:
@@ -442,6 +472,31 @@ def _data_lines(result: AnalysisResult) -> list[str]:
     lines = [f"{DATA_PREFIX}  {data_quality_label(result)}"]
     if snapshot is not None:
         lines.append(f"来源  {snapshot.source}")
+    return lines
+
+
+def _wrap(text: str) -> list[str]:
+    """Break a sentence across lines, for text that has no items to keep whole.
+
+    A sentence is not a list: it can be broken wherever it runs out of room,
+    unlike a measurement or a name, which has to stay on one line to be read at
+    all. The only care taken here is not to start a line with punctuation, which
+    is the one break a reader notices.
+    """
+    budget = _LINE_WIDTH - _display_width(_INDENT)
+    lines: list[str] = []
+    current = ""
+    for character in text:
+        if (
+            current
+            and character not in _NEVER_STARTS_A_LINE
+            and _display_width(current) + _display_width(character) > budget
+        ):
+            lines.append(_INDENT + current)
+            current = ""
+        current += character
+    if current:
+        lines.append(_INDENT + current)
     return lines
 
 

@@ -12,8 +12,10 @@ an investor already reads elsewhere.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from contracts.market_data_provider import MarketMetric
-from models.catalyst_event import CatalystEventKind, CatalystEventScope
+from models.catalyst_event import CatalystEvent, CatalystEventKind, CatalystEventScope
 from models.category import Category
 from models.decision_state import DecisionState
 from models.opportunity_assessment import OpportunityCondition
@@ -362,6 +364,23 @@ CATALYST_KIND_REASONS: dict[CatalystEventKind, str] = {
 def catalyst_kind_label(kind: CatalystEventKind, description: str) -> str:
     """Return what an event is called, preferring the name the source used."""
     return description or CATALYST_KIND_LABELS.get(kind, kind.value)
+
+
+def catalyst_when(event: CatalystEvent, moment: datetime) -> str:
+    """Return when an event falls, in the words a reader would use.
+
+    The distance is written out only while it is short enough to mean something.
+    Beyond that a date is clearer than "43 days", which a reader has to convert
+    before it tells them anything.
+    """
+    days = event.days_from(moment)
+    if days <= 0:
+        return "今日"
+    if days == 1:
+        return "明日"
+    if days <= 14:
+        return f"{days} 天后"
+    return f"{event.occurs_on.month}月{event.occurs_on.day}日"
 
 
 def catalyst_kind_reason(kind: CatalystEventKind) -> str:

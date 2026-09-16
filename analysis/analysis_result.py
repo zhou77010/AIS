@@ -13,6 +13,7 @@ from models.asset import Asset
 from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.category_rating import CategoryRating
+from models.insight import Insight
 from models.opportunity_assessment import OpportunityAssessment
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
@@ -47,6 +48,10 @@ class AnalysisResult:
             are the input the catalyst judgement started from, like the market
             data, and the report writes them out so that a reader sees the
             calendar rather than a score about it.
+        insights: What the evidence of each category means, one entry per
+            category that had something to say. They are built here rather than
+            by a renderer, because interpreting evidence is analysis and showing
+            it is presentation.
     """
 
     asset: Asset
@@ -56,6 +61,7 @@ class AnalysisResult:
     ratings: tuple[CategoryRating, ...] = ()
     opportunity: OpportunityAssessment | None = None
     events: tuple[CatalystEvent, ...] = ()
+    insights: tuple[Insight, ...] = ()
 
     def rating_for(self, category: Category) -> CategoryRating | None:
         """Return the rating recorded for one category, or None."""

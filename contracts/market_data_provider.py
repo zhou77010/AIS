@@ -24,6 +24,11 @@ from models.category import Category
 METRIC_METADATA_KEY = "market_metric"
 VALUE_METADATA_KEY = "market_value"
 
+# How the evidence for one measurement is identified. It is defined here, beside
+# the metadata keys, because the pipeline writes the identifier and everything
+# that wants to point back at a measurement has to spell it the same way.
+MARKET_EVIDENCE_ID = "{ticker}.market_data.{metric}"
+
 
 class MarketMetric(StrEnum):
     """A single market measurement AIS consumes.

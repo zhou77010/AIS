@@ -12,6 +12,7 @@ from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import grade_for_category
+from analysis.insight.builder import build_insights
 from analysis.plain_language import measurements_of, sentence_for
 from app.rating_tracker import RatingTracker
 from config.logging_config import get_logger
@@ -123,7 +124,8 @@ class AssetAnalyzer:
             market_data=market_data,
         )
         result = replace(result, ratings=self._rate(asset, result))
-        return replace(result, opportunity=self._assess_opportunity(result))
+        result = replace(result, opportunity=self._assess_opportunity(result))
+        return replace(result, insights=build_insights(result))
 
     def _assess_opportunity(self, result: AnalysisResult) -> OpportunityAssessment:
         """Return the opportunity judgement for a result just produced.

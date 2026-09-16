@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from datetime import datetime, time
 
 from contracts.catalyst_event_provider import (
+    CATALYST_EVIDENCE_ID,
     CONFIRMED_METADATA_KEY,
     DATE_METADATA_KEY,
     DESCRIPTION_METADATA_KEY,
@@ -28,6 +29,7 @@ from contracts.catalyst_event_provider import (
     SYMBOL_METADATA_KEY,
 )
 from contracts.market_data_provider import (
+    MARKET_EVIDENCE_ID,
     METRIC_METADATA_KEY,
     VALUE_METADATA_KEY,
     MarketDataSnapshot,
@@ -51,14 +53,11 @@ _PLACEHOLDER_TIMESTAMP = datetime(2000, 1, 1)
 _MARKET_DATA_CONFIDENCE = 1.0
 _MISSING_MARKET_DATA_CONFIDENCE = 0.0
 
-_MARKET_DATA_ID = "{ticker}.market_data.{metric}"
-
 # A catalyst event is a fact a source states, so its evidence is fully trusted.
 # Whether the source presents the date as settled is carried as metadata instead
 # of being turned into a confidence, because how much less a rumoured date can be
 # trusted is a judgement and not a number this layer may invent.
 _EVENT_CONFIDENCE = 1.0
-_EVENT_ID = "{ticker}.catalyst.{kind}.{date}"
 
 
 class EvidenceBuilder:
@@ -119,7 +118,7 @@ class EvidenceBuilder:
         """Return one item per metric of the snapshot, retrieved or not."""
         return tuple(
             self._factory.create(
-                id=_MARKET_DATA_ID.format(
+                id=MARKET_EVIDENCE_ID.format(
                     ticker=asset.ticker, metric=point.metric.value
                 ),
                 category=point.metric.primary_category,
@@ -156,7 +155,7 @@ class EvidenceBuilder:
         seen: dict[str, int] = {}
         items: list[EvidenceItem] = []
         for event in events:
-            base = _EVENT_ID.format(
+            base = CATALYST_EVIDENCE_ID.format(
                 ticker=asset.ticker, kind=event.kind.value, date=event.occurs_on
             )
             seen[base] = seen.get(base, 0) + 1

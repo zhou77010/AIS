@@ -95,6 +95,58 @@ CATALYST_EVENT_SCOPE: dict[CatalystEventKind, CatalystEventScope] = {
 }
 
 
+class CatalystEventPriority(StrEnum):
+    """How much attention an event of this kind is worth.
+
+    Three levels, and no more. There is no probability here, no score and no
+    model: AIS states which kinds of event change an investment case most, and a
+    reader can disagree with the ordering and see exactly what it was.
+    """
+
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    MINOR = "minor"
+
+
+# How much attention each kind is worth. This is an editorial ordering and it is
+# written down as one, in a single table, so that it can be argued with: what it
+# is not is a measurement, a probability or a prediction, and nothing derived
+# from it may be presented as any of those.
+#
+# The ordering asks one question of each kind: if this happened, how much of the
+# investment case would have to be re-examined? An event that can invalidate the
+# thesis outright is primary. One that changes a part of it is secondary. One
+# that changes the price or the paperwork without changing the case is minor.
+CATALYST_EVENT_PRIORITY: dict[CatalystEventKind, CatalystEventPriority] = {
+    CatalystEventKind.EARNINGS: CatalystEventPriority.PRIMARY,
+    CatalystEventKind.PRODUCT_LAUNCH: CatalystEventPriority.PRIMARY,
+    CatalystEventKind.LAUNCH_WINDOW: CatalystEventPriority.PRIMARY,
+    CatalystEventKind.REGULATORY: CatalystEventPriority.PRIMARY,
+    CatalystEventKind.FOMC: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.RATES: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.INFLATION: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.EMPLOYMENT: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.GROWTH: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.TARIFF: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.FISCAL_POLICY: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.INVESTOR_DAY: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.SHAREHOLDER_MEETING: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.INDUSTRY_POLICY: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.COMPETITION: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.SPLIT: CatalystEventPriority.SECONDARY,
+    CatalystEventKind.EX_DIVIDEND: CatalystEventPriority.MINOR,
+    CatalystEventKind.DIVIDEND: CatalystEventPriority.MINOR,
+    CatalystEventKind.INDUSTRY_NEWS: CatalystEventPriority.MINOR,
+    CatalystEventKind.CURRENCY: CatalystEventPriority.MINOR,
+}
+
+# The order the levels are read in, most important first.
+CATALYST_PRIORITY_ORDER: tuple[CatalystEventPriority, ...] = (
+    CatalystEventPriority.PRIMARY,
+    CatalystEventPriority.SECONDARY,
+    CatalystEventPriority.MINOR,
+)
+
 # Events that change the price rather than what the market expects. Going
 # ex-dividend moves the price by the dividend by construction, and paying one
 # settles a decision already taken; both are worth reporting and neither is a
@@ -141,6 +193,11 @@ class CatalystEvent:
     def is_mechanical(self) -> bool:
         """Return whether the event moves the price without moving a view."""
         return self.kind in CATALYST_MECHANICAL_KINDS
+
+    @property
+    def priority(self) -> CatalystEventPriority:
+        """Return how much attention an event of this kind is worth."""
+        return CATALYST_EVENT_PRIORITY[self.kind]
 
     def days_from(self, moment: datetime) -> int:
         """Return how many days away the event is from a moment.

@@ -8,9 +8,11 @@ raw scores on incomparable scales, or a low grade where nothing was read at all.
 from __future__ import annotations
 
 import unicodedata
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from analysis.analysis_result import AnalysisResult
+from analysis.insight.builder import build_insights
 from analysis.labels import METRIC_NAMES, category_label
 from analysis.mobile_report import (
     DATA_PREFIX,
@@ -538,6 +540,36 @@ def test_report_groups_catalysts_by_the_layer_they_bear_on() -> None:
     assert any(line.strip() == "行业" for line in block)
     assert any(line.strip() == "宏观" for line in block)
     assert any("今日" in line for line in block)
+
+
+def test_report_shows_the_interpretation_and_not_the_measurements() -> None:
+    # What the numbers mean is written by the insight layer; the renderer shows
+    # it and does not compose one of its own.
+    result = _result((Category.VALUATION,), market_data=_snapshot(pe=45.0, peg=3.2))
+
+    report = _render(replace(result, insights=build_insights(result)))
+    block = _block_for(report, Category.VALUATION)
+
+    assert any("估值偏高" in line for line in block)
+    assert not any("市盈率" in line for line in block)
+
+
+def test_report_falls_back_to_measurements_when_there_is_no_insight() -> None:
+    # A reader is owed the figures even when AIS cannot say what they amount to.
+    report = _render(_result((Category.VALUATION,)))
+
+    block = _block_for(report, Category.VALUATION)
+
+    assert any("市盈率" in line for line in block)
+
+
+def test_report_never_shows_a_probability_or_a_target() -> None:
+    result = _result((Category.VALUATION,), market_data=_snapshot(pe=45.0))
+
+    report = _render(replace(result, insights=build_insights(result)))
+
+    assert "概率" not in report
+    assert "目标价" not in report
 
 
 def test_report_says_why_each_event_matters() -> None:

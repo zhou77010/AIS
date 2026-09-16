@@ -32,6 +32,11 @@ CONFIRMED_METADATA_KEY = "catalyst_confirmed"
 DESCRIPTION_METADATA_KEY = "catalyst_description"
 SYMBOL_METADATA_KEY = "catalyst_symbol"
 
+# How the evidence for one event is identified, spelled the same way here as it
+# is written by the pipeline, so that an insight can point back at the event it
+# was read from.
+CATALYST_EVIDENCE_ID = "{ticker}.catalyst.{kind}.{date}"
+
 
 class CatalystEventProvider(Protocol):
     """Contract for any source of dated catalyst events."""
