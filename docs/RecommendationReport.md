@@ -484,7 +484,7 @@ and for a category with no evaluator:
 | Market | Regime and context. Its value is explanatory, so it belongs next to the categories it explains. | Future |
 | Risk | Presented twice: as a category here, and independently in §13. | Blocked |
 | Catalyst | Forward-looking, and therefore the easiest place to state an unfalsifiable claim. Every catalyst must be datable, and its confidence must reflect how testable it is. | Future |
-| HPO | Rendered verbatim under the Constitution's own name and definition. | Future |
+| HPO | The name is rendered verbatim. Its meaning is intentionally unspecified by the Constitution, so no renderer may describe, expand or characterise it, and it is shown as an unevaluated dimension. | Future |
 | Positioning | Meaningful only relative to a portfolio. With none configured, it states that rather than scoring in the abstract. | Future |
 
 ---

@@ -2,7 +2,7 @@
 
 Version 0.1 — Vocabulary and semantics
 
-Status: Draft, awaiting approval.
+Status: Frozen, version 0.1.
 
 ---
 
@@ -126,6 +126,12 @@ reasoned about, tested, or replaced.
 The same fact is never counted twice in one judgement, and the same definition
 never lives in two places. Duplication is how a system comes to disagree with
 itself.
+
+**2.11 No Invented Semantics.**
+A name carries only the meaning this document has given it. Where a meaning has
+not been specified, none may be supplied by inference, by analogy, by what the
+name resembles, or by what would be convenient — not in code, not in a report,
+and not in commentary about the system.
 
 ---
 
@@ -352,11 +358,45 @@ stated?
 
 **Positioning** — Who else holds this asset, and how crowded is that?
 
-**HPO** — *Not yet defined.* See Section 6. Until this document defines it, the
-name is carried verbatim and no meaning is assigned to it.
+**HPO** — *Intentionally undefined.* It is a member of the set and its meaning is
+not specified. See Section 4.1.
 
 **Earnings** — What have the reported results said, and what are they expected
 to say next?
+
+### 4.1 A category whose question is not specified
+
+One member of the set, `HPO`, is deliberately left without a question. Its
+meaning is not specified, and that is a decision rather than an omission.
+
+**Membership and meaning are separate.** HPO's membership in the set is settled:
+it is one of the nine, and being undefined does not remove it. Its meaning is not
+settled, and nothing in AIS may settle it implicitly.
+
+What follows from that:
+
+- **The name is authoritative.** `HPO` is written `HPO` in code, in reports and
+  in every document. It is not expanded, abbreviated, renamed or paraphrased
+  anywhere, because each of those would be an interpretation.
+- **No semantics may be invented.** No evaluator may score it, no rule may read
+  it, no renderer may describe it, and no summary may characterise it. Any
+  behaviour that would require knowing what it means is not permitted until it
+  is defined.
+- **It is not a gap.** HPO is not waiting to be filled the way an unimplemented
+  evaluator is waiting. A gap implies the shape of what belongs in it; HPO has
+  no implied shape.
+- **It is not evidence of anything.** Its presence in the set says only that the
+  set has nine members.
+
+**What it shows as an output.** No question can be answered for HPO, so no
+judgement can be formed for it, so it is an unevaluated dimension (Section 3.18)
+and is shown as one. The reason differs from the other unevaluated categories —
+theirs is a missing evaluator, HPO's is a missing question — but a reader told
+that it is not evaluated has been told the truth either way.
+
+**How it can change.** Only an explicit design decision defines HPO. Until that
+decision is recorded in this document, the state above stands, and any behaviour
+that presupposes a meaning is a defect rather than progress.
 
 ---
 
@@ -454,7 +494,11 @@ the honest state of the system.
 | **Confidence Aggregation** | How confidence in parts becomes confidence in a whole. | Per-claim confidence is meaningful on its own; only the aggregate is deferred, and an aggregate that is not yet defined must not be invented. |
 | **Driver Attribution** | How the contribution of a driver is measured, and how drivers are ordered. | Drivers can be named before they can be ranked. Until ranking exists, drivers are listed in a stated order and never presented as ranked. |
 | **Portfolio Optimization** | How an Action is derived from a Decision, a portfolio and its constraints. | Decisions are useful without Actions, and an Action derived from an undefined rule would be worse than none. |
-| **The definition of HPO** | What question the HPO category answers. | Nothing may be assumed about a category whose question is unknown. It is carried verbatim and assigned no meaning until this document defines it. |
+
+HPO does not appear in the table above, because it is a different kind of open
+item. The entries above are methods that have not been chosen yet; HPO is a
+meaning that has not been specified at all. It is handled in Section 4.1, and it
+is not a candidate for the same kind of incremental decision.
 
 Two further questions are known to be open and are not yet mature enough to list
 with the above. They are recorded so that they are not discovered again as
