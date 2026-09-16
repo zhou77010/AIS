@@ -12,6 +12,7 @@ from contracts.market_data_provider import MarketDataSnapshot
 from models.asset import Asset
 from models.category import Category
 from models.category_rating import CategoryRating
+from models.opportunity_assessment import OpportunityAssessment
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
@@ -36,6 +37,11 @@ class AnalysisResult:
             standing, empty when no rating tracker is in use. A rating is about
             successive runs, so a run that does not know the previous one has
             nothing to say here.
+        opportunity: The opportunity judgement reached from the categories, or
+            None when the run reached none. It sits beside the assessment rather
+            than inside it: the assessment is a composite of the categories, and
+            an opportunity built from those same categories would be counted
+            twice if it were folded into them.
     """
 
     asset: Asset
@@ -43,6 +49,7 @@ class AnalysisResult:
     recommendation: Recommendation
     market_data: MarketDataSnapshot | None = None
     ratings: tuple[CategoryRating, ...] = ()
+    opportunity: OpportunityAssessment | None = None
 
     def rating_for(self, category: Category) -> CategoryRating | None:
         """Return the rating recorded for one category, or None."""

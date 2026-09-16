@@ -39,6 +39,7 @@ from datetime import datetime
 from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import grade_for_category, stars
 from analysis.labels import (
+    DAY_METRICS,
     PERCENT_METRICS,
     SIGNED_METRICS,
     UNASSESSED_ITEMS,
@@ -47,8 +48,13 @@ from analysis.labels import (
     driver_phrase,
     is_improvement,
     metric_name,
+    opportunity_condition_label,
 )
-from analysis.plain_language import measurements_of, sentence_for
+from analysis.plain_language import (
+    measurements_of,
+    opportunity_sentence,
+    sentence_for,
+)
 from analysis.report import data_quality_label
 from contracts.market_data_provider import MarketDataPoint
 from models.category import CATEGORY_ORDER, Category
@@ -134,6 +140,16 @@ def _category_block(
     result: AnalysisResult, category: Category, moment: datetime
 ) -> list[str]:
     """Return the lines describing one category, empty when it was not judged."""
+    if category is Category.HPO:
+        return _opportunity_block(result)
+    if category is Category.CATALYST and category not in _assessed_categories(result):
+        # An empty calendar is an answer, not a missing evaluator: the category
+        # was looked at and had nothing on it, and saying so by name is more use
+        # than listing it among the things nothing was done about.
+        return [
+            f"{category_label(category)}  {NO_GRADE}",
+            _INDENT + "暂无可评估催化。",
+        ]
     if category not in _assessed_categories(result):
         return []
 
@@ -144,6 +160,37 @@ def _category_block(
         *_movement_lines(result, category, moment),
         *_commentary_lines(result, category),
     ]
+
+
+def _opportunity_block(result: AnalysisResult) -> list[str]:
+    """Return the lines describing whether this is worth allocating to today.
+
+    The opportunity judgement is written first among the categories because it is
+    the one an investor reads to decide whether to read the rest. It is shown
+    with the same stars a category is shown with, because it is a count of the
+    same kind of thing, and it carries no number of its own.
+    """
+    opportunity = result.opportunity
+    if opportunity is None:
+        return []
+
+    heading = (
+        f"{category_label(Category.HPO)}  "
+        f"{stars(opportunity.grade) if opportunity.grade else NO_GRADE}"
+    )
+    lines = [
+        heading,
+        *_pack([opportunity_sentence(opportunity)], separator="", trailing=""),
+    ]
+    unknown = [result.condition for result in opportunity.unknown]
+    if unknown:
+        phrases = [
+            opportunity_condition_label(condition, False) for condition in unknown
+        ]
+        lines.extend(
+            _pack([f"未评估的条件：{'、'.join(phrases)}。"], separator="", trailing="")
+        )
+    return lines
 
 
 def _movement_lines(
@@ -247,10 +294,18 @@ def _not_assessed_lines(result: AnalysisResult) -> list[str]:
 
 
 def _not_assessed_items(result: AnalysisResult) -> list[str]:
-    """Return the named things this run did not assess, in a stable order."""
+    """Return the named things this run did not assess, in a stable order.
+
+    HPO and Catalyst are never listed here. Both write a block of their own when
+    they have no judgement — one says what it was not able to judge, the other
+    says there was no catalyst — and naming them here as well would be reporting
+    the same absence twice.
+    """
     assessed = _assessed_categories(result)
     unassessed_categories = [
-        category for category in CATEGORY_ORDER if category not in assessed
+        category
+        for category in CATEGORY_ORDER
+        if category not in assessed and category not in _self_reporting(result)
     ]
 
     items: list[str] = [category_label(category) for category in unassessed_categories]
@@ -269,6 +324,19 @@ def _not_assessed_items(result: AnalysisResult) -> list[str]:
         )
 
     return list(dict.fromkeys(items))
+
+
+def _self_reporting(result: AnalysisResult) -> frozenset[Category]:
+    """Return the categories that write their own absence in a block.
+
+    Catalyst always does: an empty calendar is reported as no evaluable catalyst
+    where the category belongs. HPO does whenever the run reached a judgement,
+    which is every run the analyzer produced.
+    """
+    categories = {Category.CATALYST}
+    if result.opportunity is not None:
+        categories.add(Category.HPO)
+    return frozenset(categories)
 
 
 def _data_lines(result: AnalysisResult) -> list[str]:
@@ -319,6 +387,8 @@ def _format_value(point: MarketDataPoint) -> str:
     """Format a retrieved measurement the way it is conventionally read."""
     if point.value is None:
         return "未取得"
+    if point.metric in DAY_METRICS:
+        return f"{point.value:g} 天"
     if point.metric in PERCENT_METRICS:
         if point.metric in SIGNED_METRICS:
             return f"{point.value:+.1%}"

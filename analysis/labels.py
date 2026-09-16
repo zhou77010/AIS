@@ -15,6 +15,7 @@ from __future__ import annotations
 from contracts.market_data_provider import MarketMetric
 from models.category import Category
 from models.decision_state import DecisionState
+from models.opportunity_assessment import OpportunityCondition
 
 # Category names. HPO is deliberately left as HPO: the Constitution does not
 # specify what it means, so it cannot be translated without inventing a meaning
@@ -37,6 +38,8 @@ CATEGORY_UNIT_NOUNS: dict[Category, str] = {
     Category.MARKET: "个方面",
     Category.TREND: "个方面",
     Category.EARNINGS: "个部分",
+    Category.CATALYST: "个部分",
+    Category.POSITIONING: "个部分",
 }
 
 CATEGORY_DEFAULT_UNIT_NOUN = "项"
@@ -54,6 +57,16 @@ UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
     Category.RISK: ("业务风险", "估值风险", "事件风险", "证据风险", "长期风险"),
     Category.MARKET: ("市场波动性", "利率环境"),
     Category.TREND: ("价格路径",),
+    # Product launches, regulatory decisions and launch windows are named here
+    # rather than approximated from whatever date a source happens to publish.
+    Category.CATALYST: ("产品发布", "监管决策", "发射窗口", "股东大会", "重大宏观事件"),
+    Category.POSITIONING: (
+        "机构持仓变化",
+        "内部人交易",
+        "资金流向",
+        "期权持仓",
+        "市场情绪",
+    ),
 }
 
 DECISION_LABELS: dict[DecisionState, str] = {
@@ -93,6 +106,12 @@ METRIC_NAMES: dict[MarketMetric, str] = {
     MarketMetric.TREND_VOLUME_RATIO: "成交量对均值",
     MarketMetric.RISK_VOLATILITY: "年化波动率",
     MarketMetric.RISK_DRAWDOWN: "最大回撤",
+    MarketMetric.NEXT_EARNINGS_DAYS: "距下次财报",
+    MarketMetric.NEXT_EX_DIVIDEND_DAYS: "距下次除息",
+    MarketMetric.SHORT_PERCENT_OF_FLOAT: "做空比例",
+    MarketMetric.SHORT_RATIO: "空头回补天数",
+    MarketMetric.INSTITUTIONAL_OWNERSHIP: "机构持股比例",
+    MarketMetric.INSIDER_OWNERSHIP: "内部人持股比例",
 }
 
 # Measurements that are ratios, and read as percentages.
@@ -114,6 +133,19 @@ PERCENT_METRICS = frozenset(
         MarketMetric.TREND_VOLUME_RATIO,
         MarketMetric.RISK_VOLATILITY,
         MarketMetric.RISK_DRAWDOWN,
+        MarketMetric.SHORT_PERCENT_OF_FLOAT,
+        MarketMetric.INSTITUTIONAL_OWNERSHIP,
+        MarketMetric.INSIDER_OWNERSHIP,
+    }
+)
+
+# Measurements counted in days, which read as a distance in time rather than as a
+# quantity with decimals.
+DAY_METRICS = frozenset(
+    {
+        MarketMetric.NEXT_EARNINGS_DAYS,
+        MarketMetric.NEXT_EX_DIVIDEND_DAYS,
+        MarketMetric.SHORT_RATIO,
     }
 )
 
@@ -149,6 +181,10 @@ def category_label(category: Category) -> str:
 HIGHER_IS_BETTER: dict[Category, bool] = {
     Category.VALUATION: False,
     Category.RISK: False,
+    # A nearer event and a less crowded short side are the readings this
+    # category is looking for, and both are smaller numbers.
+    Category.CATALYST: False,
+    Category.POSITIONING: False,
 }
 
 # What a measurement moving a particular way reads as, in one phrase. A movement
@@ -200,6 +236,16 @@ DRIVER_PHRASES: dict[tuple[MarketMetric, bool], str] = {
     (MarketMetric.TREND_DIRECTION, False): "价格下行",
     (MarketMetric.TREND_RANGE_POSITION, True): "价格上行",
     (MarketMetric.TREND_RANGE_POSITION, False): "价格下行",
+    (MarketMetric.NEXT_EARNINGS_DAYS, True): "财报窗口后移",
+    (MarketMetric.NEXT_EARNINGS_DAYS, False): "财报临近",
+    (MarketMetric.NEXT_EX_DIVIDEND_DAYS, True): "除息窗口后移",
+    (MarketMetric.NEXT_EX_DIVIDEND_DAYS, False): "除息临近",
+    (MarketMetric.SHORT_PERCENT_OF_FLOAT, True): "空头仓位加重",
+    (MarketMetric.SHORT_PERCENT_OF_FLOAT, False): "空头仓位减轻",
+    (MarketMetric.SHORT_RATIO, True): "空头回补压力上升",
+    (MarketMetric.SHORT_RATIO, False): "空头回补压力下降",
+    (MarketMetric.INSTITUTIONAL_OWNERSHIP, True): "机构持股上升",
+    (MarketMetric.INSTITUTIONAL_OWNERSHIP, False): "机构持股下降",
 }
 
 
@@ -223,6 +269,41 @@ def driver_phrase(metric: MarketMetric, rising: bool) -> str:
     return DRIVER_PHRASES.get(
         (metric, rising), f"{METRIC_NAMES[metric]}{'上升' if rising else '下降'}"
     )
+
+
+# How each named opportunity condition reads when it holds and when it does not.
+# The two are written as separate phrases rather than as one phrase negated: "not
+# an attractive valuation" is a sentence, and "估值不具备吸引力" is not.
+OPPORTUNITY_CONDITION_LABELS: dict[OpportunityCondition, tuple[str, str]] = {
+    OpportunityCondition.VALUATION: ("估值具备吸引力", "估值偏高"),
+    OpportunityCondition.TREND: ("趋势向好", "趋势偏弱"),
+    OpportunityCondition.RISK: ("风险可控", "风险偏高"),
+    OpportunityCondition.CATALYST: ("有近期催化", "暂无近期催化"),
+    OpportunityCondition.POSITIONING: ("资金不拥挤", "资金较为拥挤"),
+}
+
+# What a count of held conditions amounts to, highest first.
+OPPORTUNITY_HEADLINES: tuple[tuple[int, str], ...] = (
+    (4, "当前属于值得优先配置的机会"),
+    (3, "当前机会一般，优先级不高"),
+    (0, "目前不是优先配置的时点"),
+)
+
+
+def opportunity_condition_label(
+    condition: OpportunityCondition, satisfied: bool
+) -> str:
+    """Return how one opportunity condition reads, held or not held."""
+    held, missing = OPPORTUNITY_CONDITION_LABELS[condition]
+    return held if satisfied else missing
+
+
+def opportunity_headline(grade: int) -> str:
+    """Return what a count of held conditions amounts to."""
+    for threshold, headline in OPPORTUNITY_HEADLINES:
+        if grade >= threshold:
+            return headline
+    return OPPORTUNITY_HEADLINES[-1][1]
 
 
 def decision_label(state: DecisionState) -> str:

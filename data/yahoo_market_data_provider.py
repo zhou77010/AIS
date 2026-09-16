@@ -47,7 +47,8 @@ _COOKIE_URL = "https://fc.yahoo.com"
 _TOKEN_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 _SUMMARY_URL = (
     "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
-    "?modules=summaryDetail,defaultKeyStatistics,financialData&crumb={token}"
+    "?modules=summaryDetail,defaultKeyStatistics,financialData,calendarEvents"
+    "&crumb={token}"
 )
 _CHART_URL = (
     "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -61,6 +62,7 @@ _VOLUME_RECENT_DAYS = 5
 _VOLUME_BASELINE_DAYS = 60
 _VOLATILITY_WINDOW = 20
 _VOLUME_AVERAGE_WINDOW = 60
+_SECONDS_PER_DAY = 86_400
 _DCF_REASON = (
     f"{MarketMetric.DCF.label} is not retrieved: it is the output of a valuation "
     f"model, not a datum a market data source publishes, and AIS has not defined "
@@ -124,7 +126,7 @@ class YahooMarketDataProvider:
             return self._snapshot(symbol, retrieved_at, points)
 
         return self._snapshot(
-            symbol, retrieved_at, _merge(_points(summary), indicators)
+            symbol, retrieved_at, _merge(_points(summary, retrieved_at), indicators)
         )
 
     def fetch_history(self, symbol: str) -> PriceHistory:
@@ -398,7 +400,9 @@ def _merge(
     return tuple(by_metric[metric] for metric in MarketMetric if metric in by_metric)
 
 
-def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
+def _points(
+    summary: Mapping[str, Any], retrieved_at: datetime
+) -> tuple[MarketDataPoint, ...]:
     """Build one point per metric from a quote summary."""
     market_cap = _raw(summary, "summaryDetail", "marketCap")
     free_cash_flow = _raw(summary, "financialData", "freeCashflow")
@@ -459,6 +463,34 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
         _expected_earnings_change_point(
             _raw(summary, "defaultKeyStatistics", "forwardEps"),
             _raw(summary, "defaultKeyStatistics", "trailingEps"),
+        ),
+        _days_until_point(
+            MarketMetric.NEXT_EARNINGS_DAYS,
+            _epoch(summary, "calendarEvents", "earnings", "earningsDate"),
+            retrieved_at,
+            "the next quarterly earnings report",
+        ),
+        _days_until_point(
+            MarketMetric.NEXT_EX_DIVIDEND_DAYS,
+            _epoch(summary, "calendarEvents", "exDividendDate"),
+            retrieved_at,
+            "the next ex-dividend date",
+        ),
+        _point(
+            MarketMetric.SHORT_PERCENT_OF_FLOAT,
+            _raw(summary, "defaultKeyStatistics", "shortPercentOfFloat"),
+        ),
+        _point(
+            MarketMetric.SHORT_RATIO,
+            _raw(summary, "defaultKeyStatistics", "shortRatio"),
+        ),
+        _point(
+            MarketMetric.INSTITUTIONAL_OWNERSHIP,
+            _raw(summary, "defaultKeyStatistics", "heldPercentInstitutions"),
+        ),
+        _point(
+            MarketMetric.INSIDER_OWNERSHIP,
+            _raw(summary, "defaultKeyStatistics", "heldPercentInsiders"),
         ),
     )
 
@@ -629,6 +661,77 @@ def _fcf_yield_point(
     )
 
 
+def _days_until_point(
+    metric: MarketMetric,
+    epoch: float | None,
+    retrieved_at: datetime,
+    detail: str,
+) -> MarketDataPoint:
+    """Build the point telling how far away a scheduled event is.
+
+    The distance is what makes an event a catalyst, so it is the distance that
+    is measured rather than the date: an event with no distance to it cannot be
+    said to be coming. A date the source reports that has already passed is not
+    a forthcoming event, and is reported as absent rather than as a negative
+    distance that would read as an event behind us.
+    """
+    if epoch is None:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} could not be determined: {SOURCE_NAME} did not "
+                f"report {detail} for this symbol."
+            ),
+        )
+    moment = datetime.fromtimestamp(epoch, tz=retrieved_at.tzinfo)
+    days = round((moment - retrieved_at).total_seconds() / _SECONDS_PER_DAY)
+    if days < 0:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} is not known: {detail} that {SOURCE_NAME} "
+                f"reports, {moment:%Y-%m-%d}, has already passed."
+            ),
+        )
+    return MarketDataPoint(
+        metric=metric,
+        value=float(days),
+        reason=(
+            f"{metric.label} {days} days, counted from {detail} on "
+            f"{moment:%Y-%m-%d} reported by {SOURCE_NAME}."
+        ),
+    )
+
+
+def _epoch(summary: Mapping[str, Any], module: str, *keys: str) -> float | None:
+    """Return a timestamp field of a quote summary, as seconds since the epoch.
+
+    Yahoo nests the earnings date one level deeper than the other calendar
+    fields and returns it as a list, so the lookup walks the path it is given
+    and treats a list as the first entry that is there.
+    """
+    entry: Any = summary.get(module)
+    for key in keys:
+        if isinstance(entry, list):
+            entry = entry[0] if entry else None
+        entry = entry.get(key) if isinstance(entry, Mapping) else None
+    if isinstance(entry, list):
+        entry = entry[0] if entry else None
+    if isinstance(entry, Mapping):
+        entry = entry.get("raw")
+    return _finite(entry)
+
+
+def _finite(value: object) -> float | None:
+    """Return the value as a finite number, or None when it is not one."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
 def _raw(summary: Mapping[str, Any], module: str, key: str) -> float | None:
     """Return one numeric field of a quote summary module.
 
@@ -643,7 +746,4 @@ def _raw(summary: Mapping[str, Any], module: str, key: str) -> float | None:
     entry = section.get(key)
     if isinstance(entry, Mapping):
         entry = entry.get("raw")
-    if isinstance(entry, bool) or not isinstance(entry, (int, float)):
-        return None
-    value = float(entry)
-    return value if math.isfinite(value) else None
+    return _finite(entry)

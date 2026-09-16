@@ -24,6 +24,7 @@ from contracts.market_data_provider import (
     MarketDataSnapshot,
     MarketMetric,
 )
+from evaluation.hpo.opportunity_assessor import OpportunityAssessor
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import CATEGORY_ORDER, Category
@@ -31,6 +32,7 @@ from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
 from models.coverage import Coverage
 from models.decision_state import DecisionState
+from models.opportunity_assessment import OpportunityAssessment
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
@@ -114,6 +116,7 @@ def _result(
     market_data: MarketDataSnapshot | None = None,
     assessed: int | None = None,
     ratings: tuple[CategoryRating, ...] = (),
+    opportunity: OpportunityAssessment | None = None,
 ) -> AnalysisResult:
     scores = tuple(
         _score(category, assessed) if assessed is not None else _score(category)
@@ -135,6 +138,14 @@ def _result(
         ),
         market_data=_live() if market_data is None else market_data,
         ratings=ratings,
+        opportunity=opportunity,
+    )
+
+
+def _opportunity(**grades: int | None) -> OpportunityAssessment:
+    """Return an opportunity judgement reached from the grades given."""
+    return OpportunityAssessor().assess(
+        {Category.VALUATION: 5, Category.TREND: 4, Category.RISK: 3} | grades
     )
 
 
@@ -408,6 +419,102 @@ def test_report_omits_the_not_assessed_block_when_nothing_is_outstanding() -> No
     report = _render(_result(tuple(CATEGORY_ORDER), market_data=complete))
 
     assert NOT_ASSESSED_PREFIX not in report
+
+
+# --------------------------------------------------------------------------
+# Whether this is worth allocating to today
+# --------------------------------------------------------------------------
+
+
+def test_report_states_the_opportunity_before_the_categories() -> None:
+    report = _render(_result(opportunity=_opportunity()))
+
+    lines = report.splitlines()
+    hpo = next(index for index, line in enumerate(lines) if line.startswith("HPO"))
+
+    assert hpo < next(
+        index for index, line in enumerate(lines) if line.startswith("估值")
+    )
+
+
+def test_report_writes_the_opportunity_as_conditions_and_not_a_score() -> None:
+    report = _render(_result(opportunity=_opportunity()))
+
+    assert "当前属于值得优先配置的机会" in report
+    assert "估值具备吸引力" in report
+    assert "趋势向好" in report
+
+
+def test_report_names_the_opportunity_conditions_that_do_not_hold() -> None:
+    report = _render(_result(opportunity=_opportunity(valuation=1)))
+
+    assert "但估值偏高" in report
+
+
+def test_report_names_the_opportunity_condition_it_could_not_judge() -> None:
+    # A condition nothing could be said about is reported by name rather than
+    # written as though it had failed.
+    report = _render(_result(opportunity=_opportunity(catalyst=None)))
+
+    assert "未评估的条件：" in report
+    assert "暂无近期催化" in report
+
+
+def test_report_gives_no_opportunity_grade_when_nothing_could_be_judged() -> None:
+    report = _render(_result(opportunity=OpportunityAssessor().assess({})))
+
+    assert "暂无评级" in report
+    assert "机会条件无法评估" in report
+
+
+def test_report_does_not_name_the_opportunity_among_the_things_not_looked_at() -> None:
+    report = _render(
+        _result((Category.VALUATION,), opportunity=_opportunity(catalyst=None)),
+    )
+    block = report.split(NOT_ASSESSED_PREFIX)[1]
+
+    assert "HPO" not in block
+
+
+# --------------------------------------------------------------------------
+# What could change the picture, and who is holding
+# --------------------------------------------------------------------------
+
+
+def test_report_says_when_there_is_no_evaluable_catalyst() -> None:
+    report = _render(_result((Category.VALUATION,)))
+
+    block = _block_for(report, Category.CATALYST)
+
+    assert "暂无可评估催化。" in "".join(block)
+
+
+def test_report_states_the_catalyst_as_a_distance_in_words() -> None:
+    snapshot = _live(next_earnings_days=12.0)
+
+    report = _render(_result((Category.CATALYST,), market_data=snapshot))
+
+    block = _block_for(report, Category.CATALYST)
+
+    assert any("12 天后预计发布财报" in line for line in block)
+    assert any("波动来源" in line for line in block)
+
+
+def test_report_states_positioning_as_a_sentence() -> None:
+    snapshot = _live(
+        institutional_ownership=0.66,
+        insider_ownership=0.016,
+        short_percent_of_float=0.0096,
+        short_ratio=2.97,
+    )
+
+    report = _render(_result((Category.POSITIONING,), market_data=snapshot))
+
+    block = _block_for(report, Category.POSITIONING)
+
+    assert any("筹码以机构为主" in line for line in block)
+    assert any("空头力量" in line for line in block)
+    assert not any("机构持股比例" in line for line in block)
 
 
 # --------------------------------------------------------------------------

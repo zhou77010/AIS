@@ -17,11 +17,13 @@ and to be replaced once the standard score is defined. See
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from analysis.analysis_result import AnalysisResult
+from analysis.labels import opportunity_condition_label, opportunity_headline
 from contracts.market_data_provider import MarketDataPoint, MarketMetric
 from models.category import Category
+from models.opportunity_assessment import OpportunityAssessment
 
 # Which moving averages the price is measured against, nearest first.
 _MOVING_AVERAGES = (
@@ -81,14 +83,26 @@ def sentence_for(result: AnalysisResult, category: Category) -> str | None:
     Only categories whose measurements read better as a sentence have one. The
     rest report their measurements, and this returns None for them.
     """
-    if category is not Category.TREND:
+    if category not in _SENTENCE_BUILDERS:
         return None
     values = {
         point.metric: point.value
         for point in measurements_of(result, category)
         if point.value is not None
     }
-    return trend_sentence(values)
+    return _SENTENCE_BUILDERS[category](values)
+
+
+# Which categories are written as a sentence, and the function that writes it.
+# Every sentence restates measurements that were retrieved and adds nothing to
+# them; a category whose readings are simply a list of figures is not here.
+_SENTENCE_BUILDERS: dict[
+    Category, Callable[[Mapping[MarketMetric, float]], str | None]
+] = {
+    Category.TREND: lambda values: trend_sentence(values),
+    Category.CATALYST: lambda values: catalyst_sentence(values),
+    Category.POSITIONING: lambda values: positioning_sentence(values),
+}
 
 
 def trend_sentence(values: Mapping[MarketMetric, float]) -> str | None:
@@ -188,3 +202,141 @@ def _band(value: float, bands: tuple[tuple[float, str], ...]) -> str:
         if value >= threshold:
             return phrase
     return bands[-1][1]
+
+
+# How near an event has to be to count as the thing likely to move the price.
+_NEAR_EVENT_DAYS = 30.0
+
+# Conventional readings for who is holding, and how crowded that is.
+_INSTITUTIONAL_HEAVY = 0.60
+_INSTITUTIONAL_LIGHT = 0.20
+_INSIDER_HIGH = 0.10
+_SHORT_HEAVY = 0.10
+_SHORT_LIGHT = 0.03
+_COVER_HEAVY_DAYS = 4.0
+_COVER_LIGHT_DAYS = 2.0
+
+
+def catalyst_sentence(values: Mapping[MarketMetric, float]) -> str | None:
+    """Return why the price could move in the near future, in plain language.
+
+    The sentence is about the distance to what is coming, because that is what
+    makes an event a catalyst. It says when and does not say which way: whether a
+    report will be good is not known before it is published, and a sentence that
+    implied otherwise would be a forecast.
+
+    Args:
+        values: Retrieved catalyst measurements, keyed by metric.
+
+    Returns:
+        A sentence, or None when no forthcoming event was retrieved.
+    """
+    events: list[tuple[float, str]] = []
+    earnings = values.get(MarketMetric.NEXT_EARNINGS_DAYS)
+    if earnings is not None:
+        events.append((earnings, f"{round(earnings)} 天后预计发布财报"))
+    dividend = values.get(MarketMetric.NEXT_EX_DIVIDEND_DAYS)
+    if dividend is not None:
+        events.append((dividend, f"{round(dividend)} 天后除息"))
+
+    if not events:
+        return None
+    events.sort()
+    nearest, phrase = events[0]
+    tail = (
+        "，是近期最明确的波动来源。"
+        if nearest <= _NEAR_EVENT_DAYS
+        else "，是接下来最值得留意的时间点。"
+    )
+    return "，".join(text for _, text in events) + tail
+
+
+def positioning_sentence(values: Mapping[MarketMetric, float]) -> str | None:
+    """Return who is holding the asset, and how crowded that is.
+
+    Holdings and crowding are stated as they were retrieved. A large holding is
+    not called a good one: the scale that would say so is not defined yet, and a
+    sentence is not the place to invent it.
+
+    Args:
+        values: Retrieved positioning measurements, keyed by metric.
+
+    Returns:
+        A sentence, or None when none of the measurements were retrieved.
+    """
+    clauses: list[str] = []
+
+    institutions = values.get(MarketMetric.INSTITUTIONAL_OWNERSHIP)
+    if institutions is not None:
+        if institutions >= _INSTITUTIONAL_HEAVY:
+            clauses.append("筹码以机构为主")
+        elif institutions <= _INSTITUTIONAL_LIGHT:
+            clauses.append("机构参与度不高")
+        else:
+            clauses.append("机构与个人共同持有")
+
+    insiders = values.get(MarketMetric.INSIDER_OWNERSHIP)
+    if insiders is not None and insiders >= _INSIDER_HIGH:
+        clauses.append("管理层持股较重")
+
+    crowding = _crowding_clause(
+        values.get(MarketMetric.SHORT_PERCENT_OF_FLOAT),
+        values.get(MarketMetric.SHORT_RATIO),
+    )
+    if crowding is not None:
+        clauses.append(crowding)
+
+    if not clauses:
+        return None
+    return "，".join(clauses) + "。"
+
+
+def _crowding_clause(short_share: float | None, cover_days: float | None) -> str | None:
+    """Return how crowded the short side of the trade is, or None when unmeasured."""
+    if short_share is None and cover_days is None:
+        return None
+    heavy = (short_share is not None and short_share >= _SHORT_HEAVY) or (
+        cover_days is not None and cover_days >= _COVER_HEAVY_DAYS
+    )
+    if heavy:
+        return "空头力量较重"
+    light = (short_share is None or short_share <= _SHORT_LIGHT) and (
+        cover_days is None or cover_days <= _COVER_LIGHT_DAYS
+    )
+    return "空头力量有限" if light else "空头力量中性"
+
+
+def opportunity_sentence(assessment: OpportunityAssessment) -> str:
+    """Return why this is, or is not, one of the better opportunities today.
+
+    The sentence names the conditions that hold and the conditions that do not,
+    which is the whole of what the judgement contains: there is no combined score
+    behind it to explain, because none was computed. A condition that could not
+    be judged is left out of the sentence and named separately by the report,
+    rather than being written as though it had failed.
+
+    Args:
+        assessment: Opportunity judgement to write.
+
+    Returns:
+        A sentence, always one: an opportunity that could not be judged at all is
+        itself something a reader is owed.
+    """
+    held = [
+        opportunity_condition_label(result.condition, True)
+        for result in assessment.satisfied
+    ]
+    missing = [
+        opportunity_condition_label(result.condition, False)
+        for result in assessment.unsatisfied
+    ]
+
+    if assessment.grade is None:
+        return "尚无可用的类别判断，机会条件无法评估。"
+
+    lead = opportunity_headline(assessment.grade)
+    if held and missing:
+        return f"{lead}：{'、'.join(held)}；但{'、'.join(missing)}。"
+    if held:
+        return f"{lead}：{'、'.join(held)}。"
+    return f"{lead}：{'、'.join(missing)}。"

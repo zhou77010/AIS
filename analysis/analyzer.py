@@ -19,14 +19,18 @@ from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
+from evaluation.catalyst.catalyst_evaluator import CatalystEvaluator
 from evaluation.earnings.earnings_evaluator import EarningsEvaluator
 from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
+from evaluation.hpo.opportunity_assessor import OpportunityAssessor
 from evaluation.market.market_evaluator import MarketEvaluator
+from evaluation.positioning.positioning_evaluator import PositioningEvaluator
 from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.trend.trend_evaluator import TrendEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
 from models.category_rating import CategoryRating
+from models.opportunity_assessment import OpportunityAssessment
 from models.recommendation import Recommendation
 from pipeline.evidence_builder import EvidenceBuilder
 
@@ -63,9 +67,12 @@ class AssetAnalyzer:
             MarketEvaluator(),
             TrendEvaluator(),
             EarningsEvaluator(),
+            CatalystEvaluator(),
+            PositioningEvaluator(),
         )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()
+        self._opportunity_assessor = OpportunityAssessor()
         self._logger = get_logger(_LOGGER_NAME)
 
     def analyze(self, asset: Asset) -> Recommendation:
@@ -105,7 +112,27 @@ class AssetAnalyzer:
             recommendation=recommendation,
             market_data=market_data,
         )
-        return replace(result, ratings=self._rate(asset, result))
+        result = replace(result, ratings=self._rate(asset, result))
+        return replace(result, opportunity=self._assess_opportunity(result))
+
+    def _assess_opportunity(self, result: AnalysisResult) -> OpportunityAssessment:
+        """Return the opportunity judgement for a result just produced.
+
+        The judgement reads the grade of each category and nothing else: no
+        evidence is consulted again, because HPO is a synthesis of judgements
+        already reached rather than a second reading of the data.
+
+        Args:
+            result: Analysis result just produced.
+
+        Returns:
+            Opportunity judgement over the categories that were graded.
+        """
+        grades = {
+            category_score.category: grade_for_category(result, category_score.category)
+            for category_score in result.assessment.category_scores
+        }
+        return self._opportunity_assessor.assess(grades)
 
     def _rate(self, asset: Asset, result: AnalysisResult) -> tuple[CategoryRating, ...]:
         """Return the rating of every category a judgement was reached for.
