@@ -368,45 +368,55 @@ stated?
 
 **Positioning** — Who else holds this asset, and how crowded is that?
 
-**HPO** — *Intentionally undefined.* It is a member of the set and its meaning is
-not specified. See Section 4.1.
+**HPO** — If capital were available today, is this one of the highest probability
+opportunities worth allocating to? It is a synthesis of the other categories
+rather than a reading of the asset. See Section 4.1.
 
 **Earnings** — What have the reported results said, and what are they expected
 to say next?
 
-### 4.1 A category whose question is not specified
+### 4.1 HPO — the category that answers a question about capital
 
-One member of the set, `HPO`, is deliberately left without a question. Its
-meaning is not specified, and that is a decision rather than an omission.
+`HPO` is a member of the set like the other eight, and it is unlike them in one
+respect: the other eight ask what is true of the asset, and HPO asks whether what
+is true of it makes it worth allocating capital to today.
 
-**Membership and meaning are separate.** HPO's membership in the set is settled:
-it is one of the nine, and being undefined does not remove it. Its meaning is not
-settled, and nothing in AIS may settle it implicitly.
+**The question.**
 
-What follows from that:
+> If capital were available today, is this one of the highest probability
+> opportunities worth allocating to?
 
-- **The name is authoritative.** `HPO` is written `HPO` in code, in reports and
-  in every document. It is not expanded, abbreviated, renamed or paraphrased
-  anywhere, because each of those would be an interpretation.
-- **No semantics may be invented.** No evaluator may score it, no rule may read
-  it, no renderer may describe it, and no summary may characterise it. Any
-  behaviour that would require knowing what it means is not permitted until it
-  is defined.
-- **It is not a gap.** HPO is not waiting to be filled the way an unimplemented
-  evaluator is waiting. A gap implies the shape of what belongs in it; HPO has
-  no implied shape.
-- **It is not evidence of anything.** Its presence in the set says only that the
-  set has nine members.
+**What it is not.** It is not a judgement of business quality, which is
+Fundamental's question. It is not the overall score, which combines the
+categories on a scale that is not defined. It is not a Recommendation, which says
+what to do. It is not a measure of how good the asset is; it is a judgement of
+whether today is a time to prioritise it.
 
-**What it shows as an output.** No question can be answered for HPO, so no
-judgement can be formed for it, so it is an unevaluated dimension (Section 3.18)
-and is shown as one. The reason differs from the other unevaluated categories —
-theirs is a missing evaluator, HPO's is a missing question — but a reader told
-that it is not evaluated has been told the truth either way.
+**It is a synthesis, not evidence.** HPO reads the results the other categories
+have already reached. It re-reads no evidence and consults no source. This is the
+only category of which that is true, and it is what synthesis means here: a
+judgement about judgements, which is only legitimate while the judgements it
+reads stay traceable to their own evidence.
 
-**How it can change.** Only an explicit design decision defines HPO. Until that
-decision is recorded in this document, the state above stands, and any behaviour
-that presupposes a meaning is a defect rather than progress.
+**It is never an input to anything.** No other category may read HPO, and it may
+not be folded back into the categories it was built from.
+
+**The name is authoritative.** `HPO` is written `HPO` in code, in reports and in
+every document. It is not abbreviated, renamed or paraphrased anywhere.
+
+**No semantics beyond this question may be invented.** The question above is
+frozen. How it is answered is method, and method is deferred exactly as it is for
+every other category: nothing in AIS may settle a weight, a threshold or a scale
+for HPO that this document does not state.
+
+**What it shows as an output.** HPO answers a question, so a judgement can be
+formed for it and it is shown as judged. When a category it reads has no grade,
+it reports that condition as not judged — which is the state of absence from
+Section 3.18 — rather than treating it as having failed.
+
+**How it can change.** The question is fixed. Everything about how it is answered
+is provisional until the AIS Standard Score defines what a category reading
+means.
 
 ---
 
@@ -580,6 +590,11 @@ the honest state of the system.
 | Deferred | The question it will settle | Safe to defer because |
 | --- | --- | --- |
 | **AIS Standard Score** | What scale scores live on, and what makes two scores comparable. | Measurements can be recorded on their own scale now and normalized once the scale exists; the reverse is not true. |
+| **Decision Thresholds** | Where the boundaries between decision states lie. | A decision state can be reached and shown without the boundaries being final, as long as the reader is told they are provisional. |
+| **Risk Methodology** | How Severity, Likelihood and evidence combine into a judgement of each risk dimension, and how risk constrains a Decision. | Version 0.2 fixed *which* kinds of uncertainty exist (Section 5), so a dimension can now be named and described. What remains deferred is how each is assessed, how they combine, and how far risk may override a conclusion. |
+| **Confidence Aggregation** | How confidence in parts becomes confidence in a whole. | Per-claim confidence is meaningful on its own; only the aggregate is deferred, and an aggregate that is not yet defined must not be invented. |
+| **Driver Attribution** | How the contribution of a driver is measured, and how drivers are ordered. | Drivers can be named before they can be ranked. Until ranking exists, drivers are listed in a stated order and never presented as ranked. |
+| **Portfolio Optimization** | How an Action is derived from a Decision, a portfolio and its constraints. | Decisions are useful without Actions, and an Action derived from an undefined rule would be worse than none. |
 
 **Recorded blocker on the AIS Standard Score.** Until the scale exists, scores
 are aggregated as raw measurement values, and different categories measure in
@@ -592,16 +607,11 @@ This is recorded as a blocker rather than worked around. Normalizing, weighting
 or inverting any measurement to compensate would be inventing the scale this
 entry defers, and an invented scale is harder to detect than a known-broken one.
 The report labels every affected score as undefined until the scale is defined.
-| **Decision Thresholds** | Where the boundaries between decision states lie. | A decision state can be reached and shown without the boundaries being final, as long as the reader is told they are provisional. |
-| **Risk Methodology** | How Severity, Likelihood and evidence combine into a judgement of each risk dimension, and how risk constrains a Decision. | Version 0.2 fixed *which* kinds of uncertainty exist (Section 5), so a dimension can now be named and described. What remains deferred is how each is assessed, how they combine, and how far risk may override a conclusion. |
-| **Confidence Aggregation** | How confidence in parts becomes confidence in a whole. | Per-claim confidence is meaningful on its own; only the aggregate is deferred, and an aggregate that is not yet defined must not be invented. |
-| **Driver Attribution** | How the contribution of a driver is measured, and how drivers are ordered. | Drivers can be named before they can be ranked. Until ranking exists, drivers are listed in a stated order and never presented as ranked. |
-| **Portfolio Optimization** | How an Action is derived from a Decision, a portfolio and its constraints. | Decisions are useful without Actions, and an Action derived from an undefined rule would be worse than none. |
 
-HPO does not appear in the table above, because it is a different kind of open
-item. The entries above are methods that have not been chosen yet; HPO is a
-meaning that has not been specified at all. It is handled in Section 4.1, and it
-is not a candidate for the same kind of incremental decision.
+HPO is no longer a special case of this table. Its question was fixed by an
+explicit design decision and is recorded in Section 4.1; what remains deferred
+about HPO is the same thing that is deferred about every category, which is how
+its question is answered.
 
 Two further questions are known to be open and are not yet mature enough to list
 with the above. They are recorded so that they are not discovered again as

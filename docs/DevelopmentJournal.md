@@ -383,4 +383,90 @@ later report work is measured against it rather than against taste.
 
 ---
 
+### The last two factual categories were built, and HPO was defined
+
+**Context.** Six of the nine categories were evaluated. Catalyst and Positioning
+had no evaluator, and HPO was deliberately undefined: the Constitution forbade
+any behaviour that would presuppose a meaning for it.
+
+**Decision.** Build Catalyst and Positioning as vertical slices over evidence a
+source can actually supply, and define HPO explicitly as an opportunity
+judgement built from the categories the other two completed.
+
+**Reason.** Both categories answer questions a source can partly answer:
+Catalyst gets the dates on the calendar, Positioning gets who is on the register
+and how crowded the short side is. The parts no source can supply — product
+launches, regulatory decisions, fund flows, options positioning — are named as
+not covered rather than approximated. HPO's question could not be answered while
+two of the eight categories it reads did not exist, which is why it came last.
+
+**Impact.** All nine categories now render a grade, a sentence and the list of
+what they did not cover. Catalyst and Positioning declare coverage against parts
+that include an unmeasurable one, so their coverage can never read as complete:
+that is the honest state and it is deliberate. HPO is implemented as named
+conditions counted, not as a combined score.
+
+**Revisit.** The catalyst calendar will stay thin until a source for unscheduled
+events exists. Positioning has no flow evidence at all.
+
+---
+
+### HPO is a synthesis, not a score
+
+**Context.** HPO's question was fixed — is this, today, one of the highest
+probability opportunities worth allocating capital to — and the obvious
+implementation was to combine the categories into a number.
+
+**Decision.** HPO reads the grades the categories already reached and decides a
+small set of named conditions from them. Each condition holds, does not hold, or
+could not be judged. The star count is a count of the conditions that hold among
+those judged.
+
+**Reason.** There is no common scale for the category measurements, so any
+combination would have required inventing one — the exact thing the AIS Standard
+Score entry defers. Counting named conditions needs no scale, and it has the
+property that a reader can check it: every star can be traced to a condition, and
+every condition to the category that decided it. A condition that could not be
+judged is reported by name rather than counted as having failed, because a
+question never asked is not a question answered no.
+
+**Impact.** HPO carries no score, no confidence and no coverage. It is the first
+component in AIS whose inputs are judgements rather than evidence, so it re-reads
+nothing; that is what keeps it a synthesis rather than a ninth opinion. It sits
+beside the overall assessment instead of inside it, so that the categories it was
+built from are not counted twice.
+
+**Revisit.** The conditions are thresholds on a provisional presentation grade.
+When the standard score defines what a category reading means, the conditions
+must be re-derived from it.
+
+---
+
+### The overall score is on its way out
+
+**Context.** The overall score combines every category score into one number on a
+scale that has never been defined, and it currently treats a larger reading as
+more favourable in every category — so a measured risk raises it. It is labelled
+as undefined wherever it appears.
+
+**Decision.** Stop building on it. The daily report does not show it, no new
+feature is to depend on it, and it is to be removed once the opportunity
+judgement has taken its place.
+
+**Reason.** It was a development artefact: a way to have an end-to-end pipeline
+before the categories existed. Now that all nine categories produce something a
+reader can use, a composite number nobody can explain adds confidence the system
+has not earned. An investor is better served by eight named judgements and an
+opportunity sentence than by a figure whose scale is undefined.
+
+**Impact.** Recorded here and in the backlog. Nothing is deleted yet: the
+recommendation still reads the overall assessment, and that migration is
+deliberately postponed until after the product review that follows the nine
+categories.
+
+**Revisit.** When the recommendation stops reading the overall assessment. That
+is a chain change and belongs to the review.
+
+---
+
 End of Document

@@ -143,4 +143,31 @@ allowed to pretend it is better today than it is.
 
 ---
 
+## 9. Three Questions That Must Not Be Mixed
+
+AIS distinguishes between three things, and never lets one stand in for another:
+
+**What we know.** The categories. Facts, measurements and readings, each tied to
+the evidence it came from.
+
+**What it means.** The opportunity judgement. Whether what is known adds up to
+something worth acting on today.
+
+**What we should do.** The recommendation. The action, stated plainly.
+
+They are three different questions, and the answer to one is not the answer to
+another. A fact is not a conclusion. A conclusion is not an instruction. An
+instruction is not an explanation.
+
+The reason this matters is that mixing them is invisible. A report that presents
+an opinion in the shape of a fact, or an action in the shape of an argument,
+reads as though it were more certain than it is — and the reader has no way to
+tell which part was measured and which part was decided.
+
+So each layer is allowed to say only what it can support, and each is allowed to
+say that it does not know. When a lower layer is missing, the higher layer says
+it could not be judged rather than quietly proceeding without it.
+
+---
+
 End of Document

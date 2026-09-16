@@ -60,6 +60,8 @@ pattern.
 | Market | aspects | One measurement, and `1/1` would have claimed the environment was examined. |
 | Trend | aspects | Two measurements, and nothing is seen about how the price travelled. |
 | Earnings | parts | The Constitution names both parts in the question. |
+| Catalyst | parts | One part is dated by a source, one part has no source at all. |
+| Positioning | parts | Ownership and crowding are measured; flow is not. |
 
 The review should decide which of these are right, and whether the aspect and
 dimension layers are real parts of a question or scaffolding that should be
@@ -116,6 +118,49 @@ currently describes one asset, and adding a digest is a decision for that review
 
 ---
 
+## Portfolio Layer — how much
+
+Not built, and not to be built before the review that follows the nine
+categories. It answers a fourth question AIS does not answer today: **How much?**
+
+It will need, at minimum:
+
+- **Initial allocation** — the size of a first position.
+- **Maximum allocation** — the largest position this asset may ever take.
+- **Scale-in conditions** — what would justify adding.
+- **Scale-out conditions** — what would justify reducing.
+- **Opportunity cost** — why this asset rather than another one today.
+
+Opportunity cost belongs to this layer rather than to Risk or Positioning: it is
+a question about the alternatives available, not about the asset. HPO states
+whether an opportunity is worth allocating to; only this layer can say whether it
+is a better use of capital than something else.
+
+It is deferred because it cannot be answered in the abstract. It needs a
+portfolio: live positions, cash, sector exposure and the other opportunities
+available. The intended input is an IBKR connection, and building the layer
+before that exists would mean inventing the portfolio it is supposed to read.
+
+The risk philosophy for this layer is already agreed and recorded here so it is
+not lost: a recommendation must not simply follow the opportunity judgement.
+Extreme risk has veto capability — a high opportunity with extreme risk is a
+reason to wait, not to buy. Nothing of this is implemented, and it belongs to the
+review.
+
+---
+
+## The overall score is being retired
+
+`OverallEvaluator` combines every category score into one number on a scale that
+is not defined, and it currently treats a larger reading as favourable in every
+category. The daily report does not show it, and no new feature may depend on it.
+
+It is not deleted yet, because the recommendation still reads the overall
+assessment. Removing it means deciding what the recommendation reads instead,
+which is a chain change and belongs to the review after the nine categories.
+
+---
+
 ## Registered blockers
 
 - **AIS Standard Score direction.** Recorded in `docs/Constitution.md`. Until the
@@ -123,6 +168,32 @@ currently describes one asset, and adding a digest is a decision for that review
   categories measure in opposite directions: a larger risk measurement currently
   raises the overall score rather than lowering it. Not worked around, because
   inverting or weighting to compensate would be inventing the scale.
+
+- **HPO condition thresholds.** HPO decides its named conditions from the
+  provisional grade of each category, so it inherits that grade's provisionality.
+  The thresholds are stated openly in the code and are to be re-derived once the
+  standard score defines what a category reading means. They are not to be tuned
+  in the meantime: tuning them would make a presentation band look like a
+  methodology.
+
+- **The positioning score mixes holdings and days.** The Positioning category
+  score is the mean of four readings on different scales, and the days-to-cover
+  reading dominates it numerically. Direction is read as "lower is better", which
+  is right for crowding and wrong for holdings. This is the standard-score
+  blocker showing through a single category, and it is recorded rather than
+  patched.
+
+- **Catalyst can never report complete coverage.** One of its two parts — events
+  no connected source can date — is unmeasurable today by construction, so it
+  always reports partial coverage and always lists what it could not see.
+
+- **The movement arrows are a presentation decision.** Whether ▲ means "the
+  measurement rose" or "the category improved" has no answer on an undefined
+  scale. The report currently shows improvement, which means valuation and risk
+  are inverted relative to their raw scores, and catalyst and positioning are
+  read as "nearer" and "less crowded". Nothing about the stored score is changed
+  by this. When the standard score defines direction, the presentation must
+  follow it rather than decide it.
 
 ---
 

@@ -110,7 +110,7 @@ a reason to add a field, a section or an ordering rule to the Report Model today
 | Investment Thesis | §11 | **Current**, partly **Blocked** | A thesis is produced today, but it is a placeholder string; a driver-based thesis is Future. |
 | Risk | §13 | **Blocked** | No risk evaluator exists. The section renders `UNKNOWN` until one does. |
 | Portfolio Recommendation | §14 | **Blocked** | No Portfolio Engine exists. The section renders `NOT APPLICABLE`. |
-| Category Breakdown | §10 | **Current**, mostly Future | Valuation renders now; eight of nine categories have no evaluator and render `NOT EVALUATED`. |
+| Category Breakdown | §10 | **Current** | All nine categories render. Category scores and confidence remain Blocked; the provisional grade is a presentation reading of the measurements. |
 | Evidence — ledger | §12 | **Current**, partly **Blocked** | Evidence items render now. Per-item confidence bands are Blocked. |
 | Evidence — rule breakdown | §12.2 | **Future** | `EvaluationResult.failures` is discarded before the report can see it. |
 | Provenance | §17.1 | **Current**, partly Future | Data source and missing metrics render now. Market as-of time is Future. |
@@ -415,8 +415,8 @@ The Constitution defines **nine** categories:
 > it. Silently dropping a Constitution category would make a whole dimension invisible. If
 > `EARNINGS` is genuinely not reportable, the Constitution must say so.
 
-`HPO` is rendered under whatever name the Constitution gives it. This document does not guess at
-its meaning and never abbreviates or renames it.
+`HPO` is the name rendered. See §10.6: its meaning was frozen by an explicit design
+decision, and the name is still written `HPO` everywhere rather than expanded.
 
 ### 10.2 Fields per category
 
@@ -483,9 +483,54 @@ and for a category with no evaluator:
 | Trend | Depends entirely on the window. A trend score without its window is meaningless, so the window is displayed with the score rather than stored silently. | Future |
 | Market | Regime and context. Its value is explanatory, so it belongs next to the categories it explains. | Future |
 | Risk | Presented twice: as a category here, and independently in §13. | Blocked |
-| Catalyst | Forward-looking, and therefore the easiest place to state an unfalsifiable claim. Every catalyst must be datable, and its confidence must reflect how testable it is. | Future |
-| HPO | The name is rendered verbatim. Its meaning is intentionally unspecified by the Constitution, so no renderer may describe, expand or characterise it, and it is shown as an unevaluated dimension. | Future |
-| Positioning | Meaningful only relative to a portfolio. With none configured, it states that rather than scoring in the abstract. | Future |
+| Catalyst | Forward-looking. What is rendered is the **distance** to a dated event and not the date, because a date with no distance to it cannot be said to be coming. When no forthcoming event was retrieved the block says so in words. | Current, partly Future |
+| HPO | Not a category reading but a synthesis of the other categories. Rendered as named conditions and a sentence; it carries no score of its own. See §10.6. | Current |
+| Positioning | Holdings and crowding are stated as facts. A large holding is not called a good one: no scale says so yet. | Current |
+
+### 10.6 HPO — the opportunity block
+
+**Status: Current.** HPO answers one question: *if capital were available today, is this one of the
+highest probability opportunities worth allocating to?* It is not a quality score, not the overall
+score and not a recommendation.
+
+It is a **synthesis**, not a ninth reading of the data. It reads the grades the other categories
+already reached; it never re-reads evidence and never consults a source.
+
+**Named conditions, not a number.** HPO is decided by a small set of named conditions, each reading
+exactly one category and reporting one of three states:
+
+| State | Meaning |
+| --- | --- |
+| Satisfied | The condition holds. |
+| Not satisfied | The condition was judged and does not hold. |
+| Unknown | The category it reads had no grade. **This is not a failure.** |
+
+Nothing is weighted, nothing is normalized and no scale is invented. The star count is a **count of
+the conditions that hold among those judged**; a condition that could not be judged is left out of
+the count and named separately. Those belong to the future AIS Standard Score project.
+
+**Presentation template.**
+
+```
+<HPO>                                              [opportunity]
+  ★★★★☆
+  当前属于值得优先配置的机会：估值具备吸引力、趋势向好；但暂无近期催化。
+  未评估的条件：资金不拥挤。
+```
+
+The third line appears only when a condition could not be judged. The block carries no score, no
+confidence and no coverage figure, because none of those exist for it.
+
+**Rules.**
+
+- **No number is ever shown for HPO.** A combined figure would be a score on a scale nobody defined.
+- **An unknown condition is never written as a failure.** Not judged and judged false are different
+  states and must read differently.
+- **HPO is never listed as an unevaluated dimension.** It reports its own gaps by name inside its block.
+- **HPO never produces a recommendation.** What to do belongs to the Recommendation; HPO only says
+  whether the opportunity is worth allocating to.
+- **The conditions are provisional** and are thresholds on a presentation grade. They change together
+  with the grade they read, never separately.
 
 ---
 
