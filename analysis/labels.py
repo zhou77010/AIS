@@ -139,6 +139,92 @@ def category_label(category: Category) -> str:
     return CATEGORY_LABELS[category]
 
 
+# Whether a larger reading of a category's own measurement is better for the
+# investor. Valuation and risk measure exposure, so a larger number is worse;
+# the rest measure quality or strength, so larger is better.
+#
+# This is a presentation direction and not a scoring rule: it decides which way
+# an arrow points, and nothing else. It is provisional in the same way the grade
+# is, and is to be replaced when the standard score defines direction properly.
+HIGHER_IS_BETTER: dict[Category, bool] = {
+    Category.VALUATION: False,
+    Category.RISK: False,
+}
+
+# What a measurement moving a particular way reads as, in one phrase. A movement
+# upward or downward is relative to the value the movement began from.
+DRIVER_PHRASES: dict[tuple[MarketMetric, bool], str] = {
+    (MarketMetric.PE, False): "市盈率回落",
+    (MarketMetric.PE, True): "市盈率走高",
+    (MarketMetric.PEG, False): "PEG 下降",
+    (MarketMetric.PEG, True): "PEG 上升",
+    (MarketMetric.EV_EBITDA, False): "EV/EBITDA 回落",
+    (MarketMetric.EV_EBITDA, True): "EV/EBITDA 走高",
+    (MarketMetric.FCF_YIELD, True): "自由现金流收益率改善",
+    (MarketMetric.FCF_YIELD, False): "自由现金流收益率下降",
+    (MarketMetric.BETA, False): "贝塔降低",
+    (MarketMetric.BETA, True): "贝塔上升",
+    (MarketMetric.RISK_VOLATILITY, False): "波动率下降",
+    (MarketMetric.RISK_VOLATILITY, True): "波动率上升",
+    (MarketMetric.RISK_DRAWDOWN, True): "最大回撤修复",
+    (MarketMetric.RISK_DRAWDOWN, False): "最大回撤加深",
+    (MarketMetric.DEBT_TO_EQUITY, False): "负债下降",
+    (MarketMetric.DEBT_TO_EQUITY, True): "负债上升",
+    (MarketMetric.CURRENT_RATIO, True): "短期偿债能力改善",
+    (MarketMetric.CURRENT_RATIO, False): "短期偿债能力下降",
+    (MarketMetric.PROFIT_MARGIN, True): "利润率改善",
+    (MarketMetric.PROFIT_MARGIN, False): "利润率下降",
+    (MarketMetric.RETURN_ON_EQUITY, True): "净资产收益率提升",
+    (MarketMetric.RETURN_ON_EQUITY, False): "净资产收益率下降",
+    (MarketMetric.FREE_CASH_FLOW_MARGIN, True): "现金流改善",
+    (MarketMetric.FREE_CASH_FLOW_MARGIN, False): "现金流恶化",
+    (MarketMetric.TREND_MA20_GAP, True): "重新站上 20 日均线",
+    (MarketMetric.TREND_MA20_GAP, False): "跌破 20 日均线",
+    (MarketMetric.TREND_MA60_GAP, True): "站上 60 日均线",
+    (MarketMetric.TREND_MA60_GAP, False): "跌破 60 日均线",
+    (MarketMetric.TREND_MA120_GAP, True): "站上 120 日均线",
+    (MarketMetric.TREND_MA120_GAP, False): "跌破 120 日均线",
+    (MarketMetric.TREND_MACD, True): "MACD 金叉",
+    (MarketMetric.TREND_MACD, False): "MACD 死叉",
+    (MarketMetric.TREND_RSI, True): "RSI 回升",
+    (MarketMetric.TREND_RSI, False): "RSI 走弱",
+    (MarketMetric.TREND_VOLUME_RATIO, True): "成交量放大",
+    (MarketMetric.TREND_VOLUME_RATIO, False): "成交量萎缩",
+    (MarketMetric.EARNINGS_GROWTH, True): "盈利预期上修",
+    (MarketMetric.EARNINGS_GROWTH, False): "盈利预期下修",
+    (MarketMetric.EXPECTED_EARNINGS_CHANGE, True): "盈利预期上修",
+    (MarketMetric.EXPECTED_EARNINGS_CHANGE, False): "盈利预期下修",
+    (MarketMetric.MARKET_DIRECTION, True): "大盘走强",
+    (MarketMetric.MARKET_DIRECTION, False): "大盘走弱",
+    (MarketMetric.TREND_DIRECTION, True): "价格上行",
+    (MarketMetric.TREND_DIRECTION, False): "价格下行",
+    (MarketMetric.TREND_RANGE_POSITION, True): "价格上行",
+    (MarketMetric.TREND_RANGE_POSITION, False): "价格下行",
+}
+
+
+def is_improvement(category: Category, momentum: float) -> bool:
+    """Return whether a movement is an improvement for this category.
+
+    Args:
+        category: Category the movement is in.
+        momentum: How far the category's own measurement has moved.
+
+    Returns:
+        True when the movement is towards a better reading of the category.
+    """
+    if momentum == 0:
+        return False
+    return (momentum > 0) == HIGHER_IS_BETTER.get(category, True)
+
+
+def driver_phrase(metric: MarketMetric, rising: bool) -> str:
+    """Return what a measurement moving one way reads as."""
+    return DRIVER_PHRASES.get(
+        (metric, rising), f"{METRIC_NAMES[metric]}{'上升' if rising else '下降'}"
+    )
+
+
 def decision_label(state: DecisionState) -> str:
     """Return the name a decision state is reported under."""
     return DECISION_LABELS[state]

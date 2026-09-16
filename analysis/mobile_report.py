@@ -44,6 +44,8 @@ from analysis.labels import (
     UNASSESSED_ITEMS,
     category_label,
     decision_label,
+    driver_phrase,
+    is_improvement,
     metric_name,
 )
 from analysis.plain_language import measurements_of, sentence_for
@@ -98,7 +100,7 @@ def render_mobile_report(result: AnalysisResult, *, generated_at: datetime) -> s
         SECTION_SEPARATOR,
     ]
     for category in CATEGORY_ORDER:
-        lines.extend(_category_block(result, category))
+        lines.extend(_category_block(result, category, generated_at))
     lines.append(SECTION_SEPARATOR)
     lines.extend(_not_assessed_lines(result))
     lines.extend(_data_lines(result))
@@ -128,7 +130,9 @@ def _decision_line(result: AnalysisResult) -> str:
     return f"结论  {state}          信心  {confidence:.0%}"
 
 
-def _category_block(result: AnalysisResult, category: Category) -> list[str]:
+def _category_block(
+    result: AnalysisResult, category: Category, moment: datetime
+) -> list[str]:
     """Return the lines describing one category, empty when it was not judged."""
     if category not in _assessed_categories(result):
         return []
@@ -137,29 +141,60 @@ def _category_block(result: AnalysisResult, category: Category) -> list[str]:
     heading = f"{category_label(category)}  {stars(grade) if grade else NO_GRADE}"
     return [
         heading,
-        *_movement_lines(result, category),
+        *_movement_lines(result, category, moment),
         *_commentary_lines(result, category),
     ]
 
 
-def _movement_lines(result: AnalysisResult, category: Category) -> list[str]:
-    """Return how far a category has moved inside its grade.
+def _movement_lines(
+    result: AnalysisResult, category: Category, moment: datetime
+) -> list[str]:
+    """Return how far a category has moved inside its grade, and why.
 
     A grade says where a category stands. This says whether it is moving inside
     that standing, which a grade cannot show: a category can improve for weeks
-    without crossing into the next grade. When the grade itself has just
-    changed, the line says when instead, because the movement has started again
-    from nothing.
+    without crossing into the next grade.
+
+    A movement is only useful if a reader is told three things: how much, for
+    how long, and why. A bare arrow answers the first and leaves the other two
+    to be guessed at, so all three are always written together.
     """
     rating = result.rating_for(category)
     if rating is None:
         return []
     if rating.changed:
         return [_INDENT + _change_note(rating)]
-    if abs(rating.momentum) >= _MOMENTUM_FLOOR:
-        arrow = "▲" if rating.momentum > 0 else "▼"
-        return [_INDENT + f"{arrow}{abs(rating.momentum):.0%}"]
-    return []
+    if abs(rating.momentum) < _MOMENTUM_FLOOR:
+        return []
+
+    improving = is_improvement(category, rating.momentum)
+    lines = [
+        _INDENT + f"{'▲' if improving else '▼'}{abs(rating.momentum):.0%}",
+        _INDENT + _duration_phrase(rating.since, moment, improving),
+    ]
+    reason = _driver_reason(rating)
+    if reason is not None:
+        lines.append(_INDENT + f"原因：{reason}。")
+    return lines
+
+
+def _duration_phrase(since: datetime, moment: datetime, improving: bool) -> str:
+    """Return how long the movement has been running.
+
+    The length comes from when the movement began, which the tracker recorded,
+    and not from anything the renderer can see. A movement that began today
+    reads as one day rather than as none.
+    """
+    days = max(1, (moment - since).days)
+    return f"近{days}天{'累计改善' if improving else '持续走弱'}"
+
+
+def _driver_reason(rating: CategoryRating) -> str | None:
+    """Return what moved most while the movement accumulated, or None."""
+    if rating.driver is None or rating.driver_from is None or rating.driver_to is None:
+        return None
+    rising = rating.driver_to > rating.driver_from
+    return driver_phrase(rating.driver, rising)
 
 
 def _change_note(rating: CategoryRating) -> str:

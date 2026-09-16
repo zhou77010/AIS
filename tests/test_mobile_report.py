@@ -8,7 +8,7 @@ raw scores on incomparable scales, or a low grade where nothing was read at all.
 from __future__ import annotations
 
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from analysis.analysis_result import AnalysisResult
 from analysis.labels import METRIC_NAMES, category_label
@@ -145,16 +145,25 @@ def _rating(
     previous_grade: int | None = None,
     grade: int = 4,
     changed_at: datetime = _GENERATED_AT,
+    since: datetime | None = None,
+    driver: MarketMetric | None = None,
+    driver_from: float | None = None,
+    driver_to: float | None = None,
+    category: Category = Category.VALUATION,
 ) -> CategoryRating:
-    """Return a rating for the VALUATION category."""
+    """Return a rating for one category of the test asset."""
     return CategoryRating(
-        category=Category.VALUATION,
+        category=category,
         grade=grade,
         momentum=momentum,
         changed_at=changed_at,
         changed=changed,
         previous_grade=previous_grade,
         reason="reason",
+        since=changed_at if since is None else since,
+        driver=driver,
+        driver_from=driver_from,
+        driver_to=driver_to,
     )
 
 
@@ -228,18 +237,63 @@ def test_report_names_measurements_as_an_investor_reads_them() -> None:
         assert METRIC_NAMES[metric]
 
 
-def test_report_shows_movement_inside_a_grade() -> None:
-    report = _render(_result(ratings=(_rating(0.05),)))
+def test_report_shows_a_movement_inside_a_grade() -> None:
+    # A valuation score falling is a valuation improving, so the arrow points up.
+    report = _render(_result(ratings=(_rating(-0.05),)))
 
     block = _block_for(report, Category.VALUATION)
 
     assert any("▲5%" in line for line in block)
 
 
-def test_report_shows_a_falling_movement_too() -> None:
-    report = _render(_result(ratings=(_rating(-0.03),)))
+def test_report_shows_a_movement_the_other_way_too() -> None:
+    report = _render(_result(ratings=(_rating(0.03),)))
 
     assert "▼3%" in report
+
+
+def test_report_says_how_long_a_movement_has_lasted() -> None:
+    rating = _rating(-0.05, since=_GENERATED_AT - timedelta(days=6))
+
+    report = _render(_result(ratings=(rating,)))
+
+    assert "近6天累计改善" in report
+
+
+def test_report_says_what_moved_while_the_category_moved() -> None:
+    rating = _rating(
+        -0.05,
+        since=_GENERATED_AT - timedelta(days=6),
+        driver=MarketMetric.TREND_MA20_GAP,
+        driver_from=0.010,
+        driver_to=0.020,
+        category=Category.TREND,
+    )
+
+    report = _render(_result((Category.TREND,), ratings=(rating,)))
+
+    assert "原因：" in report
+    assert "均线" in report
+
+
+def test_report_shows_the_movement_in_the_order_grade_time_reason() -> None:
+    rating = _rating(
+        -0.05,
+        since=_GENERATED_AT - timedelta(days=6),
+        driver=MarketMetric.TREND_MA20_GAP,
+        driver_from=0.010,
+        driver_to=0.020,
+        category=Category.TREND,
+    )
+
+    block = _block_for(
+        _render(_result((Category.TREND,), ratings=(rating,))), Category.TREND
+    )
+
+    assert "★" in block[0]
+    assert "▼5%" in block[1]
+    assert "近6天" in block[2]
+    assert block[3].lstrip().startswith("原因：")
 
 
 def test_report_says_when_a_grade_changed_instead_of_showing_movement() -> None:

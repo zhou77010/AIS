@@ -336,4 +336,51 @@ decision rather than an omission.
 
 ---
 
+### A movement carries a length and a reason
+
+**Context.** The report showed a grade and an arrow. A bare "▲5%" does not tell
+an investor whether the category moved in a day or in a month, or what moved,
+and both of those decide whether the change means anything.
+
+**Decision.** Every movement is written as three things together: how much, how
+long, and why. The length comes from when the movement began, tracked with the
+standing. The reason comes from the measurement that moved most over the same
+stretch.
+
+**Reason.** A number without a span is unreadable ("up 5% since when?"), and a
+span without a reason is unactionable ("improving, but because of what?"). Both
+had to be answered from recorded evidence rather than inferred by the renderer,
+or the report would be inventing the explanation it presents as fact.
+
+**Impact.** `RatingTracker` now records when a run of movement began and what
+every measurement read at that moment, so attribution is a comparison of two
+real readings rather than a summary of one. A run that only starts moving keeps
+the length of the whole standing; only a genuine turn starts a new one.
+
+**Revisit.** The attribution is by size, because how much each measurement
+contributes to a judgement is still undefined. When the AIS Standard Score
+defines that, attribution should follow it.
+
+---
+
+### AIS emphasises change over static state
+
+**Context.** The report can now show movement, and the question arose of how
+much of the report should be given to where things stand.
+
+**Decision.** Investment decisions are driven by what is changing, not only by
+what currently exists. The report leads with change; standing facts support it.
+
+**Reason.** An investor already knows roughly where their position stands. What
+they cannot see is what moved since they last looked and whether it matters.
+Listing today's figures makes them redo the same work every day from the same
+numbers.
+
+**Impact.** Recorded as a product principle in `docs/ProductPrinciples.md`, so
+later report work is measured against it rather than against taste.
+
+**Revisit.** No.
+
+---
+
 End of Document

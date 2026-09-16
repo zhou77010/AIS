@@ -42,6 +42,9 @@ be argued with is not worth having.
 
 The daily report says **what has changed**, not what the numbers are today.
 
+**AIS emphasises change over static state.** Investment decisions are driven by
+what is changing, not only by what currently exists.
+
 An investor who holds a position already knows roughly where it stands. What
 they do not know is what moved since they last looked, and whether it matters.
 A report that lists today's figures makes them work that out themselves, every

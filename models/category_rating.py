@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from contracts.market_data_provider import MarketMetric
 from models.category import Category
 
 
@@ -35,6 +36,14 @@ class CategoryRating:
         previous_grade: The grade this one replaced, or None when the grade did
             not change on this reading, or when there was no grade before it.
         reason: What the category said when the grade last changed.
+        since: Moment the current run of movement began. It is a different
+            moment from ``changed_at``: a grade can be set weeks before the
+            measurement starts moving, and the movement is what a reader is
+            being told the length of.
+        driver: The measurement that moved most while the movement accumulated,
+            or None when there was no movement.
+        driver_from: What that measurement read when the movement began.
+        driver_to: What it reads now.
     """
 
     category: Category
@@ -44,6 +53,10 @@ class CategoryRating:
     changed: bool
     previous_grade: int | None
     reason: str
+    since: datetime
+    driver: MarketMetric | None = None
+    driver_from: float | None = None
+    driver_to: float | None = None
 
     @property
     def is_accumulating(self) -> bool:

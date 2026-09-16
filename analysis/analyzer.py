@@ -12,7 +12,7 @@ from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import grade_for_category
-from analysis.plain_language import sentence_for
+from analysis.plain_language import measurements_of, sentence_for
 from app.rating_tracker import RatingTracker
 from config.logging_config import get_logger
 from contracts.category_evaluator import CategoryEvaluator
@@ -134,6 +134,11 @@ class AssetAnalyzer:
             reason = (
                 sentence_for(result, category_score.category) or category_score.summary
             )
+            readings = {
+                point.metric: point.value
+                for point in measurements_of(result, category_score.category)
+                if point.value is not None
+            }
             ratings.append(
                 self._rating_tracker.update(
                     symbol=asset.ticker,
@@ -141,6 +146,7 @@ class AssetAnalyzer:
                     grade=grade,
                     score=category_score.score,
                     reason=reason,
+                    measurements=readings,
                     moment=moment,
                 )
             )
