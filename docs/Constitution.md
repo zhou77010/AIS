@@ -1,8 +1,14 @@
 # AIS Constitution
 
-Version 0.1 — Vocabulary and semantics
+Version 0.2 — Vocabulary, semantics and risk dimensions
 
-Status: Frozen, version 0.1.
+Status: Frozen, version 0.2.
+
+Version history:
+
+- **0.1** — vocabulary and semantics. Sections 1 to 4.
+- **0.2** — risk dimensions. Adds Section 5, defining the kinds of uncertainty an
+  investment thesis can fail from. No method, no evidence, no scale.
 
 ---
 
@@ -15,7 +21,7 @@ this document wins.
 **Version 0.1 defines language, not method.** It says what AIS's words mean and
 how its concepts relate to one another. It deliberately does not say how
 anything is computed. Everything that would require mathematics is named in
-Section 6 and left there on purpose.
+Section 7 and left there on purpose.
 
 The document is intentionally small. It is built up incrementally: v0.1 settles
 vocabulary so that later versions can settle method without redefining words
@@ -68,7 +74,7 @@ correct answer teaches nothing and cannot be relied on twice.
 
 - When an implementation and the Constitution disagree about meaning, the
   implementation is wrong.
-- When the Constitution is silent, the silence is deliberate. Check Section 6
+- When the Constitution is silent, the silence is deliberate. Check Section 7
   before filling it.
 - A definition is not a place to add method. Adding methodology means a new
   version of this document, not an edit to a definition.
@@ -267,6 +273,10 @@ Risk is not only a category. It is also a property of every conclusion: any
 conclusion that could be wrong carries risk, and a conclusion presented without
 its risk is incomplete.
 
+The kinds of uncertainty that risk is about are a separate, fixed set, given in
+Section 5. Severity and Likelihood describe *how bad* and *how likely*; the
+kinds of uncertainty in Section 5 describe *about what*.
+
 ### 3.13 Score
 
 A number expressing a judgement.
@@ -400,12 +410,93 @@ that presupposes a meaning is a defect rather than progress.
 
 ---
 
-## 5. Relationships
+## 5. Risk Dimensions
+
+### 5.1 What a risk dimension is
+
+A **risk dimension** names a kind of uncertainty that can invalidate an
+investment thesis.
+
+Risk itself is a category (Section 4) and asks one question. The dimensions are
+the kinds of uncertainty that question is about. A judgement of Risk that names
+no dimension is incomplete, because it does not say what it is a judgement
+*about*.
+
+Dimensions are semantic. They are fixed by what they mean, not by how they are
+assessed. The set is closed: implementations do not add to it, remove from it, or
+rename its members.
+
+**A dimension is never named for a measurement.** A measurement may later serve
+as evidence for a dimension; it is never the dimension. The moment a risk is
+defined by the data that happens to observe it, the dependency has run backwards,
+and the definition will change whenever the data source does. Which evidence
+supports which dimension is an implementation decision, made downward from these
+meanings — never upward from what happens to be available.
+
+The order below carries no meaning, and no dimension ranks above another.
+
+### 5.2 The dimensions
+
+**Business Risk** — the possibility that the business does not do what the thesis
+assumes it will do. It concerns operating performance: whether the business sells
+what it is assumed to sell, competes as it is assumed to compete, and executes as
+it is assumed to execute.
+
+**Financial Risk** — the possibility that the business's finances cannot support
+it, or cannot support the assumption. It concerns how the business is funded and
+whether it can meet what it owes. It is about the money, not about the trade.
+
+**Valuation Risk** — the possibility that the price already assumes more than
+will be delivered. A sound business bought at a price that requires everything to
+go right carries this risk, and no other dimension on this list has to
+materialise for the thesis to fail.
+
+**Market Risk** — the possibility that the asset moves against the holder for
+reasons that have nothing to do with the business. It concerns the environment
+the asset is held in rather than the asset's own merits, so it can invalidate a
+correct thesis without the thesis being wrong.
+
+**Event Risk** — the possibility that a discrete occurrence changes the picture.
+It is distinct from the dimensions above because it is a step change rather than
+a drift: something happens, at a time, and afterwards the situation is different.
+
+**Liquidity Risk** — the possibility that the position cannot be entered or
+exited on the terms the thesis assumes. A thesis that cannot be acted on is not an
+available thesis, however sound its reasoning.
+
+**Evidence Risk** — the possibility that what the thesis rests on is wrong, no
+longer current, or insufficient to support it. This is the dimension that
+separates a thesis that is uncertain from a thesis that is unfounded, and it is
+the one AIS is uniquely placed to be honest about.
+
+**Horizon Risk** — the possibility that the thesis is right, but not within the
+time it is needed. To whoever must hold the position in the meantime, being early
+is indistinguishable from being wrong.
+
+### 5.3 Rules
+
+- **A dimension is never asserted without evidence.** A named risk is a claim,
+  and a claim follows Section 2.1 like any other.
+- **A dimension not examined is unknown, never absent.** A dimension that was not
+  assessed is not a dimension found to be acceptable (Section 3.18).
+- **A dimension that does not apply is not a gap.** Some dimensions do not arise
+  for some assets. Non-applicability is a state, not a missing value.
+- **A source of uncertainty is not a dimension.** Many things can go wrong within
+  one dimension. Naming each of them would turn a closed set of meanings into an
+  open list of topics, and an open list cannot be reasoned about.
+- **Severity and Likelihood apply to every dimension.** They describe how bad and
+  how likely; they do not merge one dimension into another.
+- **How dimensions are assessed, combined, or permitted to constrain a decision
+  is not defined here.** See Section 7.
+
+---
+
+## 6. Relationships
 
 This section states how the concepts connect. It contains no implementation and
 no ordering rules beyond what the meaning of the concepts requires.
 
-### 5.1 The chain
+### 6.1 The chain
 
 ```
 Evidence
@@ -443,9 +534,9 @@ of the business rule pipeline in `docs/Architecture.md` are consistent with it
 and are named here so that the two documents cannot be read as disagreeing: a
 category judgement stands between a score and the assessment that contains it,
 and the chain continues beyond this document into the portfolio dimension, where
-a Decision leads to an Action. That continuation is deferred (Section 6).
+a Decision leads to an Action. That continuation is deferred (Section 7).
 
-### 5.2 Standing relationships
+### 6.2 Standing relationships
 
 - **A category is answered from evidence.** No category may be answered from
   another category's conclusion.
@@ -465,7 +556,7 @@ a Decision leads to an Action. That continuation is deferred (Section 6).
 - **Evidence References are what survive.** A conclusion travels through the
   system carrying references, never carrying a private copy of the evidence.
 
-### 5.3 What may not be skipped
+### 6.3 What may not be skipped
 
 - A conclusion with no evidence behind it.
 - A score with no rule behind it.
@@ -476,7 +567,7 @@ a Decision leads to an Action. That continuation is deferred (Section 6).
 
 ---
 
-## 6. Deferred Decisions
+## 7. Deferred Decisions
 
 The following are **intentionally deferred, not missing**. Each is named here so
 that its absence is a recorded decision rather than an oversight, and so that no
@@ -490,7 +581,7 @@ the honest state of the system.
 | --- | --- | --- |
 | **AIS Standard Score** | What scale scores live on, and what makes two scores comparable. | Measurements can be recorded on their own scale now and normalized once the scale exists; the reverse is not true. |
 | **Decision Thresholds** | Where the boundaries between decision states lie. | A decision state can be reached and shown without the boundaries being final, as long as the reader is told they are provisional. |
-| **Risk Methodology** | How Severity, Likelihood and evidence combine into a risk judgement, and how risk constrains a Decision. | Risk can be described by its dimensions first. What remains deferred is how those dimensions are combined and how far risk may override a conclusion. |
+| **Risk Methodology** | How Severity, Likelihood and evidence combine into a judgement of each risk dimension, and how risk constrains a Decision. | Version 0.2 fixed *which* kinds of uncertainty exist (Section 5), so a dimension can now be named and described. What remains deferred is how each is assessed, how they combine, and how far risk may override a conclusion. |
 | **Confidence Aggregation** | How confidence in parts becomes confidence in a whole. | Per-claim confidence is meaningful on its own; only the aggregate is deferred, and an aggregate that is not yet defined must not be invented. |
 | **Driver Attribution** | How the contribution of a driver is measured, and how drivers are ordered. | Drivers can be named before they can be ranked. Until ranking exists, drivers are listed in a stated order and never presented as ranked. |
 | **Portfolio Optimization** | How an Action is derived from a Decision, a portfolio and its constraints. | Decisions are useful without Actions, and an Action derived from an undefined rule would be worse than none. |
