@@ -94,13 +94,13 @@ _LIVE_SNAPSHOT = _live_snapshot()
 _EMPTY_SNAPSHOT = _empty_snapshot()
 
 
-def _valuation_score(score: float = 13.10) -> CategoryScore:
+def _category_score(category: Category = Category.VALUATION) -> CategoryScore:
     return CategoryScore(
-        category=Category.VALUATION,
-        score=score,
+        category=category,
+        score=13.10,
         confidence=1.0,
         summary="summary",
-        evidence_references=("NVDA.market_data.pe",),
+        evidence_references=(f"NVDA.market_data.{category.value}",),
     )
 
 
@@ -110,7 +110,7 @@ def _result(
     thesis: str = _THESIS,
 ) -> AnalysisResult:
     """Return an analysis result for the renderer to work on."""
-    scores = (_valuation_score(),) if category_scores is None else category_scores
+    scores = (_category_score(),) if category_scores is None else category_scores
     assessment = OverallAssessment(
         overall_score=13.10,
         confidence=1.0,
@@ -312,7 +312,7 @@ def test_report_says_when_it_rests_on_partial_evidence() -> None:
 
 
 def test_report_omits_the_partial_evidence_notice_when_coverage_is_complete() -> None:
-    scores = tuple(_valuation_score() for _ in Category)
+    scores = tuple(_category_score(category) for category in Category)
     complete = _snapshot(tuple(_point(metric, 1.0) for metric in MarketMetric))
 
     report = _render(_result(category_scores=scores, market_data=complete))
@@ -351,6 +351,29 @@ def test_data_quality_label_classifies_every_case() -> None:
 # --------------------------------------------------------------------------
 # Shape
 # --------------------------------------------------------------------------
+
+
+def test_report_shows_evidence_only_for_categories_it_concluded_from() -> None:
+    report = _render(_result(market_data=_EMPTY_SNAPSHOT))
+
+    # Nothing was assessed, so nothing explains the recommendation.
+    assert " Evidence\n  none: no measurement could be retrieved" in report
+
+
+def test_report_draws_evidence_from_every_assessed_category() -> None:
+    scores = (_category_score(Category.VALUATION), _category_score(Category.RISK))
+    snapshot = _snapshot(
+        (
+            _point(MarketMetric.PE, 26.80),
+            _point(MarketMetric.PEG, 0.46),
+            _point(MarketMetric.BETA, 1.24),
+        )
+    )
+
+    report = _render(_result(category_scores=scores, market_data=snapshot))
+
+    assert "  Trailing P/E 26.80" in report
+    assert "  Beta 1.24" in report
 
 
 def test_report_stays_within_the_mobile_length_budget() -> None:

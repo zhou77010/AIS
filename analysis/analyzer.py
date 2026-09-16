@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from analysis.analysis_result import AnalysisResult
 from config.logging_config import get_logger
+from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
+from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
 from models.recommendation import Recommendation
@@ -34,7 +36,10 @@ class AssetAnalyzer:
         """
         self._evidence_builder = EvidenceBuilder()
         self._market_data_provider = market_data_provider
-        self._category_evaluator = ValuationEvaluator()
+        self._category_evaluators: tuple[CategoryEvaluator, ...] = (
+            ValuationEvaluator(),
+            RiskEvaluator(),
+        )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()
         self._logger = get_logger(_LOGGER_NAME)
@@ -65,8 +70,10 @@ class AssetAnalyzer:
         """
         market_data = self._collect_market_data(asset)
         evidence = self._evidence_builder.build(asset, market_data)
-        category_score = self._category_evaluator.evaluate(evidence)
-        assessment = self._overall_evaluator.evaluate((category_score,))
+        category_scores = tuple(
+            evaluator.evaluate(evidence) for evaluator in self._category_evaluators
+        )
+        assessment = self._overall_evaluator.evaluate(category_scores)
         recommendation = self._recommendation_engine.recommend(assessment)
         return AnalysisResult(
             asset=asset,

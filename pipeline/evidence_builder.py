@@ -99,7 +99,7 @@ class EvidenceBuilder:
                 id=_MARKET_DATA_ID.format(
                     ticker=asset.ticker, metric=point.metric.value
                 ),
-                category=Category.VALUATION,
+                category=point.metric.category,
                 title=f"{market_data.source}: {point.metric.label}",
                 description=point.reason,
                 source=EvidenceSource.MARKET_DATA,

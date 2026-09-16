@@ -112,7 +112,9 @@ def test_provider_records_why_a_metric_could_not_be_retrieved() -> None:
     assert dcf.value is None
     assert "valuation model" in dcf.reason
     assert len(snapshot.available_points) == 4
-    assert len(snapshot.missing_points) == 1
+    # Every risk measurement is absent from this summary, and so is the DCF
+    # fair value, which no source can supply.
+    assert len(snapshot.missing_points) == len(MarketMetric) - 4
 
 
 def test_provider_reuses_the_access_token_across_requests() -> None:
@@ -146,7 +148,7 @@ def test_provider_missing_data_leaves_the_metric_empty_and_explains_it() -> None
     assert "could not be computed" in fcf_yield.reason
 
     assert snapshot.is_live is True
-    assert len(snapshot.missing_points) == 4
+    assert len(snapshot.missing_points) == len(MarketMetric) - 1
 
 
 def test_provider_failure_is_reported_and_never_raises() -> None:

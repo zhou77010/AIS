@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from contracts.market_data_provider import MarketMetric
 from evaluation.evaluation_rule import EvaluationRule
+from evaluation.market_evidence import read_metric
 from evaluation.rule_result import RuleResult
-from evaluation.valuation.market_evidence import read_metric
 from evidence.evidence_collection import EvidenceCollection
 from utils.exceptions import DataError
 

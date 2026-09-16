@@ -176,6 +176,23 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
         ),
         _fcf_yield_point(free_cash_flow, market_cap),
         _point(MarketMetric.DCF, None),
+        _point(MarketMetric.BETA, _raw(summary, "summaryDetail", "beta")),
+        _point(
+            MarketMetric.DEBT_TO_EQUITY,
+            _raw(summary, "financialData", "debtToEquity"),
+        ),
+        _point(
+            MarketMetric.CURRENT_RATIO,
+            _raw(summary, "financialData", "currentRatio"),
+        ),
+        _point(
+            MarketMetric.AVERAGE_VOLUME,
+            _raw(summary, "summaryDetail", "averageVolume"),
+        ),
+        _point(
+            MarketMetric.FLOAT_SHARES,
+            _raw(summary, "defaultKeyStatistics", "floatShares"),
+        ),
     )
 
 

@@ -16,6 +16,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from models.category import Category
+
 # Keys used in the metadata of the evidence items that carry a market metric.
 # They are defined once, here, because the pipeline writes them and the
 # valuation rules read them.
@@ -24,18 +26,33 @@ VALUE_METADATA_KEY = "market_value"
 
 
 class MarketMetric(StrEnum):
-    """A single market measurement the valuation rules consume."""
+    """A single market measurement AIS consumes.
+
+    Each measurement belongs to exactly one category, which is the category
+    whose question it helps answer. A measurement is evidence for that category;
+    it is never the category itself.
+    """
 
     PE = "pe"
     PEG = "peg"
     EV_EBITDA = "ev_ebitda"
     FCF_YIELD = "fcf_yield"
     DCF = "dcf"
+    BETA = "beta"
+    DEBT_TO_EQUITY = "debt_to_equity"
+    CURRENT_RATIO = "current_ratio"
+    AVERAGE_VOLUME = "average_volume"
+    FLOAT_SHARES = "float_shares"
 
     @property
     def label(self) -> str:
         """Return the human readable name of the metric."""
         return _METRIC_LABELS[self]
+
+    @property
+    def category(self) -> Category:
+        """Return the category whose question this measurement serves."""
+        return _METRIC_CATEGORIES[self]
 
 
 _METRIC_LABELS: dict[MarketMetric, str] = {
@@ -44,6 +61,24 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.EV_EBITDA: "EV/EBITDA",
     MarketMetric.FCF_YIELD: "Free cash flow yield",
     MarketMetric.DCF: "DCF fair value",
+    MarketMetric.BETA: "Beta",
+    MarketMetric.DEBT_TO_EQUITY: "Debt to equity",
+    MarketMetric.CURRENT_RATIO: "Current ratio",
+    MarketMetric.AVERAGE_VOLUME: "Average volume",
+    MarketMetric.FLOAT_SHARES: "Shares in float",
+}
+
+_METRIC_CATEGORIES: dict[MarketMetric, Category] = {
+    MarketMetric.PE: Category.VALUATION,
+    MarketMetric.PEG: Category.VALUATION,
+    MarketMetric.EV_EBITDA: Category.VALUATION,
+    MarketMetric.FCF_YIELD: Category.VALUATION,
+    MarketMetric.DCF: Category.VALUATION,
+    MarketMetric.BETA: Category.RISK,
+    MarketMetric.DEBT_TO_EQUITY: Category.RISK,
+    MarketMetric.CURRENT_RATIO: Category.RISK,
+    MarketMetric.AVERAGE_VOLUME: Category.RISK,
+    MarketMetric.FLOAT_SHARES: Category.RISK,
 }
 
 

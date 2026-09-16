@@ -1,9 +1,9 @@
 """Market data readings taken from an evidence collection.
 
-Valuation rules take their input from the evidence, and the evidence is where a
-missing metric is explained. This module is the single place that knows how a
-market metric is written into the evidence and how it is read back, so the five
-valuation rules do not each reimplement the lookup.
+Every category evaluator takes its measurements from the evidence, and the
+evidence is where a missing measurement is explained. This module is the single
+place that knows how a market metric is written into the evidence and how it is
+read back, so no evaluator reimplements the lookup.
 """
 
 from __future__ import annotations

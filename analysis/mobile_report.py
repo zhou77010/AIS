@@ -24,11 +24,18 @@ Rules it follows:
 * every category the Constitution defines is listed, in the canonical order of
   :data:`models.category.CATEGORY_ORDER`, and a category with no evaluator is
   rendered as ``NOT EVALUATED`` rather than as a score of zero;
+* a category whose judgement rests on no evidence at all is treated the same
+  way, because a category assembled from no rule results carries a zero that
+  means nothing was measured, not that the worst was measured;
 * a value that does not exist is never rendered as a number, including the
   overall score, which is left unevaluated when no category could be assessed;
 * the message always states whether the figures came from live market data;
 * a report built on incomplete coverage says so, because a conclusion drawn
   from partial evidence is a weaker conclusion;
+* the evidence takes one measurement from each assessed category in turn, so
+  that a category added later appears in the report rather than being pushed out
+  by whichever category happens to be retrieved first, and so that no evidence
+  is shown for a category nothing was concluded from;
 * an evidence entry is a list of lines, so that an explanation can be added
   beneath the value later. Evidence exists to explain a decision rather than to
   state a number, and this renderer must not cap that.
@@ -48,6 +55,7 @@ from analysis.analysis_result import AnalysisResult
 from analysis.report import data_quality_label
 from contracts.market_data_provider import MarketDataPoint, MarketMetric
 from models.category import CATEGORY_ORDER, Category
+from models.category_score import CategoryScore
 
 SECTION_SEPARATOR = "-" * 32
 NOT_EVALUATED = "NOT EVALUATED"
@@ -64,6 +72,12 @@ _UNAVAILABLE_VALUE = "unavailable"
 
 # Metrics that are ratios rather than counts, and read better as percentages.
 _PERCENT_METRICS = frozenset({MarketMetric.FCF_YIELD})
+
+# Scales for measurements that are counts, and are unreadable written out.
+_COUNT_SCALES: tuple[tuple[float, str], ...] = (
+    (1_000_000_000, "B"),
+    (1_000_000, "M"),
+)
 
 
 def render_mobile_report(result: AnalysisResult, *, generated_at: datetime) -> str:
@@ -95,6 +109,21 @@ def render_mobile_report(result: AnalysisResult, *, generated_at: datetime) -> s
     return "\n".join(lines)
 
 
+def _assessed_categories(result: AnalysisResult) -> dict[Category, CategoryScore]:
+    """Return the categories a judgement was actually reached for.
+
+    A category the assembler produced from no rule results carries no evidence
+    references. That is an absent judgement rather than a score, and showing its
+    zero would report the worst possible value for a dimension nothing looked
+    at.
+    """
+    return {
+        category_score.category: category_score
+        for category_score in result.assessment.category_scores
+        if category_score.evidence_references
+    }
+
+
 def _conclusion_lines(result: AnalysisResult) -> list[str]:
     """Return the decision, the confidence and the score."""
     return [
@@ -106,7 +135,7 @@ def _conclusion_lines(result: AnalysisResult) -> list[str]:
 
 def _score_line(result: AnalysisResult) -> str:
     """Return the score line, or state that no score could be produced."""
-    if not result.assessment.category_scores:
+    if not _assessed_categories(result):
         return f"SCORE       {NOT_EVALUATED}"
     return f"SCORE       {result.assessment.overall_score:.2f}  (scale undefined)"
 
@@ -139,14 +168,11 @@ def _thesis_text(result: AnalysisResult) -> str:
 def _category_lines(result: AnalysisResult) -> list[str]:
     """Return one line per category, in the canonical category order.
 
-    A category without an evaluator is rendered as ``NOT EVALUATED``. It is
-    never rendered as a score, because a zero would read as the worst measured
-    value rather than as an absent measurement.
+    A category without a judgement is rendered as ``NOT EVALUATED``. It is never
+    rendered as a score, because a zero would read as the worst measured value
+    rather than as an absent measurement.
     """
-    assessed = {
-        category_score.category: category_score
-        for category_score in result.assessment.category_scores
-    }
+    assessed = _assessed_categories(result)
     lines: list[str] = []
     for category in CATEGORY_ORDER:
         category_score = assessed.get(category)
@@ -165,14 +191,44 @@ def _evidence_lines(result: AnalysisResult) -> list[str]:
     snapshot = result.market_data
     if snapshot is None:
         return [f"  none: {NO_MARKET_DATA_SOURCE}"]
-    available = snapshot.available_points[:_MAX_EVIDENCE]
+    available = snapshot.available_points
     if not available:
         return ["  none: no measurement could be retrieved"]
 
     lines: list[str] = []
-    for point in available:
+    for point in _select_evidence(result, available)[:_MAX_EVIDENCE]:
         lines.extend(_evidence_entry(point))
     return lines
+
+
+def _select_evidence(
+    result: AnalysisResult, points: Sequence[MarketDataPoint]
+) -> list[MarketDataPoint]:
+    """Return the evidence to show, taking one measurement from each category in turn.
+
+    Only evidence belonging to a category AIS reached a judgement for is shown.
+    This block sits under "why AIS reached this", and a measurement from a
+    category nothing was concluded from explains nothing; showing it there would
+    suggest it had been used.
+
+    Within that, taking turns rather than taking the first few keeps every
+    assessed category visible inside the same budget, so a category added later
+    appears in the report instead of being pushed out by whichever category
+    happens to be retrieved first.
+    """
+    assessed = _assessed_categories(result)
+    by_category: dict[Category, list[MarketDataPoint]] = {}
+    for point in points:
+        if point.metric.category in assessed:
+            by_category.setdefault(point.metric.category, []).append(point)
+    groups = [
+        by_category[category] for category in CATEGORY_ORDER if category in by_category
+    ]
+
+    selected: list[MarketDataPoint] = []
+    for index in range(max((len(group) for group in groups), default=0)):
+        selected.extend(group[index] for group in groups if index < len(group))
+    return selected
 
 
 def _evidence_entry(point: MarketDataPoint) -> list[str]:
@@ -193,7 +249,7 @@ def _missing_lines(result: AnalysisResult) -> list[str]:
     nothing they can act on.
     """
     lines: list[str] = []
-    unevaluated = len(Category) - len(result.assessment.category_scores)
+    unevaluated = len(Category) - len(_assessed_categories(result))
     if unevaluated:
         lines.append(f" {unevaluated} of {len(Category)} categories not evaluated")
 
@@ -215,8 +271,8 @@ def _missing_lines(result: AnalysisResult) -> list[str]:
 
 
 def _coverage_is_complete(result: AnalysisResult) -> bool:
-    """Return whether every category and every measurement was available."""
-    if len(result.assessment.category_scores) != len(Category):
+    """Return whether every category was assessed and every measurement retrieved."""
+    if len(_assessed_categories(result)) != len(Category):
         return False
     snapshot = result.market_data
     if snapshot is None:
@@ -232,7 +288,7 @@ def _data_lines(result: AnalysisResult) -> list[str]:
         return [label, f" {NO_MARKET_DATA_SOURCE}"]
 
     retrieved = len(snapshot.available_points)
-    assessed = len(result.assessment.category_scores)
+    assessed = len(_assessed_categories(result))
     return [
         f"{label} - {snapshot.source}",
         f" {retrieved} of {len(snapshot.points)} measurements, "
@@ -298,4 +354,7 @@ def _format_value(point: MarketDataPoint) -> str:
         return _UNAVAILABLE_VALUE
     if point.metric in _PERCENT_METRICS:
         return f"{point.value:.2%}"
+    for scale, suffix in _COUNT_SCALES:
+        if abs(point.value) >= scale:
+            return f"{point.value / scale:.1f}{suffix}"
     return f"{point.value:.2f}"
