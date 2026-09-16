@@ -17,11 +17,17 @@ and to be replaced once the standard score is defined. See
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
-from analysis.labels import opportunity_condition_label, opportunity_headline
+from analysis.labels import (
+    catalyst_kind_label,
+    opportunity_condition_label,
+    opportunity_headline,
+)
 from contracts.market_data_provider import MarketDataPoint, MarketMetric
+from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.opportunity_assessment import OpportunityAssessment
 
@@ -83,6 +89,8 @@ def sentence_for(result: AnalysisResult, category: Category) -> str | None:
     Only categories whose measurements read better as a sentence have one. The
     rest report their measurements, and this returns None for them.
     """
+    if category is Category.CATALYST:
+        return catalyst_sentence(result.events, _moment_for(result))
     if category not in _SENTENCE_BUILDERS:
         return None
     values = {
@@ -93,14 +101,21 @@ def sentence_for(result: AnalysisResult, category: Category) -> str | None:
     return _SENTENCE_BUILDERS[category](values)
 
 
+def _moment_for(result: AnalysisResult) -> datetime:
+    """Return the moment a reading is measured against."""
+    snapshot = result.market_data
+    return datetime.now() if snapshot is None else snapshot.retrieved_at
+
+
 # Which categories are written as a sentence, and the function that writes it.
 # Every sentence restates measurements that were retrieved and adds nothing to
 # them; a category whose readings are simply a list of figures is not here.
+# Catalyst is not here either: it is written from its events rather than from
+# measurements, and it is handled in :func:`sentence_for`.
 _SENTENCE_BUILDERS: dict[
     Category, Callable[[Mapping[MarketMetric, float]], str | None]
 ] = {
     Category.TREND: lambda values: trend_sentence(values),
-    Category.CATALYST: lambda values: catalyst_sentence(values),
     Category.POSITIONING: lambda values: positioning_sentence(values),
 }
 
@@ -206,6 +221,9 @@ def _band(value: float, bands: tuple[tuple[float, str], ...]) -> str:
 
 # How near an event has to be to count as the thing likely to move the price.
 _NEAR_EVENT_DAYS = 30.0
+_IMMINENT_EVENT_DAYS = 7.0
+# Above this many events in the window, the calendar is busy enough to say so.
+_DENSE_CALENDAR_EVENTS = 3
 
 # Conventional readings for who is holding, and how crowded that is.
 _INSTITUTIONAL_HEAVY = 0.60
@@ -217,38 +235,53 @@ _COVER_HEAVY_DAYS = 4.0
 _COVER_LIGHT_DAYS = 2.0
 
 
-def catalyst_sentence(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return why the price could move in the near future, in plain language.
+def catalyst_sentence(events: Sequence[CatalystEvent], moment: datetime) -> str | None:
+    """Return what could change the investment case, in plain language.
 
-    The sentence is about the distance to what is coming, because that is what
-    makes an event a catalyst. It says when and does not say which way: whether a
-    report will be good is not known before it is published, and a sentence that
-    implied otherwise would be a forecast.
+    The sentence is about whether anything is coming and how soon, which is the
+    question a reader has. It says when and does not say which way: whether a
+    report will be good, whether a decision will surprise anyone, whether a
+    launch will succeed — none of that is known before it happens, and a
+    sentence that implied otherwise would be a forecast.
+
+    How many events there are shapes the wording and never a judgement: a busy
+    calendar reads as a busy calendar, not as a better opportunity.
 
     Args:
-        values: Retrieved catalyst measurements, keyed by metric.
+        events: The forthcoming events, in date order.
+        moment: Moment the reading is taken.
 
     Returns:
-        A sentence, or None when no forthcoming event was retrieved.
+        A sentence, or None when there is no forthcoming event to write about.
     """
-    events: list[tuple[float, str]] = []
-    earnings = values.get(MarketMetric.NEXT_EARNINGS_DAYS)
-    if earnings is not None:
-        events.append((earnings, f"{round(earnings)} 天后预计发布财报"))
-    dividend = values.get(MarketMetric.NEXT_EX_DIVIDEND_DAYS)
-    if dividend is not None:
-        events.append((dividend, f"{round(dividend)} 天后除息"))
-
-    if not events:
+    upcoming = _upcoming_events(events, moment)
+    if not upcoming:
         return None
-    events.sort()
-    nearest, phrase = events[0]
-    tail = (
-        "，是近期最明确的波动来源。"
-        if nearest <= _NEAR_EVENT_DAYS
-        else "，是接下来最值得留意的时间点。"
+
+    nearest = upcoming[0]
+    days = nearest.days_from(moment)
+    if days <= _IMMINENT_EVENT_DAYS:
+        return "未来一周即有事件落地，短期可能进入事件驱动阶段。"
+    if days <= _NEAR_EVENT_DAYS and len(upcoming) >= _DENSE_CALENDAR_EVENTS:
+        return "未来一个月催化较密集，短期可能进入事件驱动阶段。"
+    if days <= _NEAR_EVENT_DAYS:
+        return "未来一个月存在可能改变预期的事件。"
+    waiting = catalyst_kind_label(nearest.kind, nearest.description)
+    return f"近期暂无明确催化，未来一段时间主要等待{waiting}。"
+
+
+def _upcoming_events(
+    events: Sequence[CatalystEvent], moment: datetime
+) -> list[CatalystEvent]:
+    """Return the forthcoming events that could change a view, nearest first."""
+    return sorted(
+        (
+            event
+            for event in events
+            if event.is_upcoming(moment) and not event.is_mechanical
+        ),
+        key=lambda event: (event.days_from(moment), event.kind),
     )
-    return "，".join(text for _, text in events) + tail
 
 
 def positioning_sentence(values: Mapping[MarketMetric, float]) -> str | None:

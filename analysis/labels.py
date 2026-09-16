@@ -13,6 +13,7 @@ an investor already reads elsewhere.
 from __future__ import annotations
 
 from contracts.market_data_provider import MarketMetric
+from models.catalyst_event import CatalystEventKind, CatalystEventScope
 from models.category import Category
 from models.decision_state import DecisionState
 from models.opportunity_assessment import OpportunityCondition
@@ -57,9 +58,9 @@ UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
     Category.RISK: ("业务风险", "估值风险", "事件风险", "证据风险", "长期风险"),
     Category.MARKET: ("市场波动性", "利率环境"),
     Category.TREND: ("价格路径",),
-    # Product launches, regulatory decisions and launch windows are named here
-    # rather than approximated from whatever date a source happens to publish.
-    Category.CATALYST: ("产品发布", "监管决策", "发射窗口", "股东大会", "重大宏观事件"),
+    # Named by layer, because that is how the catalyst question is read and how
+    # the report groups what it did find.
+    Category.CATALYST: ("行业事件",),
     Category.POSITIONING: (
         "机构持仓变化",
         "内部人交易",
@@ -106,8 +107,6 @@ METRIC_NAMES: dict[MarketMetric, str] = {
     MarketMetric.TREND_VOLUME_RATIO: "成交量对均值",
     MarketMetric.RISK_VOLATILITY: "年化波动率",
     MarketMetric.RISK_DRAWDOWN: "最大回撤",
-    MarketMetric.NEXT_EARNINGS_DAYS: "距下次财报",
-    MarketMetric.NEXT_EX_DIVIDEND_DAYS: "距下次除息",
     MarketMetric.SHORT_PERCENT_OF_FLOAT: "做空比例",
     MarketMetric.SHORT_RATIO: "空头回补天数",
     MarketMetric.INSTITUTIONAL_OWNERSHIP: "机构持股比例",
@@ -141,13 +140,7 @@ PERCENT_METRICS = frozenset(
 
 # Measurements counted in days, which read as a distance in time rather than as a
 # quantity with decimals.
-DAY_METRICS = frozenset(
-    {
-        MarketMetric.NEXT_EARNINGS_DAYS,
-        MarketMetric.NEXT_EX_DIVIDEND_DAYS,
-        MarketMetric.SHORT_RATIO,
-    }
-)
+DAY_METRICS = frozenset({MarketMetric.SHORT_RATIO})
 
 # Measurements where the sign is the point, and a plus is worth showing.
 SIGNED_METRICS = frozenset(
@@ -236,10 +229,6 @@ DRIVER_PHRASES: dict[tuple[MarketMetric, bool], str] = {
     (MarketMetric.TREND_DIRECTION, False): "价格下行",
     (MarketMetric.TREND_RANGE_POSITION, True): "价格上行",
     (MarketMetric.TREND_RANGE_POSITION, False): "价格下行",
-    (MarketMetric.NEXT_EARNINGS_DAYS, True): "财报窗口后移",
-    (MarketMetric.NEXT_EARNINGS_DAYS, False): "财报临近",
-    (MarketMetric.NEXT_EX_DIVIDEND_DAYS, True): "除息窗口后移",
-    (MarketMetric.NEXT_EX_DIVIDEND_DAYS, False): "除息临近",
     (MarketMetric.SHORT_PERCENT_OF_FLOAT, True): "空头仓位加重",
     (MarketMetric.SHORT_PERCENT_OF_FLOAT, False): "空头仓位减轻",
     (MarketMetric.SHORT_RATIO, True): "空头回补压力上升",
@@ -304,6 +293,85 @@ def opportunity_headline(grade: int) -> str:
         if grade >= threshold:
             return headline
     return OPPORTUNITY_HEADLINES[-1][1]
+
+
+# How the three layers of the catalyst question are named, in the order the
+# report writes them: what the company has scheduled, what its industry faces,
+# and what every asset is valued under.
+CATALYST_SCOPE_LABELS: dict[CatalystEventScope, str] = {
+    CatalystEventScope.COMPANY: "公司",
+    CatalystEventScope.INDUSTRY: "行业",
+    CatalystEventScope.MACRO: "宏观",
+}
+
+# What each kind of event is called when it is written into the report. A kind
+# with no entry falls back to whatever the source called it, which is why every
+# source states a description.
+CATALYST_KIND_LABELS: dict[CatalystEventKind, str] = {
+    CatalystEventKind.EARNINGS: "公布财报",
+    CatalystEventKind.EX_DIVIDEND: "除息",
+    CatalystEventKind.DIVIDEND: "派息",
+    CatalystEventKind.SPLIT: "拆股",
+    CatalystEventKind.INVESTOR_DAY: "投资者日",
+    CatalystEventKind.PRODUCT_LAUNCH: "产品发布",
+    CatalystEventKind.LAUNCH_WINDOW: "发射窗口",
+    CatalystEventKind.REGULATORY: "监管决定",
+    CatalystEventKind.SHAREHOLDER_MEETING: "股东大会",
+    CatalystEventKind.INDUSTRY_POLICY: "行业政策",
+    CatalystEventKind.COMPETITION: "竞争格局变化",
+    CatalystEventKind.INDUSTRY_NEWS: "行业消息",
+    CatalystEventKind.FOMC: "美联储议息",
+    CatalystEventKind.INFLATION: "通胀数据",
+    CatalystEventKind.EMPLOYMENT: "就业数据",
+    CatalystEventKind.GROWTH: "增长数据",
+    CatalystEventKind.RATES: "利率决议",
+    CatalystEventKind.FISCAL_POLICY: "财政政策",
+    CatalystEventKind.TARIFF: "关税决定",
+    CatalystEventKind.CURRENCY: "汇率事件",
+}
+
+# Why a kind of event matters to an investment case, in one short clause. This
+# is why the event is worth reading about, and it is a property of the kind
+# rather than of the instance: AIS states what this sort of event does to an
+# investment case, and never what this particular one will do, because nobody
+# knows that before it happens.
+CATALYST_KIND_REASONS: dict[CatalystEventKind, str] = {
+    CatalystEventKind.EARNINGS: "业绩与指引改变增长预期",
+    CatalystEventKind.EX_DIVIDEND: "价格按股息调整",
+    CatalystEventKind.DIVIDEND: "现金回报的兑现",
+    CatalystEventKind.SPLIT: "改变每股价格与流动性",
+    CatalystEventKind.INVESTOR_DAY: "管理层给出中期目标",
+    CatalystEventKind.PRODUCT_LAUNCH: "检验增长假设",
+    CatalystEventKind.LAUNCH_WINDOW: "直接检验执行能力",
+    CatalystEventKind.REGULATORY: "可能改变市场准入",
+    CatalystEventKind.SHAREHOLDER_MEETING: "可能改变治理结构",
+    CatalystEventKind.INDUSTRY_POLICY: "改变整个赛道盈利结构",
+    CatalystEventKind.COMPETITION: "改变份额与定价能力",
+    CatalystEventKind.INDUSTRY_NEWS: "改变行业层面的预期",
+    CatalystEventKind.FOMC: "利率路径影响估值分母",
+    CatalystEventKind.INFLATION: "决定利率预期",
+    CatalystEventKind.EMPLOYMENT: "影响利率与风险偏好",
+    CatalystEventKind.GROWTH: "影响周期与盈利预期",
+    CatalystEventKind.RATES: "改变资金成本",
+    CatalystEventKind.FISCAL_POLICY: "改变需求与税负",
+    CatalystEventKind.TARIFF: "改变成本与市场准入",
+    CatalystEventKind.CURRENCY: "改变汇兑与毛利",
+}
+
+
+def catalyst_kind_label(kind: CatalystEventKind, description: str) -> str:
+    """Return what an event is called, preferring the name the source used."""
+    return description or CATALYST_KIND_LABELS.get(kind, kind.value)
+
+
+def catalyst_kind_reason(kind: CatalystEventKind) -> str:
+    """Return why this kind of event matters to an investment case."""
+    return CATALYST_KIND_REASONS.get(kind, "可能改变市场预期")
+
+
+def catalyst_scope_label(scope: CatalystEventScope) -> str:
+    """Return the name a layer of the catalyst question is reported under."""
+    return CATALYST_SCOPE_LABELS[scope]
 
 
 def decision_label(state: DecisionState) -> str:

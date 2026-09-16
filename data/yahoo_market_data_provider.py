@@ -38,6 +38,7 @@ from contracts.market_data_provider import (
 )
 from data import indicators
 from data.http import HttpTransport, UrllibTransport
+from models.catalyst_event import CatalystEvent, CatalystEventKind
 from utils.exceptions import DataError
 
 SOURCE_NAME = "Yahoo Finance"
@@ -62,7 +63,6 @@ _VOLUME_RECENT_DAYS = 5
 _VOLUME_BASELINE_DAYS = 60
 _VOLATILITY_WINDOW = 20
 _VOLUME_AVERAGE_WINDOW = 60
-_SECONDS_PER_DAY = 86_400
 _DCF_REASON = (
     f"{MarketMetric.DCF.label} is not retrieved: it is the output of a valuation "
     f"model, not a datum a market data source publishes, and AIS has not defined "
@@ -128,6 +128,40 @@ class YahooMarketDataProvider:
         return self._snapshot(
             symbol, retrieved_at, _merge(_points(summary, retrieved_at), indicators)
         )
+
+    def fetch_events(self, symbol: str) -> tuple[CatalystEvent, ...]:
+        """Return the dated events Yahoo Finance publishes for a symbol.
+
+        This is what the same source knows about the calendar: when results are
+        due, and when the shares next go ex-dividend or pay one. It is a small
+        set, and it is the only part of a company's calendar a market data source
+        publishes at all.
+
+        The call never raises. A source that cannot be reached returns no events,
+        and the category reports that it found nothing rather than that there was
+        nothing to find.
+
+        Args:
+            symbol: Trading symbol to retrieve events for.
+
+        Returns:
+            The forthcoming events, possibly none.
+        """
+        try:
+            summary = self._request_summary(symbol)
+        except Exception as error:  # noqa: BLE001 - the contract is to never raise
+            self._logger.warning(
+                "catalyst events for %s unavailable from %s: %s",
+                symbol,
+                SOURCE_NAME,
+                f"{type(error).__name__}: {error}",
+            )
+            return ()
+        events = _events_from(summary, symbol, datetime.now())
+        self._logger.info(
+            "catalyst events for %s: %d from %s", symbol, len(events), SOURCE_NAME
+        )
+        return events
 
     def fetch_history(self, symbol: str) -> PriceHistory:
         """Return the daily price history Yahoo Finance holds for a symbol.
@@ -464,18 +498,6 @@ def _points(
             _raw(summary, "defaultKeyStatistics", "forwardEps"),
             _raw(summary, "defaultKeyStatistics", "trailingEps"),
         ),
-        _days_until_point(
-            MarketMetric.NEXT_EARNINGS_DAYS,
-            _epoch(summary, "calendarEvents", "earnings", "earningsDate"),
-            retrieved_at,
-            "the next quarterly earnings report",
-        ),
-        _days_until_point(
-            MarketMetric.NEXT_EX_DIVIDEND_DAYS,
-            _epoch(summary, "calendarEvents", "exDividendDate"),
-            retrieved_at,
-            "the next ex-dividend date",
-        ),
         _point(
             MarketMetric.SHORT_PERCENT_OF_FLOAT,
             _raw(summary, "defaultKeyStatistics", "shortPercentOfFloat"),
@@ -661,50 +683,6 @@ def _fcf_yield_point(
     )
 
 
-def _days_until_point(
-    metric: MarketMetric,
-    epoch: float | None,
-    retrieved_at: datetime,
-    detail: str,
-) -> MarketDataPoint:
-    """Build the point telling how far away a scheduled event is.
-
-    The distance is what makes an event a catalyst, so it is the distance that
-    is measured rather than the date: an event with no distance to it cannot be
-    said to be coming. A date the source reports that has already passed is not
-    a forthcoming event, and is reported as absent rather than as a negative
-    distance that would read as an event behind us.
-    """
-    if epoch is None:
-        return MarketDataPoint(
-            metric=metric,
-            value=None,
-            reason=(
-                f"{metric.label} could not be determined: {SOURCE_NAME} did not "
-                f"report {detail} for this symbol."
-            ),
-        )
-    moment = datetime.fromtimestamp(epoch, tz=retrieved_at.tzinfo)
-    days = round((moment - retrieved_at).total_seconds() / _SECONDS_PER_DAY)
-    if days < 0:
-        return MarketDataPoint(
-            metric=metric,
-            value=None,
-            reason=(
-                f"{metric.label} is not known: {detail} that {SOURCE_NAME} "
-                f"reports, {moment:%Y-%m-%d}, has already passed."
-            ),
-        )
-    return MarketDataPoint(
-        metric=metric,
-        value=float(days),
-        reason=(
-            f"{metric.label} {days} days, counted from {detail} on "
-            f"{moment:%Y-%m-%d} reported by {SOURCE_NAME}."
-        ),
-    )
-
-
 def _epoch(summary: Mapping[str, Any], module: str, *keys: str) -> float | None:
     """Return a timestamp field of a quote summary, as seconds since the epoch.
 
@@ -722,6 +700,75 @@ def _epoch(summary: Mapping[str, Any], module: str, *keys: str) -> float | None:
     if isinstance(entry, Mapping):
         entry = entry.get("raw")
     return _finite(entry)
+
+
+def _events_from(
+    summary: Mapping[str, Any], symbol: str, moment: datetime
+) -> tuple[CatalystEvent, ...]:
+    """Build the events a quote summary carries for a symbol.
+
+    Only dates that are still ahead are returned. A date that has passed is not
+    an event that could change anything, and carrying it would put something in
+    the calendar that is not on the calendar.
+
+    A date is reported as confirmed unless the source says it is an estimate.
+    Which layer each event belongs to is not decided here: that is AIS's reading,
+    made from the kind in :mod:`models.catalyst_event`.
+    """
+    estimated = _flag(summary, "calendarEvents", "earnings", "isEarningsDateEstimate")
+    candidates = (
+        (
+            CatalystEventKind.EARNINGS,
+            _epoch(summary, "calendarEvents", "earnings", "earningsDate"),
+            "季度财报",
+            not bool(estimated),
+        ),
+        (
+            CatalystEventKind.EX_DIVIDEND,
+            _epoch(summary, "calendarEvents", "exDividendDate"),
+            "除息",
+            True,
+        ),
+        (
+            CatalystEventKind.DIVIDEND,
+            _epoch(summary, "calendarEvents", "dividendDate"),
+            "派息",
+            True,
+        ),
+    )
+
+    events: list[CatalystEvent] = []
+    for kind, epoch, description, confirmed in candidates:
+        if epoch is None:
+            continue
+        occurs_on = datetime.fromtimestamp(epoch, tz=moment.tzinfo).date()
+        if occurs_on < moment.date():
+            continue
+        events.append(
+            CatalystEvent(
+                kind=kind,
+                occurs_on=occurs_on,
+                source=SOURCE_NAME,
+                confirmed=confirmed,
+                description=description,
+                symbol=symbol,
+            )
+        )
+    return tuple(sorted(events, key=lambda event: (event.occurs_on, event.kind)))
+
+
+def _flag(summary: Mapping[str, Any], module: str, *keys: str) -> bool | None:
+    """Return a boolean field of a quote summary, or None when it is not there."""
+    entry: Any = summary.get(module)
+    for key in keys:
+        entry = entry.get(key) if isinstance(entry, Mapping) else None
+    if isinstance(entry, Mapping):
+        entry = entry.get("raw")
+    if isinstance(entry, bool):
+        return entry
+    if isinstance(entry, (int, float)):
+        return bool(entry)
+    return None
 
 
 def _finite(value: object) -> float | None:

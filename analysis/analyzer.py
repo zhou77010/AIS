@@ -15,6 +15,7 @@ from analysis.category_grade import grade_for_category
 from analysis.plain_language import measurements_of, sentence_for
 from app.rating_tracker import RatingTracker
 from config.logging_config import get_logger
+from contracts.catalyst_event_provider import CatalystEventProvider
 from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
 from core.overall_evaluator import OverallEvaluator
@@ -29,6 +30,7 @@ from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.trend.trend_evaluator import TrendEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
+from models.catalyst_event import CatalystEvent
 from models.category_rating import CategoryRating
 from models.opportunity_assessment import OpportunityAssessment
 from models.recommendation import Recommendation
@@ -44,6 +46,7 @@ class AssetAnalyzer:
         self,
         market_data_provider: MarketDataProvider | None = None,
         rating_tracker: RatingTracker | None = None,
+        event_provider: CatalystEventProvider | None = None,
     ) -> None:
         """Create the analyzer with the components it orchestrates.
 
@@ -56,10 +59,15 @@ class AssetAnalyzer:
                 None to run without one. Without a tracker the result carries no
                 ratings, because a rating is about successive runs and a single
                 run does not know the previous one.
+            event_provider: Source dated catalyst events are retrieved from, or
+                None to run without one. Without a provider the catalyst
+                category finds no forthcoming event and says so, which is the
+                truth rather than a placeholder.
         """
         self._evidence_builder = EvidenceBuilder()
         self._market_data_provider = market_data_provider
         self._rating_tracker = rating_tracker
+        self._event_provider = event_provider
         self._category_evaluators: tuple[CategoryEvaluator, ...] = (
             ValuationEvaluator(),
             RiskEvaluator(),
@@ -100,7 +108,8 @@ class AssetAnalyzer:
             and the market data the run was built on.
         """
         market_data = self._collect_market_data(asset)
-        evidence = self._evidence_builder.build(asset, market_data)
+        events = self._collect_events(asset)
+        evidence = self._evidence_builder.build(asset, market_data, events)
         category_scores = tuple(
             evaluator.evaluate(evidence) for evaluator in self._category_evaluators
         )
@@ -110,6 +119,7 @@ class AssetAnalyzer:
             asset=asset,
             assessment=assessment,
             recommendation=recommendation,
+            events=events,
             market_data=market_data,
         )
         result = replace(result, ratings=self._rate(asset, result))
@@ -201,3 +211,25 @@ class AssetAnalyzer:
                 "market data unavailable for %s: %s", asset.ticker, point.reason
             )
         return snapshot
+
+    def _collect_events(self, asset: Asset) -> tuple[CatalystEvent, ...]:
+        """Retrieve the dated catalyst events known for the asset.
+
+        An empty result is not logged as a failure: a calendar with nothing on it
+        and a calendar that could not be reached look the same here, and the
+        provider that could not be reached says so in its own log line. What the
+        category reports either way is that it found no forthcoming event, which
+        is true of both.
+
+        Args:
+            asset: Asset to retrieve events for.
+
+        Returns:
+            The forthcoming events, empty when no provider was configured or
+            nothing was found.
+        """
+        if self._event_provider is None:
+            return ()
+        events = self._event_provider.fetch_events(asset.ticker)
+        self._logger.info("catalyst events for %s: %d", asset.ticker, len(events))
+        return events

@@ -43,6 +43,9 @@ from analysis.labels import (
     PERCENT_METRICS,
     SIGNED_METRICS,
     UNASSESSED_ITEMS,
+    catalyst_kind_label,
+    catalyst_kind_reason,
+    catalyst_scope_label,
     category_label,
     decision_label,
     driver_phrase,
@@ -57,6 +60,7 @@ from analysis.plain_language import (
 )
 from analysis.report import data_quality_label
 from contracts.market_data_provider import MarketDataPoint
+from models.catalyst_event import CatalystEvent, CatalystEventScope
 from models.category import CATEGORY_ORDER, Category
 from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
@@ -66,6 +70,17 @@ SECTION_SEPARATOR = "-" * 32
 NO_GRADE = "暂无评级"
 DATA_PREFIX = "行情数据"
 NOT_ASSESSED_PREFIX = "尚未评估"
+
+# What is said when there is nothing on the calendar. It is an answer to the
+# question rather than a gap in it, so it is written as a sentence.
+_NO_CATALYST_SENTENCE = "近期暂无明确催化。"
+
+# How much of the calendar is written out. A reader needs the near ones, not an
+# agenda: a meeting a year and a half away is a fact about the calendar and not
+# something to watch this month.
+_EVENT_WINDOW_DAYS = 90
+_MAX_EVENTS = 6
+_MAX_EVENTS_PER_SCOPE = 3
 
 _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 _TIMEZONE_NOTE = "北京时间"
@@ -142,14 +157,8 @@ def _category_block(
     """Return the lines describing one category, empty when it was not judged."""
     if category is Category.HPO:
         return _opportunity_block(result)
-    if category is Category.CATALYST and category not in _assessed_categories(result):
-        # An empty calendar is an answer, not a missing evaluator: the category
-        # was looked at and had nothing on it, and saying so by name is more use
-        # than listing it among the things nothing was done about.
-        return [
-            f"{category_label(category)}  {NO_GRADE}",
-            _INDENT + "暂无可评估催化。",
-        ]
+    if category is Category.CATALYST:
+        return _catalyst_block(result, category, moment)
     if category not in _assessed_categories(result):
         return []
 
@@ -160,6 +169,89 @@ def _category_block(
         *_movement_lines(result, category, moment),
         *_commentary_lines(result, category),
     ]
+
+
+def _catalyst_block(
+    result: AnalysisResult, category: Category, moment: datetime
+) -> list[str]:
+    """Return what could change the investment case, and why each thing matters.
+
+    The block writes the calendar out and not the score: which events are coming,
+    grouped by whether they bear on the company, on its industry or on the
+    conditions everything is valued under, each with one clause saying why that
+    sort of event matters. A reader who wants to know what to watch next month
+    gets an answer from this block and not from a number.
+
+    The grade is shown above all of it and answers a different question — how
+    soon the nearest of them falls. An empty calendar is an answer too, and it is
+    written as one rather than left as a category nothing was done about.
+    """
+    assessed = category in _assessed_categories(result)
+    grade = grade_for_category(result, category) if assessed else None
+    lines = [f"{category_label(category)}  {stars(grade) if grade else NO_GRADE}"]
+    if assessed:
+        lines.extend(_movement_lines(result, category, moment))
+
+    sentence = sentence_for(result, category) or _NO_CATALYST_SENTENCE
+    lines.extend(_pack([sentence], separator="", trailing=""))
+    lines.extend(_event_lines(result, moment))
+    return lines
+
+
+def _event_lines(result: AnalysisResult, moment: datetime) -> list[str]:
+    """Return the forthcoming events within the window, grouped by layer.
+
+    What falls outside the window is counted rather than listed. A calendar
+    reaching into the following year is a fact about the calendar, and writing it
+    out would bury the two events a reader could act on.
+    """
+    upcoming = [
+        event
+        for event in result.events
+        if event.is_upcoming(moment) and event.days_from(moment) <= _EVENT_WINDOW_DAYS
+    ]
+    if not upcoming:
+        return []
+
+    lines: list[str] = []
+    budget = _MAX_EVENTS
+    for scope in CatalystEventScope:
+        if budget <= 0:
+            break
+        in_scope = sorted(
+            (event for event in upcoming if event.scope is scope),
+            key=lambda event: (event.days_from(moment), event.kind),
+        )
+        if not in_scope:
+            continue
+        shown = in_scope[: min(len(in_scope), _MAX_EVENTS_PER_SCOPE, budget)]
+        budget -= len(shown)
+        lines.append(f"{_INDENT}{catalyst_scope_label(scope)}")
+        lines.extend(_event_line(event, moment) for event in shown)
+        hidden = len(in_scope) - len(shown)
+        if hidden:
+            lines.append(_INDENT + f"· 另有 {hidden} 项未列出")
+    return lines
+
+
+def _event_line(event: CatalystEvent, moment: datetime) -> str:
+    """Return one event as a line: when it is, what it is, and why it matters."""
+    name = catalyst_kind_label(event.kind, event.description)
+    reason = catalyst_kind_reason(event.kind)
+    confirmation = "" if event.confirmed else "（未确认）"
+    return f"{_INDENT}· {_when(event, moment)}{name}{confirmation} — {reason}"
+
+
+def _when(event: CatalystEvent, moment: datetime) -> str:
+    """Return when an event falls, in the words a reader would use."""
+    days = event.days_from(moment)
+    if days <= 0:
+        return "今日 "
+    if days == 1:
+        return "明日 "
+    if days <= 14:
+        return f"{days} 天后 "
+    return f"{event.occurs_on.month}月{event.occurs_on.day}日 "
 
 
 def _opportunity_block(result: AnalysisResult) -> list[str]:

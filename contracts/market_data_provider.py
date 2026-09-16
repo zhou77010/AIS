@@ -60,8 +60,6 @@ class MarketMetric(StrEnum):
     TREND_VOLUME_RATIO = "trend_volume_ratio"
     RISK_VOLATILITY = "risk_volatility"
     RISK_DRAWDOWN = "risk_drawdown"
-    NEXT_EARNINGS_DAYS = "next_earnings_days"
-    NEXT_EX_DIVIDEND_DAYS = "next_ex_dividend_days"
     SHORT_PERCENT_OF_FLOAT = "short_percent_of_float"
     SHORT_RATIO = "short_ratio"
     INSTITUTIONAL_OWNERSHIP = "institutional_ownership"
@@ -118,10 +116,6 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.TREND_VOLUME_RATIO: "Recent volume against its average",
     MarketMetric.RISK_VOLATILITY: "Annualised volatility",
     MarketMetric.RISK_DRAWDOWN: "Largest fall from a peak",
-    # The distance to a scheduled event is what makes it a catalyst: an event
-    # with no date attached cannot be said to be coming.
-    MarketMetric.NEXT_EARNINGS_DAYS: "Days to the next scheduled earnings report",
-    MarketMetric.NEXT_EX_DIVIDEND_DAYS: "Days to the next ex-dividend date",
     MarketMetric.SHORT_PERCENT_OF_FLOAT: "Short interest as a share of float",
     MarketMetric.SHORT_RATIO: "Days needed to cover the short positions",
     MarketMetric.INSTITUTIONAL_OWNERSHIP: "Institutional ownership",
@@ -158,8 +152,6 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.TREND_VOLUME_RATIO: (Category.TREND,),
     MarketMetric.RISK_VOLATILITY: (Category.RISK,),
     MarketMetric.RISK_DRAWDOWN: (Category.RISK,),
-    MarketMetric.NEXT_EARNINGS_DAYS: (Category.CATALYST,),
-    MarketMetric.NEXT_EX_DIVIDEND_DAYS: (Category.CATALYST,),
     MarketMetric.SHORT_PERCENT_OF_FLOAT: (Category.POSITIONING,),
     MarketMetric.SHORT_RATIO: (Category.POSITIONING,),
     MarketMetric.INSTITUTIONAL_OWNERSHIP: (Category.POSITIONING,),

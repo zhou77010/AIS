@@ -22,6 +22,9 @@ DEFAULT_LOG_DIR_NAME = "logs"
 DEFAULT_LOG_FILE_NAME = "ais.log"
 DEFAULT_TICKERS: tuple[str, ...] = ("AAPL",)
 DEFAULT_ANALYSIS_INTERVAL_MINUTES = 30
+# The curated catalyst calendar lives in the repository, because it holds events
+# no connected source reports and a person maintains it.
+DEFAULT_CALENDAR_RELATIVE_PATH = Path("data") / "calendar" / "events.json"
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,7 @@ class Config:
     serverchan_url: str | None = None
     pushplus_token: str | None = None
     analysis_interval_minutes: int = DEFAULT_ANALYSIS_INTERVAL_MINUTES
+    catalyst_calendar_file: Path = PROJECT_ROOT / DEFAULT_CALENDAR_RELATIVE_PATH
 
     @property
     def log_file_path(self) -> Path:
@@ -64,7 +68,17 @@ class Config:
             serverchan_url=_read_value(EnvVar.SERVERCHAN_URL),
             pushplus_token=_read_value(EnvVar.PUSHPLUS_TOKEN),
             analysis_interval_minutes=_read_analysis_interval_minutes(),
+            catalyst_calendar_file=_resolve_calendar_file(),
         )
+
+
+def _resolve_calendar_file() -> Path:
+    """Return the curated catalyst calendar, resolved against the root."""
+    raw = _read_value(EnvVar.CATALYST_CALENDAR)
+    if raw is None:
+        return PROJECT_ROOT / DEFAULT_CALENDAR_RELATIVE_PATH
+    path = Path(raw).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def _resolve_log_dir() -> Path:

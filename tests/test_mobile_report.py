@@ -27,6 +27,7 @@ from contracts.market_data_provider import (
 from evaluation.hpo.opportunity_assessor import OpportunityAssessor
 from models.asset import Asset
 from models.asset_profile import AssetProfile
+from models.catalyst_event import CatalystEvent, CatalystEventKind
 from models.category import CATEGORY_ORDER, Category
 from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
@@ -117,6 +118,7 @@ def _result(
     assessed: int | None = None,
     ratings: tuple[CategoryRating, ...] = (),
     opportunity: OpportunityAssessment | None = None,
+    events: tuple[CatalystEvent, ...] = (),
 ) -> AnalysisResult:
     scores = tuple(
         _score(category, assessed) if assessed is not None else _score(category)
@@ -139,6 +141,7 @@ def _result(
         market_data=_live() if market_data is None else market_data,
         ratings=ratings,
         opportunity=opportunity,
+        events=events,
     )
 
 
@@ -147,6 +150,34 @@ def _opportunity(**grades: int | None) -> OpportunityAssessment:
     return OpportunityAssessor().assess(
         {Category.VALUATION: 5, Category.TREND: 4, Category.RISK: 3} | grades
     )
+
+
+def _event(
+    kind: CatalystEventKind,
+    days: int,
+    *,
+    confirmed: bool = True,
+    description: str = "",
+) -> CatalystEvent:
+    """Return a catalyst event the given number of days from the report moment.
+
+    Distances are counted from the moment the report is rendered rather than from
+    today, so that an assertion can state the distance the report will write.
+    """
+    return CatalystEvent(
+        kind=kind,
+        occurs_on=_GENERATED_AT.date() + timedelta(days=days),
+        source="Test source",
+        confirmed=confirmed,
+        description=description,
+        symbol="NVDA",
+    )
+
+
+def _stars_in(report: str) -> str:
+    """Return the star line of the catalyst block."""
+    block = _block_for(report, Category.CATALYST)
+    return next(line for line in block if "★" in line)
 
 
 def _rating(
@@ -481,23 +512,89 @@ def test_report_does_not_name_the_opportunity_among_the_things_not_looked_at() -
 # --------------------------------------------------------------------------
 
 
-def test_report_says_when_there_is_no_evaluable_catalyst() -> None:
+def test_report_says_when_there_is_no_catalyst() -> None:
     report = _render(_result((Category.VALUATION,)))
 
     block = _block_for(report, Category.CATALYST)
 
-    assert "暂无可评估催化。" in "".join(block)
+    assert "近期暂无明确催化。" in "".join(block)
 
 
-def test_report_states_the_catalyst_as_a_distance_in_words() -> None:
-    snapshot = _live(next_earnings_days=12.0)
-
-    report = _render(_result((Category.CATALYST,), market_data=snapshot))
+def test_report_groups_catalysts_by_the_layer_they_bear_on() -> None:
+    report = _render(
+        _result(
+            (Category.CATALYST,),
+            events=(
+                _event(CatalystEventKind.EARNINGS, 43),
+                _event(CatalystEventKind.INDUSTRY_POLICY, 20),
+                _event(CatalystEventKind.FOMC, 0),
+            ),
+        )
+    )
 
     block = _block_for(report, Category.CATALYST)
 
-    assert any("12 天后预计发布财报" in line for line in block)
-    assert any("波动来源" in line for line in block)
+    assert any(line.strip() == "公司" for line in block)
+    assert any(line.strip() == "行业" for line in block)
+    assert any(line.strip() == "宏观" for line in block)
+    assert any("今日" in line for line in block)
+
+
+def test_report_says_why_each_event_matters() -> None:
+    report = _render(
+        _result((Category.CATALYST,), events=(_event(CatalystEventKind.EARNINGS, 12),))
+    )
+
+    block = _block_for(report, Category.CATALYST)
+
+    assert any("12 天后" in line and "—" in line for line in block)
+    assert any("改变增长预期" in line for line in block)
+
+
+def test_report_marks_a_date_the_source_has_not_confirmed() -> None:
+    report = _render(
+        _result(
+            (Category.CATALYST,),
+            events=(_event(CatalystEventKind.LAUNCH_WINDOW, 9, confirmed=False),),
+        )
+    )
+
+    assert "未确认" in report
+
+
+def test_report_does_not_show_a_count_of_catalysts_as_a_grade() -> None:
+    # Two calendars whose nearest event is the same distance apart read the same
+    # number of stars, however many events each holds.
+    one = _render(
+        _result((Category.CATALYST,), events=(_event(CatalystEventKind.EARNINGS, 20),))
+    )
+    many = _render(
+        _result(
+            (Category.CATALYST,),
+            events=(
+                _event(CatalystEventKind.EARNINGS, 20),
+                _event(CatalystEventKind.FOMC, 40),
+                _event(CatalystEventKind.PRODUCT_LAUNCH, 60),
+            ),
+        )
+    )
+
+    assert _stars_in(one) == _stars_in(many)
+
+
+def test_report_says_the_month_is_busy_when_it_is() -> None:
+    report = _render(
+        _result(
+            (Category.CATALYST,),
+            events=(
+                _event(CatalystEventKind.FOMC, 12),
+                _event(CatalystEventKind.EARNINGS, 20),
+                _event(CatalystEventKind.PRODUCT_LAUNCH, 26),
+            ),
+        )
+    )
+
+    assert "未来一个月催化较密集" in report
 
 
 def test_report_states_positioning_as_a_sentence() -> None:

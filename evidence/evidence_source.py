@@ -15,6 +15,7 @@ class EvidenceSource(StrEnum):
     SEC = "sec"
     EARNINGS = "earnings"
     MARKET_DATA = "market_data"
+    CALENDAR = "calendar"
     NEWS = "news"
     MACRO = "macro"
     MANUAL = "manual"

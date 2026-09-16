@@ -15,8 +15,18 @@ Two kinds of evidence are produced:
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Sequence
+from datetime import datetime, time
 
+from contracts.catalyst_event_provider import (
+    CONFIRMED_METADATA_KEY,
+    DATE_METADATA_KEY,
+    DESCRIPTION_METADATA_KEY,
+    KIND_METADATA_KEY,
+    SCOPE_METADATA_KEY,
+    SOURCE_METADATA_KEY,
+    SYMBOL_METADATA_KEY,
+)
 from contracts.market_data_provider import (
     METRIC_METADATA_KEY,
     VALUE_METADATA_KEY,
@@ -26,6 +36,7 @@ from evidence.evidence_collection import EvidenceCollection
 from evidence.evidence_item import EvidenceItem
 from evidence.evidence_source import EvidenceSource
 from models.asset import Asset
+from models.catalyst_event import CatalystEvent
 from models.category import Category
 from pipeline.evidence_factory import EvidenceFactory
 
@@ -42,6 +53,13 @@ _MISSING_MARKET_DATA_CONFIDENCE = 0.0
 
 _MARKET_DATA_ID = "{ticker}.market_data.{metric}"
 
+# A catalyst event is a fact a source states, so its evidence is fully trusted.
+# Whether the source presents the date as settled is carried as metadata instead
+# of being turned into a confidence, because how much less a rumoured date can be
+# trusted is a judgement and not a number this layer may invent.
+_EVENT_CONFIDENCE = 1.0
+_EVENT_ID = "{ticker}.catalyst.{kind}.{date}"
+
 
 class EvidenceBuilder:
     """Builds an EvidenceCollection for an asset."""
@@ -54,6 +72,7 @@ class EvidenceBuilder:
         self,
         asset: Asset,
         market_data: MarketDataSnapshot | None = None,
+        events: Sequence[CatalystEvent] = (),
     ) -> EvidenceCollection:
         """Build evidence for the asset.
 
@@ -61,14 +80,18 @@ class EvidenceBuilder:
             asset: Asset to build evidence for.
             market_data: Market data retrieved for the asset, or None when no
                 market data source was consulted.
+            events: Dated catalyst events retrieved for the asset, in the order
+                they should be recorded.
 
         Returns:
             EvidenceCollection holding one placeholder item per category, plus
-            one item per market metric when a snapshot was supplied.
+            one item per market metric when a snapshot was supplied, plus one
+            item per catalyst event.
         """
         items = [*self._placeholder_items(asset)]
         if market_data is not None:
             items.extend(self._market_data_items(asset, market_data))
+        items.extend(self._event_items(asset, events))
         return EvidenceCollection(asset=asset, items=tuple(items))
 
     def _placeholder_items(self, asset: Asset) -> tuple[EvidenceItem, ...]:
@@ -118,3 +141,48 @@ class EvidenceBuilder:
             )
             for point in market_data.points
         )
+
+    def _event_items(
+        self, asset: Asset, events: Sequence[CatalystEvent]
+    ) -> tuple[EvidenceItem, ...]:
+        """Return one item per catalyst event.
+
+        An event is recorded as evidence because it is the ground a catalyst
+        judgement stands on, and every judgement must be traceable to what it
+        was made from. The item carries the event's own date rather than the
+        moment it was retrieved: the date is the fact, and when AIS happened to
+        read it is not.
+        """
+        seen: dict[str, int] = {}
+        items: list[EvidenceItem] = []
+        for event in events:
+            base = _EVENT_ID.format(
+                ticker=asset.ticker, kind=event.kind.value, date=event.occurs_on
+            )
+            seen[base] = seen.get(base, 0) + 1
+            suffix = "" if seen[base] == 1 else f".{seen[base]}"
+            items.append(
+                self._factory.create(
+                    id=f"{base}{suffix}",
+                    category=Category.CATALYST,
+                    title=f"{event.source}: {event.description}",
+                    description=(
+                        f"{event.description} on {event.occurs_on}, reported by "
+                        f"{event.source}"
+                        + ("." if event.confirmed else ", not confirmed.")
+                    ),
+                    source=EvidenceSource.CALENDAR,
+                    timestamp=datetime.combine(event.occurs_on, time.min),
+                    confidence=_EVENT_CONFIDENCE,
+                    metadata={
+                        KIND_METADATA_KEY: event.kind.value,
+                        SCOPE_METADATA_KEY: event.scope.value,
+                        DATE_METADATA_KEY: event.occurs_on.isoformat(),
+                        SOURCE_METADATA_KEY: event.source,
+                        CONFIRMED_METADATA_KEY: "true" if event.confirmed else "false",
+                        DESCRIPTION_METADATA_KEY: event.description,
+                        SYMBOL_METADATA_KEY: event.symbol or "",
+                    },
+                )
+            )
+        return tuple(items)

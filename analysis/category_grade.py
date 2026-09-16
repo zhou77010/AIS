@@ -28,6 +28,7 @@ it never changes a judgement.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
 from contracts.market_data_provider import MarketMetric
@@ -46,15 +47,21 @@ _LOWER_IS_BETTER: dict[MarketMetric, tuple[tuple[float, int], ...]] = {
     # The source reports this as a percentage, so 100 means debt equals equity.
     MarketMetric.DEBT_TO_EQUITY: ((30.0, 5), (60.0, 4), (100.0, 3), (200.0, 2)),
     MarketMetric.RISK_VOLATILITY: ((0.20, 5), (0.30, 4), (0.45, 3), (0.70, 2)),
-    # A catalyst is graded by how near it is, not by which way it would move the
-    # asset. Nearer means the picture could change sooner.
-    MarketMetric.NEXT_EARNINGS_DAYS: ((7.0, 5), (30.0, 4), (90.0, 3), (180.0, 2)),
-    MarketMetric.NEXT_EX_DIVIDEND_DAYS: ((7.0, 5), (30.0, 4), (90.0, 3), (180.0, 2)),
     # Crowding. How much of the float is sold short, and how long unwinding it
     # would take. Neither says whether the short side is right.
     MarketMetric.SHORT_PERCENT_OF_FLOAT: ((0.02, 5), (0.05, 4), (0.10, 3), (0.20, 2)),
     MarketMetric.SHORT_RATIO: ((1.0, 5), (2.0, 4), (4.0, 3), (7.0, 2)),
 }
+
+# Catalyst is graded from its events rather than from a snapshot measurement, so
+# its band is stated separately. It reads how near the nearest event that could
+# change what the market expects is, and never how many there are.
+_CATALYST_PROXIMITY_BANDS: tuple[tuple[float, int], ...] = (
+    (7.0, 5),
+    (30.0, 4),
+    (90.0, 3),
+    (180.0, 2),
+)
 
 # Measurements where a negative reading means the quantity being measured
 # against is not there, rather than that the reading is low. A negative price to
@@ -106,6 +113,9 @@ def grade_for_category(result: AnalysisResult, category: Category) -> int | None
         was retrieved. None means the report shows no grade rather than a low
         one, because nothing was read.
     """
+    if category is Category.CATALYST:
+        return _catalyst_grade(result)
+
     snapshot = result.market_data
     if snapshot is None:
         return None
@@ -118,6 +128,42 @@ def grade_for_category(result: AnalysisResult, category: Category) -> int | None
         if reading is not None
     ]
     return _rounded_mean(readings)
+
+
+def _catalyst_grade(result: AnalysisResult) -> int | None:
+    """Return the catalyst grade, read from how near the nearest event is.
+
+    Catalyst is graded from its events rather than from a metric, because what
+    makes an event a catalyst is its date and a date is not a measurement that
+    fits a snapshot.
+
+    The grade reads the nearest event that could change what the market expects,
+    and not how many events there are: a crowded month and a quiet one are the
+    same reading when the nearest thing is the same distance away. Events that
+    move the price without moving a view are left out, so the grade does not
+    improve because shares are about to go ex-dividend.
+    """
+    moment = _moment_for(result)
+    upcoming = [
+        event
+        for event in result.events
+        if event.is_upcoming(moment) and not event.is_mechanical
+    ]
+    if not upcoming:
+        return None
+    nearest = min(event.days_from(moment) for event in upcoming)
+    return _band_grade(float(nearest), _CATALYST_PROXIMITY_BANDS)
+
+
+def _moment_for(result: AnalysisResult) -> datetime:
+    """Return the moment readings are measured against.
+
+    The moment the data was retrieved is used when there is one, so that a
+    report describes the run it came from. A run without market data has no such
+    moment, and the current time is the only honest alternative.
+    """
+    snapshot = result.market_data
+    return datetime.now() if snapshot is None else snapshot.retrieved_at
 
 
 def stars(grade: int) -> str:
@@ -144,16 +190,21 @@ def _reading_of(metric: MarketMetric, value: float | None) -> int | None:
             value = abs(value)
         elif metric in _NEGATIVE_MEANS_ABSENT and value < 0:
             return MIN_GRADE
-        for threshold, grade in _LOWER_IS_BETTER[metric]:
-            if value <= threshold:
-                return grade
-        return MIN_GRADE
+        return _band_grade(value, _LOWER_IS_BETTER[metric])
     for threshold, grade in _HIGHER_IS_BETTER.get(metric, ()):
         if value >= threshold:
             return grade
     if metric in _HIGHER_IS_BETTER:
         return MIN_GRADE
     return None
+
+
+def _band_grade(value: float, bands: tuple[tuple[float, int], ...]) -> int:
+    """Return the grade a value reads at, the first band it falls at winning."""
+    for threshold, grade in bands:
+        if value <= threshold:
+            return grade
+    return MIN_GRADE
 
 
 def _rounded_mean(readings: Sequence[int]) -> int | None:

@@ -29,6 +29,7 @@ from communication.wechat import WeChatNotifier
 from communication.wecom_app import WeComAppNotifier
 from config.config import Config
 from config.logging_config import configure_logging, get_logger
+from data.catalyst_events import build_catalyst_event_provider
 from data.market_data import build_market_data_provider
 from models.asset import Asset
 from models.asset_profile import AssetProfile
@@ -60,7 +61,11 @@ class Application:
         self._analyzer = (
             analyzer
             if analyzer is not None
-            else AssetAnalyzer(build_market_data_provider(), RatingTracker())
+            else AssetAnalyzer(
+                build_market_data_provider(),
+                RatingTracker(),
+                build_catalyst_event_provider(),
+            )
         )
         self._change_detector = ChangeDetector()
         self._scheduler = Scheduler(self._config.analysis_interval_minutes)
