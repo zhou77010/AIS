@@ -1,7 +1,14 @@
-"""Tests for the mobile report renderer (Runtime Sprint 13A).
+"""Tests for the mobile report renderer (v1.0).
 
 The renderer is the thing the user reads on their phone, so the tests describe
 what the message must say and, just as importantly, what it must never say.
+
+Every block of the report answers one of three questions, and the tests are
+grouped the same way:
+
+* what AIS concluded,
+* why AIS reached it,
+* what we know, and what we do not.
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ from models.recommendation import Recommendation
 
 _GENERATED_AT = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
 _SOURCE = "Yahoo Finance"
+_THESIS = "Placeholder decision."
 
 
 def _asset() -> Asset:
@@ -63,7 +71,7 @@ def _snapshot(points: tuple[MarketDataPoint, ...]) -> MarketDataSnapshot:
 
 
 def _live_snapshot() -> MarketDataSnapshot:
-    """Return a snapshot with four metrics retrieved and DCF unavailable."""
+    """Return a snapshot with four measurements retrieved and DCF unavailable."""
     return _snapshot(
         (
             _point(MarketMetric.PE, 26.80),
@@ -99,6 +107,7 @@ def _valuation_score(score: float = 13.10) -> CategoryScore:
 def _result(
     category_scores: tuple[CategoryScore, ...] | None = None,
     market_data: MarketDataSnapshot | None = _LIVE_SNAPSHOT,
+    thesis: str = _THESIS,
 ) -> AnalysisResult:
     """Return an analysis result for the renderer to work on."""
     scores = (_valuation_score(),) if category_scores is None else category_scores
@@ -111,7 +120,7 @@ def _result(
     recommendation = Recommendation(
         decision_state=DecisionState.WATCH,
         confidence=1.0,
-        investment_thesis="Placeholder decision.",
+        investment_thesis=thesis,
         evidence_references=("NVDA.market_data.pe",),
     )
     return AnalysisResult(
@@ -126,24 +135,97 @@ def _render(result: AnalysisResult | None = None) -> str:
     return render_mobile_report(result or _result(), generated_at=_GENERATED_AT)
 
 
+def _unwrapped(report: str) -> str:
+    """Return the report as one line, so a phrase can be checked across a wrap."""
+    return " ".join(report.split())
+
+
 # --------------------------------------------------------------------------
-# T2 - required content
+# What AIS concluded
 # --------------------------------------------------------------------------
 
 
 def test_report_states_the_symbol_decision_confidence_and_time() -> None:
     report = _render()
 
-    assert "AIS | NVDA" in report
+    assert "AIS | NVDA | generated 2026-09-16 03:20" in report
     assert "DECISION    WATCH" in report
     assert "CONFIDENCE  1.00" in report
-    assert "Generated 2026-09-16 03:20:00" in report
 
 
-def test_report_states_the_data_coverage() -> None:
+def test_the_conclusion_comes_before_everything_that_supports_it() -> None:
     report = _render()
 
-    assert "COVERAGE    1/9 categories, 4/5 inputs" in report
+    assert report.index("DECISION") < report.index("WHY")
+    assert report.index("DECISION") < report.index("CATEGORIES")
+    assert report.index("DECISION") < report.index("MISSING")
+
+
+def test_report_leaves_the_score_unevaluated_when_no_category_was_assessed() -> None:
+    report = _render(_result(category_scores=(), market_data=_EMPTY_SNAPSHOT))
+
+    assert f"SCORE       {NOT_EVALUATED}" in report
+    assert "0.00" not in report
+
+
+# --------------------------------------------------------------------------
+# Why AIS reached it
+# --------------------------------------------------------------------------
+
+
+def test_report_states_the_thesis_under_why() -> None:
+    report = _render()
+
+    assert "WHY\n Placeholder decision." in report
+
+
+def test_the_evidence_sits_under_the_thesis_it_supports() -> None:
+    report = _render()
+
+    why = report.index("WHY")
+    thesis = report.index(_THESIS)
+    evidence = report.index(" Evidence")
+
+    assert why < thesis < evidence
+
+
+def test_report_states_when_no_thesis_was_given_rather_than_leaving_it_blank() -> None:
+    report = _render(_result(thesis="   "))
+
+    assert "No thesis was given for this recommendation." in _unwrapped(report)
+
+
+def test_report_shows_at_most_three_evidence_lines() -> None:
+    report = _render()
+
+    assert "  Trailing P/E 26.80" in report
+    assert "  PEG ratio 0.46" in report
+    assert "  EV/EBITDA 25.14" in report
+    assert "Free cash flow yield" not in report
+
+
+def test_report_formats_a_ratio_metric_as_a_percentage() -> None:
+    snapshot = _snapshot(
+        (
+            _point(MarketMetric.FCF_YIELD, 0.0082),
+            _point(MarketMetric.PE, 26.80),
+        )
+    )
+
+    report = _render(_result(market_data=snapshot))
+
+    assert "  Free cash flow yield 0.82%" in report
+
+
+def test_an_evidence_entry_is_a_list_so_a_reason_can_be_added_later() -> None:
+    entry = _evidence_entry(_point(MarketMetric.PE, 26.80))
+
+    assert entry == ["  Trailing P/E 26.80"]
+
+
+# --------------------------------------------------------------------------
+# What we know
+# --------------------------------------------------------------------------
 
 
 def test_report_lists_every_category_in_the_canonical_order() -> None:
@@ -169,23 +251,6 @@ def test_canonical_category_order_covers_every_category_exactly_once() -> None:
     assert set(CATEGORY_ORDER) == set(Category)
 
 
-def test_report_orders_the_sections_as_the_reader_needs_them() -> None:
-    report = _render()
-
-    assert report.index("CATEGORIES") < report.index("EVIDENCE")
-    assert report.index("EVIDENCE") < report.index("DATA        ")
-    assert report.index("DATA        ") < report.index("COVERAGE")
-    assert report.index("COVERAGE") < report.index("MISSING")
-
-
-def test_report_puts_the_decision_before_the_evidence_quality() -> None:
-    report = _render()
-
-    assert report.index("DECISION") < report.index("SCORE")
-    assert report.index("SCORE") < report.index("CATEGORIES")
-    assert report.index("SCORE") < report.index("COVERAGE")
-
-
 def test_report_marks_categories_without_an_evaluator() -> None:
     report = _render()
 
@@ -205,47 +270,45 @@ def test_report_never_renders_an_absent_category_as_zero() -> None:
             assert not stripped.endswith("0.00")
 
 
-def test_report_shows_at_most_three_evidence_lines() -> None:
-    report = _render()
-
-    assert "EVIDENCE (max 3)" in report
-    assert "Trailing P/E 26.80" in report
-    assert "PEG ratio 0.46" in report
-    assert "EV/EBITDA 25.14" in report
-    assert "Free cash flow yield" not in report
+def test_report_states_live_market_data() -> None:
+    assert f"{LIVE_DATA_LABEL} - {_SOURCE}" in _render()
 
 
-def test_report_formats_a_ratio_metric_as_a_percentage() -> None:
-    snapshot = _snapshot(
-        (
-            _point(MarketMetric.FCF_YIELD, 0.0082),
-            _point(MarketMetric.PE, 26.80),
-        )
-    )
-
-    report = _render(_result(market_data=snapshot))
-
-    assert "Free cash flow yield 0.82%" in report
+# --------------------------------------------------------------------------
+# What we do not know
+# --------------------------------------------------------------------------
 
 
-def test_an_evidence_entry_is_a_list_so_a_reason_can_be_added_later() -> None:
-    entry = _evidence_entry(_point(MarketMetric.PE, 26.80))
-
-    assert entry == [" Trailing P/E 26.80"]
-
-
-def test_report_names_the_missing_categories_and_inputs() -> None:
+def test_report_names_what_is_missing_in_readable_terms() -> None:
     report = _render()
 
     assert "MISSING" in report
-    assert "categories: 8 of 9 not evaluated" in report
-    assert "inputs: dcf" in report
+    assert " 8 of 9 categories not evaluated" in report
+    assert "Unavailable: DCF fair value" in report
+
+
+def test_report_names_every_unavailable_measurement_without_truncating() -> None:
+    report = _render(_result(market_data=_EMPTY_SNAPSHOT))
+
+    for metric in MarketMetric:
+        assert metric.label in _unwrapped(report)
+
+
+def test_an_unavailable_measurement_name_is_never_split_across_lines() -> None:
+    report = _render(_result(market_data=_EMPTY_SNAPSHOT))
+
+    for metric in MarketMetric:
+        assert any(metric.label in line for line in report.splitlines()), metric.label
+
+
+def test_report_states_the_coverage_of_the_figures_it_shows() -> None:
+    report = _render()
+
+    assert " 4 of 5 measurements, 1 of 9 categories" in report
 
 
 def test_report_says_when_it_rests_on_partial_evidence() -> None:
-    report = _render()
-
-    assert report.splitlines()[-1] == f" {PARTIAL_EVIDENCE_NOTICE}"
+    assert f" {PARTIAL_EVIDENCE_NOTICE}" in _render()
 
 
 def test_report_omits_the_partial_evidence_notice_when_coverage_is_complete() -> None:
@@ -255,58 +318,52 @@ def test_report_omits_the_partial_evidence_notice_when_coverage_is_complete() ->
     report = _render(_result(category_scores=scores, market_data=complete))
 
     assert PARTIAL_EVIDENCE_NOTICE not in report
-    assert report.splitlines()[-1] == " none"
-
-
-def test_report_stays_within_the_mobile_length_budget() -> None:
-    lines = _render().splitlines()
-
-    assert 20 <= len(lines) <= 30
-
-
-# --------------------------------------------------------------------------
-# T3 - the data quality statement
-# --------------------------------------------------------------------------
-
-
-def test_report_states_live_market_data() -> None:
-    assert "DATA        LIVE MARKET DATA (Yahoo Finance)" in _render()
+    assert "MISSING\n none" in report
 
 
 def test_report_states_no_market_data_when_nothing_was_retrieved() -> None:
-    report = _render(_result(category_scores=(), market_data=_empty_snapshot()))
+    report = _render(_result(category_scores=(), market_data=_EMPTY_SNAPSHOT))
 
-    assert f"DATA        {NO_DATA_LABEL} ({_SOURCE})" in report
+    assert f"{NO_DATA_LABEL} - {_SOURCE}" in report
     assert LIVE_DATA_LABEL not in report
 
 
 def test_report_states_placeholder_data_when_no_source_was_connected() -> None:
     report = _render(_result(category_scores=(), market_data=None))
 
-    assert f"DATA        {PLACEHOLDER_DATA_LABEL}" in report
+    assert PLACEHOLDER_DATA_LABEL in report
     assert "no market data source was connected" in report
-
-
-def test_data_quality_label_classifies_every_case() -> None:
-    assert data_quality_label(_result()) == LIVE_DATA_LABEL
-    assert data_quality_label(_result(market_data=_empty_snapshot())) == NO_DATA_LABEL
-    assert data_quality_label(_result(market_data=None)) == PLACEHOLDER_DATA_LABEL
-
-
-# --------------------------------------------------------------------------
-# An absent measurement is never rendered as a number
-# --------------------------------------------------------------------------
-
-
-def test_report_leaves_the_score_unevaluated_when_no_category_was_assessed() -> None:
-    report = _render(_result(category_scores=(), market_data=_empty_snapshot()))
-
-    assert f"SCORE       {NOT_EVALUATED}" in report
-    assert "0.00" not in report
 
 
 def test_report_without_market_data_says_so_in_every_section() -> None:
     report = _render(_result(category_scores=(), market_data=None))
 
-    assert "MISSING\n categories: 9 of 9 not evaluated" in report
-    assert "EVIDENCE (max 3)\n none: no market data source was connected" in report
+    assert "MISSING\n 9 of 9 categories not evaluated" in report
+    assert " Evidence\n  none: no market data source was connected" in report
+
+
+def test_data_quality_label_classifies_every_case() -> None:
+    assert data_quality_label(_result()) == LIVE_DATA_LABEL
+    assert data_quality_label(_result(market_data=_EMPTY_SNAPSHOT)) == NO_DATA_LABEL
+    assert data_quality_label(_result(market_data=None)) == PLACEHOLDER_DATA_LABEL
+
+
+# --------------------------------------------------------------------------
+# Shape
+# --------------------------------------------------------------------------
+
+
+def test_report_stays_within_the_mobile_length_budget() -> None:
+    assert len(_render().splitlines()) <= 34
+
+
+def test_report_keeps_every_line_within_the_readable_width() -> None:
+    for line in _render().splitlines():
+        assert len(line) <= 46, line
+
+
+def test_report_is_plain_text_with_no_markup() -> None:
+    report = _render()
+
+    for markup in ("**", "##", "<", ">", "]"):
+        assert markup not in report
