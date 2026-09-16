@@ -27,6 +27,7 @@ from contracts.market_data_provider import (
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import CATEGORY_ORDER, Category
+from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
 from models.coverage import Coverage
 from models.decision_state import DecisionState
@@ -112,6 +113,7 @@ def _result(
     categories: tuple[Category, ...] = (Category.VALUATION,),
     market_data: MarketDataSnapshot | None = None,
     assessed: int | None = None,
+    ratings: tuple[CategoryRating, ...] = (),
 ) -> AnalysisResult:
     scores = tuple(
         _score(category, assessed) if assessed is not None else _score(category)
@@ -132,6 +134,27 @@ def _result(
             evidence_references=("NVDA.market_data.pe",),
         ),
         market_data=_live() if market_data is None else market_data,
+        ratings=ratings,
+    )
+
+
+def _rating(
+    momentum: float,
+    *,
+    changed: bool = False,
+    previous_grade: int | None = None,
+    grade: int = 4,
+    changed_at: datetime = _GENERATED_AT,
+) -> CategoryRating:
+    """Return a rating for the VALUATION category."""
+    return CategoryRating(
+        category=Category.VALUATION,
+        grade=grade,
+        momentum=momentum,
+        changed_at=changed_at,
+        changed=changed,
+        previous_grade=previous_grade,
+        reason="reason",
     )
 
 
@@ -203,6 +226,52 @@ def test_report_names_measurements_as_an_investor_reads_them() -> None:
     for metric in (MarketMetric.PE, MarketMetric.BETA, MarketMetric.PROFIT_MARGIN):
         assert metric.value not in _render(), metric
         assert METRIC_NAMES[metric]
+
+
+def test_report_shows_movement_inside_a_grade() -> None:
+    report = _render(_result(ratings=(_rating(0.05),)))
+
+    block = _block_for(report, Category.VALUATION)
+
+    assert any("▲5%" in line for line in block)
+
+
+def test_report_shows_a_falling_movement_too() -> None:
+    report = _render(_result(ratings=(_rating(-0.03),)))
+
+    assert "▼3%" in report
+
+
+def test_report_says_when_a_grade_changed_instead_of_showing_movement() -> None:
+    rating = _rating(0.0, changed=True, previous_grade=3, grade=4)
+
+    report = _render(_result(ratings=(rating,)))
+
+    assert "（9月16日 升级）" in report
+    assert "▲" not in report
+
+
+def test_report_calls_a_first_rating_a_first_rating() -> None:
+    rating = _rating(0.0, changed=True, previous_grade=None, grade=4)
+
+    report = _render(_result(ratings=(rating,)))
+
+    assert "（9月16日 首次评级）" in report
+
+
+def test_a_movement_that_rounds_to_nothing_is_not_shown() -> None:
+    report = _render(_result(ratings=(_rating(0.0002),)))
+
+    assert "▲0%" not in report
+    assert "▼0%" not in report
+
+
+def test_report_omits_movement_when_no_rating_was_taken() -> None:
+    report = _render(_result())
+
+    assert "▲" not in report
+    assert "▼" not in report
+    assert "首次评级" not in report
 
 
 def test_report_never_shows_a_raw_category_score() -> None:

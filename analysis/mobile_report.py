@@ -46,10 +46,11 @@ from analysis.labels import (
     decision_label,
     metric_name,
 )
-from analysis.plain_language import trend_sentence
+from analysis.plain_language import measurements_of, sentence_for
 from analysis.report import data_quality_label
-from contracts.market_data_provider import MarketDataPoint, MarketMetric
+from contracts.market_data_provider import MarketDataPoint
 from models.category import CATEGORY_ORDER, Category
+from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
 
 SECTION_SEPARATOR = "-" * 32
@@ -64,6 +65,9 @@ _TIMEZONE_NOTE = "北京时间"
 # Chinese characters occupy two columns, so the budget is in display columns.
 _LINE_WIDTH = 42
 _INDENT = " "
+
+# Below this, a movement rounds to nothing and is not worth a line.
+_MOMENTUM_FLOOR = 0.005
 _FOOTER_LINES = (
     "综合评分刻度尚未定义，",
     "本报告只呈现证据与观察，不构成投资建议。",
@@ -131,7 +135,41 @@ def _category_block(result: AnalysisResult, category: Category) -> list[str]:
 
     grade = grade_for_category(result, category)
     heading = f"{category_label(category)}  {stars(grade) if grade else NO_GRADE}"
-    return [heading, *_commentary_lines(result, category)]
+    return [
+        heading,
+        *_movement_lines(result, category),
+        *_commentary_lines(result, category),
+    ]
+
+
+def _movement_lines(result: AnalysisResult, category: Category) -> list[str]:
+    """Return how far a category has moved inside its grade.
+
+    A grade says where a category stands. This says whether it is moving inside
+    that standing, which a grade cannot show: a category can improve for weeks
+    without crossing into the next grade. When the grade itself has just
+    changed, the line says when instead, because the movement has started again
+    from nothing.
+    """
+    rating = result.rating_for(category)
+    if rating is None:
+        return []
+    if rating.changed:
+        return [_INDENT + _change_note(rating)]
+    if abs(rating.momentum) >= _MOMENTUM_FLOOR:
+        arrow = "▲" if rating.momentum > 0 else "▼"
+        return [_INDENT + f"{arrow}{abs(rating.momentum):.0%}"]
+    return []
+
+
+def _change_note(rating: CategoryRating) -> str:
+    """Return the note describing when a grade last changed and which way."""
+    moment = f"{rating.changed_at.month}月{rating.changed_at.day}日"
+    if rating.previous_grade is None:
+        return f"（{moment} 首次评级）"
+    if rating.grade > rating.previous_grade:
+        return f"（{moment} 升级）"
+    return f"（{moment} 降级）"
 
 
 def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
@@ -141,43 +179,18 @@ def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
     The measurements themselves stay in the evidence, where they support the
     conclusion rather than being the thing the reader is asked to interpret.
     """
-    sentence = _sentence_for(result, category)
+    sentence = sentence_for(result, category)
     if sentence is not None:
         return _pack([sentence], separator="", trailing="")
 
     phrases = [
         _measurement_phrase(point)
-        for point in _measurements_of(result, category)
+        for point in measurements_of(result, category)
         if point.value is not None
     ]
     if not phrases:
         return [_INDENT + "尚未取得该类别所需的测量。"]
     return _pack(phrases, separator="、", trailing="。")
-
-
-def _sentence_for(result: AnalysisResult, category: Category) -> str | None:
-    """Return a plain language sentence for a category, when one is written."""
-    if category is not Category.TREND:
-        return None
-    values = {point.metric: point.value for point in _measurements_of(result, category)}
-    return trend_sentence(
-        values.get(MarketMetric.TREND_RANGE_POSITION),
-        values.get(MarketMetric.TREND_DIRECTION),
-    )
-
-
-def _measurements_of(
-    result: AnalysisResult, category: Category
-) -> list[MarketDataPoint]:
-    """Return the retrieved measurements that bear on one category."""
-    snapshot = result.market_data
-    if snapshot is None:
-        return []
-    return [
-        point
-        for point in snapshot.available_points
-        if category in point.metric.categories
-    ]
 
 
 def _measurement_phrase(point: MarketDataPoint) -> str:

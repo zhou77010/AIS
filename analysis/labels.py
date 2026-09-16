@@ -85,6 +85,14 @@ METRIC_NAMES: dict[MarketMetric, str] = {
     MarketMetric.TREND_DIRECTION: "一年涨跌幅",
     MarketMetric.EARNINGS_GROWTH: "季度盈利同比",
     MarketMetric.EXPECTED_EARNINGS_CHANGE: "预期盈利变化",
+    MarketMetric.TREND_MA20_GAP: "价格对 20 日均线",
+    MarketMetric.TREND_MA60_GAP: "价格对 60 日均线",
+    MarketMetric.TREND_MA120_GAP: "价格对 120 日均线",
+    MarketMetric.TREND_MACD: "MACD 动能",
+    MarketMetric.TREND_RSI: "相对强弱指标",
+    MarketMetric.TREND_VOLUME_RATIO: "成交量对均值",
+    MarketMetric.RISK_VOLATILITY: "年化波动率",
+    MarketMetric.RISK_DRAWDOWN: "最大回撤",
 }
 
 # Measurements that are ratios, and read as percentages.
@@ -99,6 +107,13 @@ PERCENT_METRICS = frozenset(
         MarketMetric.TREND_DIRECTION,
         MarketMetric.EARNINGS_GROWTH,
         MarketMetric.EXPECTED_EARNINGS_CHANGE,
+        MarketMetric.TREND_MA20_GAP,
+        MarketMetric.TREND_MA60_GAP,
+        MarketMetric.TREND_MA120_GAP,
+        MarketMetric.TREND_MACD,
+        MarketMetric.TREND_VOLUME_RATIO,
+        MarketMetric.RISK_VOLATILITY,
+        MarketMetric.RISK_DRAWDOWN,
     }
 )
 
@@ -109,6 +124,12 @@ SIGNED_METRICS = frozenset(
         MarketMetric.TREND_DIRECTION,
         MarketMetric.EARNINGS_GROWTH,
         MarketMetric.EXPECTED_EARNINGS_CHANGE,
+        MarketMetric.TREND_MA20_GAP,
+        MarketMetric.TREND_MA60_GAP,
+        MarketMetric.TREND_MA120_GAP,
+        MarketMetric.TREND_MACD,
+        MarketMetric.TREND_VOLUME_RATIO,
+        MarketMetric.RISK_DRAWDOWN,
     }
 )
 

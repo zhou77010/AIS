@@ -19,6 +19,7 @@ from analysis.analysis_result import AnalysisResult
 from analysis.analyzer import AssetAnalyzer
 from analysis.mobile_report import render_mobile_report
 from analysis.report import generate_report
+from app.rating_tracker import RatingTracker
 from app.scheduler import Scheduler
 from communication.bark import BarkNotifier
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
@@ -59,7 +60,7 @@ class Application:
         self._analyzer = (
             analyzer
             if analyzer is not None
-            else AssetAnalyzer(build_market_data_provider())
+            else AssetAnalyzer(build_market_data_provider(), RatingTracker())
         )
         self._change_detector = ChangeDetector()
         self._scheduler = Scheduler(self._config.analysis_interval_minutes)

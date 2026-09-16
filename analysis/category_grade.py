@@ -40,9 +40,26 @@ _LOWER_IS_BETTER: dict[MarketMetric, tuple[tuple[float, int], ...]] = {
     MarketMetric.BETA: ((0.8, 5), (1.0, 4), (1.3, 3), (1.8, 2)),
     # The source reports this as a percentage, so 100 means debt equals equity.
     MarketMetric.DEBT_TO_EQUITY: ((30.0, 5), (60.0, 4), (100.0, 3), (200.0, 2)),
+    MarketMetric.RISK_VOLATILITY: ((0.20, 5), (0.30, 4), (0.45, 3), (0.70, 2)),
 }
 
-# Bands for measurements where a larger number reads better.
+# Measurements where a negative reading means the quantity being measured
+# against is not there, rather than that the reading is low. A negative price to
+# earnings ratio means a loss, not a bargain, and grading it as the lowest
+# multiple on the list would state the opposite of the truth.
+_NEGATIVE_MEANS_ABSENT = frozenset(
+    {
+        MarketMetric.PE,
+        MarketMetric.PEG,
+        MarketMetric.EV_EBITDA,
+        MarketMetric.DEBT_TO_EQUITY,
+    }
+)
+
+# Bands for measurements where a larger number reads better. Signed
+# measurements belong here too: a price below its moving average, or a drawdown,
+# is a real reading and not a missing one, and it is read by how far from zero
+# it is on the side that matters.
 _HIGHER_IS_BETTER: dict[MarketMetric, tuple[tuple[float, int], ...]] = {
     MarketMetric.FCF_YIELD: ((0.06, 5), (0.04, 4), (0.02, 3), (0.0, 2)),
     MarketMetric.CURRENT_RATIO: ((2.0, 5), (1.5, 4), (1.2, 3), (1.0, 2)),
@@ -54,6 +71,13 @@ _HIGHER_IS_BETTER: dict[MarketMetric, tuple[tuple[float, int], ...]] = {
     MarketMetric.TREND_DIRECTION: ((0.20, 5), (0.10, 4), (0.03, 3), (-0.03, 2)),
     MarketMetric.EARNINGS_GROWTH: ((0.30, 5), (0.15, 4), (0.05, 3), (0.0, 2)),
     MarketMetric.EXPECTED_EARNINGS_CHANGE: ((0.30, 5), (0.15, 4), (0.05, 3), (0.0, 2)),
+    MarketMetric.TREND_MA20_GAP: ((0.05, 5), (0.0, 4), (-0.03, 3), (-0.08, 2)),
+    MarketMetric.TREND_MA60_GAP: ((0.05, 5), (0.0, 4), (-0.03, 3), (-0.08, 2)),
+    MarketMetric.TREND_MA120_GAP: ((0.08, 5), (0.02, 4), (-0.05, 3), (-0.12, 2)),
+    MarketMetric.TREND_MACD: ((0.010, 5), (0.0, 4), (-0.010, 3), (-0.030, 2)),
+    MarketMetric.TREND_RSI: ((60.0, 5), (50.0, 4), (40.0, 3), (30.0, 2)),
+    MarketMetric.TREND_VOLUME_RATIO: ((0.30, 5), (0.10, 4), (-0.10, 3), (-0.30, 2)),
+    MarketMetric.RISK_DRAWDOWN: ((-0.05, 5), (-0.10, 4), (-0.20, 3), (-0.35, 2)),
 }
 
 
@@ -105,7 +129,7 @@ def _reading_of(metric: MarketMetric, value: float | None) -> int | None:
             # Beta describes how far the asset moves with its market, in either
             # direction. The size of the movement is what is read here.
             value = abs(value)
-        elif value < 0:
+        elif metric in _NEGATIVE_MEANS_ABSENT and value < 0:
             return MIN_GRADE
         for threshold, grade in _LOWER_IS_BETTER[metric]:
             if value <= threshold:

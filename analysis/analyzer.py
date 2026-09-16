@@ -7,7 +7,13 @@ only and contains no business logic.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime
+
 from analysis.analysis_result import AnalysisResult
+from analysis.category_grade import grade_for_category
+from analysis.plain_language import sentence_for
+from app.rating_tracker import RatingTracker
 from config.logging_config import get_logger
 from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
@@ -20,6 +26,7 @@ from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.trend.trend_evaluator import TrendEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
+from models.category_rating import CategoryRating
 from models.recommendation import Recommendation
 from pipeline.evidence_builder import EvidenceBuilder
 
@@ -29,7 +36,11 @@ _LOGGER_NAME = "analysis"
 class AssetAnalyzer:
     """Runs the complete analysis flow for one asset."""
 
-    def __init__(self, market_data_provider: MarketDataProvider | None = None) -> None:
+    def __init__(
+        self,
+        market_data_provider: MarketDataProvider | None = None,
+        rating_tracker: RatingTracker | None = None,
+    ) -> None:
         """Create the analyzer with the components it orchestrates.
 
         Args:
@@ -37,9 +48,14 @@ class AssetAnalyzer:
                 None to run without one. Without a provider the flow stays
                 deterministic and builds placeholder evidence, which is how the
                 pipeline behaved before live market data existed.
+            rating_tracker: Holder of where each category stood last time, or
+                None to run without one. Without a tracker the result carries no
+                ratings, because a rating is about successive runs and a single
+                run does not know the previous one.
         """
         self._evidence_builder = EvidenceBuilder()
         self._market_data_provider = market_data_provider
+        self._rating_tracker = rating_tracker
         self._category_evaluators: tuple[CategoryEvaluator, ...] = (
             ValuationEvaluator(),
             RiskEvaluator(),
@@ -83,12 +99,52 @@ class AssetAnalyzer:
         )
         assessment = self._overall_evaluator.evaluate(category_scores)
         recommendation = self._recommendation_engine.recommend(assessment)
-        return AnalysisResult(
+        result = AnalysisResult(
             asset=asset,
             assessment=assessment,
             recommendation=recommendation,
             market_data=market_data,
         )
+        return replace(result, ratings=self._rate(asset, result))
+
+    def _rate(self, asset: Asset, result: AnalysisResult) -> tuple[CategoryRating, ...]:
+        """Return the rating of every category a judgement was reached for.
+
+        A category assembled from no rule results carries no evidence and is not
+        rated: a grade would say where nothing stands.
+
+        Args:
+            asset: Asset the result is about.
+            result: Analysis result just produced.
+
+        Returns:
+            The ratings, empty when no tracker is in use.
+        """
+        if self._rating_tracker is None:
+            return ()
+
+        moment = datetime.now()
+        ratings: list[CategoryRating] = []
+        for category_score in result.assessment.category_scores:
+            if not category_score.evidence_references:
+                continue
+            grade = grade_for_category(result, category_score.category)
+            if grade is None:
+                continue
+            reason = (
+                sentence_for(result, category_score.category) or category_score.summary
+            )
+            ratings.append(
+                self._rating_tracker.update(
+                    symbol=asset.ticker,
+                    category=category_score.category,
+                    grade=grade,
+                    score=category_score.score,
+                    reason=reason,
+                    moment=moment,
+                )
+            )
+        return tuple(ratings)
 
     def _collect_market_data(self, asset: Asset) -> MarketDataSnapshot | None:
         """Retrieve market data for the asset, or None when no source is set.

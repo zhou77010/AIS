@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from contracts.market_data_provider import MarketDataSnapshot
 from models.asset import Asset
+from models.category import Category
+from models.category_rating import CategoryRating
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
@@ -30,9 +32,21 @@ class AnalysisResult:
             from, not a copy of anything the assessment owns, and it is what
             lets the report and the notification state truthfully whether live
             market data was used.
+        ratings: Where each category stands and how it has moved inside that
+            standing, empty when no rating tracker is in use. A rating is about
+            successive runs, so a run that does not know the previous one has
+            nothing to say here.
     """
 
     asset: Asset
     assessment: OverallAssessment
     recommendation: Recommendation
     market_data: MarketDataSnapshot | None = None
+    ratings: tuple[CategoryRating, ...] = ()
+
+    def rating_for(self, category: Category) -> CategoryRating | None:
+        """Return the rating recorded for one category, or None."""
+        for rating in self.ratings:
+            if rating.category is category:
+                return rating
+        return None

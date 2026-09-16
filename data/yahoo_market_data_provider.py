@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
-from datetime import datetime
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -33,7 +33,10 @@ from contracts.market_data_provider import (
     MarketDataPoint,
     MarketDataSnapshot,
     MarketMetric,
+    PriceBar,
+    PriceHistory,
 )
+from data import indicators
 from data.http import HttpTransport, UrllibTransport
 from utils.exceptions import DataError
 
@@ -46,6 +49,18 @@ _SUMMARY_URL = (
     "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
     "?modules=summaryDetail,defaultKeyStatistics,financialData&crumb={token}"
 )
+_CHART_URL = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    "?range={range}&interval=1d"
+)
+
+# One year of daily bars is enough for a 120 day average with room to spare.
+_HISTORY_RANGE = "1y"
+_MA_WINDOWS = (20, 60, 120)
+_VOLUME_RECENT_DAYS = 5
+_VOLUME_BASELINE_DAYS = 60
+_VOLATILITY_WINDOW = 20
+_VOLUME_AVERAGE_WINDOW = 60
 _DCF_REASON = (
     f"{MarketMetric.DCF.label} is not retrieved: it is the output of a valuation "
     f"model, not a datum a market data source publishes, and AIS has not defined "
@@ -76,6 +91,12 @@ class YahooMarketDataProvider:
         with something unusable, the returned snapshot carries one point per
         metric without a value, each stating why it is missing.
 
+        Price history is retrieved alongside the summary because the two answer
+        different questions: the summary says what the figures are now, and the
+        history says how the price got here. When only one of them answers, the
+        measurements the other would have produced report themselves as
+        unavailable rather than borrowing from it.
+
         Args:
             symbol: Trading symbol to retrieve data for.
 
@@ -83,6 +104,8 @@ class YahooMarketDataProvider:
             Snapshot holding one point per metric.
         """
         retrieved_at = datetime.now()
+        indicators = _indicator_points(self.fetch_history(symbol))
+
         try:
             summary = self._request_summary(symbol)
         except Exception as error:  # noqa: BLE001 - the contract is to never raise
@@ -97,8 +120,51 @@ class YahooMarketDataProvider:
                 f"{SOURCE_NAME} could not provide this metric, so it was not "
                 f"retrieved ({detail})."
             )
-            return self._snapshot(symbol, retrieved_at, _unavailable_points(reason))
-        return self._snapshot(symbol, retrieved_at, _points(summary))
+            points = _merge(_unavailable_points(reason), indicators)
+            return self._snapshot(symbol, retrieved_at, points)
+
+        return self._snapshot(
+            symbol, retrieved_at, _merge(_points(summary), indicators)
+        )
+
+    def fetch_history(self, symbol: str) -> PriceHistory:
+        """Return the daily price history Yahoo Finance holds for a symbol.
+
+        The call never raises. A source that cannot be reached, or that answers
+        with something unusable, returns an empty history, and everything
+        computed from it reports itself as unavailable.
+
+        Args:
+            symbol: Trading symbol to retrieve history for.
+
+        Returns:
+            History holding the daily bars the source provided, possibly none.
+        """
+        retrieved_at = datetime.now()
+        url = _CHART_URL.format(symbol=quote(symbol, safe=""), range=_HISTORY_RANGE)
+        try:
+            payload = json.loads(self._transport.get(url))
+            bars = _bars_from(payload)
+        except Exception as error:  # noqa: BLE001 - the contract is to never raise
+            self._logger.warning(
+                "price history for %s unavailable from %s: %s",
+                symbol,
+                SOURCE_NAME,
+                f"{type(error).__name__}: {error}",
+            )
+            bars = ()
+        self._logger.info(
+            "price history for %s: %d daily bars from %s",
+            symbol,
+            len(bars),
+            SOURCE_NAME,
+        )
+        return PriceHistory(
+            symbol=symbol,
+            source=SOURCE_NAME,
+            retrieved_at=retrieved_at,
+            bars=bars,
+        )
 
     def _snapshot(
         self,
@@ -161,6 +227,175 @@ class YahooMarketDataProvider:
             self._transport.get(_COOKIE_URL)
         except DataError as error:
             self._logger.debug("%s session priming answered %s", SOURCE_NAME, error)
+
+
+def _bars_from(payload: object) -> tuple[PriceBar, ...]:
+    """Return the daily bars out of a chart response.
+
+    A period missing any of its prices is dropped rather than repaired: a bar
+    with a closing price and no high is not a bar, and inventing one of the two
+    would put a price in the record that nobody traded at.
+    """
+    if not isinstance(payload, Mapping):
+        return ()
+    chart = payload.get("chart")
+    if not isinstance(chart, Mapping):
+        return ()
+    results = chart.get("result")
+    if not isinstance(results, list) or not results:
+        return ()
+    entry = results[0]
+    if not isinstance(entry, Mapping):
+        return ()
+
+    timestamps = entry.get("timestamp")
+    blocks = entry.get("indicators")
+    quotes = blocks.get("quote") if isinstance(blocks, Mapping) else None
+    if not isinstance(timestamps, list) or not isinstance(quotes, list) or not quotes:
+        return ()
+    quote = quotes[0]
+    if not isinstance(quote, Mapping):
+        return ()
+
+    bars: list[PriceBar] = []
+    for index, stamp in enumerate(timestamps):
+        values = [_series_value(quote, field, index) for field in _BAR_FIELDS]
+        if any(value is None for value in values):
+            continue
+        open_, high, low, close, volume = values
+        bars.append(
+            PriceBar(
+                timestamp=datetime.fromtimestamp(stamp, tz=UTC),
+                open=open_,
+                high=high,
+                low=low,
+                close=close,
+                volume=volume,
+            )
+        )
+    return tuple(bars)
+
+
+_BAR_FIELDS = ("open", "high", "low", "close", "volume")
+
+
+def _series_value(quote: Mapping[str, Any], field: str, index: int) -> float | None:
+    """Return one value out of a chart series, or None when it is not usable."""
+    series = quote.get(field)
+    if not isinstance(series, list) or index >= len(series):
+        return None
+    value = series[index]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _indicator_points(history: PriceHistory) -> tuple[MarketDataPoint, ...]:
+    """Return one point per indicator computed from the price history."""
+    closes = history.closes
+    volumes = history.volumes
+    latest = closes[-1] if closes else None
+
+    return (
+        _indicator_point(
+            MarketMetric.TREND_MA20_GAP,
+            indicators.relative_change(
+                latest, indicators.simple_moving_average(closes, _MA_WINDOWS[0])
+            ),
+            "as the latest close against its 20 day average",
+        ),
+        _indicator_point(
+            MarketMetric.TREND_MA60_GAP,
+            indicators.relative_change(
+                latest, indicators.simple_moving_average(closes, _MA_WINDOWS[1])
+            ),
+            "as the latest close against its 60 day average",
+        ),
+        _indicator_point(
+            MarketMetric.TREND_MA120_GAP,
+            indicators.relative_change(
+                latest, indicators.simple_moving_average(closes, _MA_WINDOWS[2])
+            ),
+            "as the latest close against its 120 day average",
+        ),
+        _indicator_point(
+            MarketMetric.TREND_MACD,
+            _macd_share(closes),
+            "as the MACD line less its signal line, over the latest close",
+        ),
+        _indicator_point(
+            MarketMetric.TREND_RSI,
+            indicators.relative_strength_index(closes),
+            "from the last 14 daily closes",
+        ),
+        _indicator_point(
+            MarketMetric.TREND_VOLUME_RATIO,
+            indicators.relative_change(
+                indicators.simple_moving_average(volumes, _VOLUME_RECENT_DAYS),
+                indicators.simple_moving_average(volumes, _VOLUME_BASELINE_DAYS),
+            ),
+            "as the last 5 days' volume against the last 60 days'",
+        ),
+        _indicator_point(
+            MarketMetric.RISK_VOLATILITY,
+            indicators.annualised_volatility(closes, _VOLATILITY_WINDOW),
+            "from the last 20 daily returns, scaled to a year",
+        ),
+        _indicator_point(
+            MarketMetric.RISK_DRAWDOWN,
+            indicators.maximum_drawdown(closes),
+            "over the daily closes retrieved",
+        ),
+    )
+
+
+def _macd_share(closes: tuple[float, ...]) -> float | None:
+    """Return the MACD gap as a share of price, so it can be compared across assets."""
+    if not closes:
+        return None
+    result = indicators.macd(closes)
+    if result is None:
+        return None
+    _, _, histogram = result
+    return indicators.relative_change(closes[-1] + histogram, closes[-1])
+
+
+def _indicator_point(
+    metric: MarketMetric, value: float | None, detail: str
+) -> MarketDataPoint:
+    """Build one indicator point, or record that the history was too short."""
+    if value is None:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} could not be computed: {SOURCE_NAME} did not "
+                f"provide enough daily price history for this symbol."
+            ),
+        )
+    return MarketDataPoint(
+        metric=metric,
+        value=value,
+        reason=(
+            f"{metric.label} {value} computed {detail}, from daily prices "
+            f"reported by {SOURCE_NAME}."
+        ),
+    )
+
+
+def _merge(
+    summary_points: Sequence[MarketDataPoint],
+    indicator_points: Sequence[MarketDataPoint],
+) -> tuple[MarketDataPoint, ...]:
+    """Combine the two sources of measurements, in one stable order.
+
+    The indicator points win where both describe the same metric, because the
+    history says more about how the price has behaved than the summary does.
+    """
+    by_metric = {point.metric: point for point in summary_points}
+    by_metric.update({point.metric: point for point in indicator_points})
+    return tuple(by_metric[metric] for metric in MarketMetric if metric in by_metric)
 
 
 def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:

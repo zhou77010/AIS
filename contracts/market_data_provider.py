@@ -52,6 +52,14 @@ class MarketMetric(StrEnum):
     TREND_DIRECTION = "trend_direction"
     EARNINGS_GROWTH = "earnings_growth"
     EXPECTED_EARNINGS_CHANGE = "expected_earnings_change"
+    TREND_MA20_GAP = "trend_ma20_gap"
+    TREND_MA60_GAP = "trend_ma60_gap"
+    TREND_MA120_GAP = "trend_ma120_gap"
+    TREND_MACD = "trend_macd"
+    TREND_RSI = "trend_rsi"
+    TREND_VOLUME_RATIO = "trend_volume_ratio"
+    RISK_VOLATILITY = "risk_volatility"
+    RISK_DRAWDOWN = "risk_drawdown"
 
     @property
     def label(self) -> str:
@@ -96,6 +104,14 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.TREND_DIRECTION: "Price change over 52 weeks",
     MarketMetric.EARNINGS_GROWTH: "Quarterly earnings growth",
     MarketMetric.EXPECTED_EARNINGS_CHANGE: "Expected earnings change",
+    MarketMetric.TREND_MA20_GAP: "Price against 20 day average",
+    MarketMetric.TREND_MA60_GAP: "Price against 60 day average",
+    MarketMetric.TREND_MA120_GAP: "Price against 120 day average",
+    MarketMetric.TREND_MACD: "MACD momentum",
+    MarketMetric.TREND_RSI: "Relative strength index",
+    MarketMetric.TREND_VOLUME_RATIO: "Recent volume against its average",
+    MarketMetric.RISK_VOLATILITY: "Annualised volatility",
+    MarketMetric.RISK_DRAWDOWN: "Largest fall from a peak",
 }
 
 # Debt to equity and the current ratio are read by Risk and by Fundamental.
@@ -120,6 +136,14 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.TREND_DIRECTION: (Category.TREND,),
     MarketMetric.EARNINGS_GROWTH: (Category.EARNINGS,),
     MarketMetric.EXPECTED_EARNINGS_CHANGE: (Category.EARNINGS,),
+    MarketMetric.TREND_MA20_GAP: (Category.TREND,),
+    MarketMetric.TREND_MA60_GAP: (Category.TREND,),
+    MarketMetric.TREND_MA120_GAP: (Category.TREND,),
+    MarketMetric.TREND_MACD: (Category.TREND,),
+    MarketMetric.TREND_RSI: (Category.TREND,),
+    MarketMetric.TREND_VOLUME_RATIO: (Category.TREND,),
+    MarketMetric.RISK_VOLATILITY: (Category.RISK,),
+    MarketMetric.RISK_DRAWDOWN: (Category.RISK,),
 }
 
 
@@ -194,6 +218,63 @@ class MarketDataSnapshot:
         raise KeyError(f"no market data point recorded for {metric.value}")
 
 
+@dataclass(frozen=True)
+class PriceBar:
+    """One trading period's prices and volume.
+
+    Attributes:
+        timestamp: Moment the period opened.
+        open: First traded price of the period.
+        high: Highest traded price of the period.
+        low: Lowest traded price of the period.
+        close: Last traded price of the period.
+        volume: Units traded during the period.
+    """
+
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+
+
+@dataclass(frozen=True)
+class PriceHistory:
+    """The price history retrieved for one symbol.
+
+    History is evidence about how an asset has behaved over time, which a single
+    snapshot cannot show. Everything computed from it is computed from these
+    bars and nothing else.
+
+    Attributes:
+        symbol: Symbol the history belongs to.
+        source: Name of the source the history came from.
+        retrieved_at: Moment the history was retrieved.
+        bars: Trading periods in chronological order, oldest first.
+    """
+
+    symbol: str
+    source: str
+    retrieved_at: datetime
+    bars: tuple[PriceBar, ...]
+
+    @property
+    def closes(self) -> tuple[float, ...]:
+        """Return the closing price of every bar, oldest first."""
+        return tuple(bar.close for bar in self.bars)
+
+    @property
+    def volumes(self) -> tuple[float, ...]:
+        """Return the volume of every bar, oldest first."""
+        return tuple(bar.volume for bar in self.bars)
+
+    @property
+    def is_empty(self) -> bool:
+        """Return whether no bar was retrieved."""
+        return not self.bars
+
+
 class MarketDataProvider(Protocol):
     """Contract for any market data source."""
 
@@ -210,4 +291,18 @@ class MarketDataProvider(Protocol):
 
         Returns:
             Snapshot holding one point per metric.
+        """
+
+    def fetch_history(self, symbol: str) -> PriceHistory:
+        """Return the price history retrieved for a symbol.
+
+        As with :meth:`fetch`, an implementation never raises: a source that
+        cannot be reached returns an empty history, and everything derived from
+        history reports itself as unavailable rather than inventing a value.
+
+        Args:
+            symbol: Trading symbol the history is requested for.
+
+        Returns:
+            History holding the bars the source provided, possibly none.
         """
