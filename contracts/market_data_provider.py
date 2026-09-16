@@ -50,6 +50,8 @@ class MarketMetric(StrEnum):
     MARKET_DIRECTION = "market_direction"
     TREND_RANGE_POSITION = "trend_range_position"
     TREND_DIRECTION = "trend_direction"
+    EARNINGS_GROWTH = "earnings_growth"
+    EXPECTED_EARNINGS_CHANGE = "expected_earnings_change"
 
     @property
     def label(self) -> str:
@@ -92,6 +94,8 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     # measurement and is displayed wherever the measurement is.
     MarketMetric.TREND_RANGE_POSITION: "Price position in 52 week range",
     MarketMetric.TREND_DIRECTION: "Price change over 52 weeks",
+    MarketMetric.EARNINGS_GROWTH: "Quarterly earnings growth",
+    MarketMetric.EXPECTED_EARNINGS_CHANGE: "Expected earnings change",
 }
 
 # Debt to equity and the current ratio are read by Risk and by Fundamental.
@@ -114,6 +118,8 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.MARKET_DIRECTION: (Category.MARKET,),
     MarketMetric.TREND_RANGE_POSITION: (Category.TREND,),
     MarketMetric.TREND_DIRECTION: (Category.TREND,),
+    MarketMetric.EARNINGS_GROWTH: (Category.EARNINGS,),
+    MarketMetric.EXPECTED_EARNINGS_CHANGE: (Category.EARNINGS,),
 }
 
 

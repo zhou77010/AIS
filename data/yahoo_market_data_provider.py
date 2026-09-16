@@ -217,6 +217,14 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
             MarketMetric.TREND_DIRECTION,
             _raw(summary, "defaultKeyStatistics", "52WeekChange"),
         ),
+        _point(
+            MarketMetric.EARNINGS_GROWTH,
+            _raw(summary, "defaultKeyStatistics", "earningsQuarterlyGrowth"),
+        ),
+        _expected_earnings_change_point(
+            _raw(summary, "defaultKeyStatistics", "forwardEps"),
+            _raw(summary, "defaultKeyStatistics", "trailingEps"),
+        ),
     )
 
 
@@ -253,6 +261,43 @@ def _point(metric: MarketMetric, value: float | None) -> MarketDataPoint:
         metric=metric,
         value=value,
         reason=f"{metric.label} {value} retrieved from {SOURCE_NAME}.",
+    )
+
+
+def _expected_earnings_change_point(
+    forward_eps: float | None, trailing_eps: float | None
+) -> MarketDataPoint:
+    """Build the point describing what earnings are expected to do next.
+
+    The expected change is the gap between what is expected next and what has
+    been reported, as a share of what has been reported. It is a ratio rather
+    than a field the source publishes, so the reason states the division.
+
+    Reported earnings that are not positive carry no meaningful ratio: dividing
+    by zero or by a loss produces a number that says nothing about the
+    expectation. That case is reported as absent with the reason, never as a
+    value.
+    """
+    metric = MarketMetric.EXPECTED_EARNINGS_CHANGE
+    if forward_eps is None or trailing_eps is None or trailing_eps <= 0:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} could not be computed: it needs both a forward "
+                f"and a positive reported earnings per share from {SOURCE_NAME}, "
+                f"and this symbol does not have them."
+            ),
+        )
+    value = (forward_eps - trailing_eps) / trailing_eps
+    return MarketDataPoint(
+        metric=metric,
+        value=value,
+        reason=(
+            f"{metric.label} {value} computed as the forward earnings per share "
+            f"{forward_eps} less the reported {trailing_eps}, divided by the "
+            f"reported figure, both from {SOURCE_NAME}."
+        ),
     )
 
 

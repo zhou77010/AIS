@@ -83,6 +83,8 @@ _PERCENT_METRICS = frozenset(
         MarketMetric.MARKET_DIRECTION,
         MarketMetric.TREND_RANGE_POSITION,
         MarketMetric.TREND_DIRECTION,
+        MarketMetric.EARNINGS_GROWTH,
+        MarketMetric.EXPECTED_EARNINGS_CHANGE,
     }
 )
 
@@ -92,6 +94,7 @@ _CATEGORY_UNITS: dict[Category, str] = {
     Category.RISK: "dimensions",
     Category.MARKET: "aspects",
     Category.TREND: "aspects",
+    Category.EARNINGS: "parts",
 }
 _DEFAULT_UNITS = "measurements"
 

@@ -13,6 +13,7 @@ from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
+from evaluation.earnings.earnings_evaluator import EarningsEvaluator
 from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
 from evaluation.market.market_evaluator import MarketEvaluator
 from evaluation.risk.risk_evaluator import RiskEvaluator
@@ -45,6 +46,7 @@ class AssetAnalyzer:
             FundamentalEvaluator(),
             MarketEvaluator(),
             TrendEvaluator(),
+            EarningsEvaluator(),
         )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()
