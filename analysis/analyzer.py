@@ -13,6 +13,7 @@ from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
+from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
 from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
@@ -39,6 +40,7 @@ class AssetAnalyzer:
         self._category_evaluators: tuple[CategoryEvaluator, ...] = (
             ValuationEvaluator(),
             RiskEvaluator(),
+            FundamentalEvaluator(),
         )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()

@@ -28,9 +28,10 @@ VALUE_METADATA_KEY = "market_value"
 class MarketMetric(StrEnum):
     """A single market measurement AIS consumes.
 
-    Each measurement belongs to exactly one category, which is the category
-    whose question it helps answer. A measurement is evidence for that category;
-    it is never the category itself.
+    A measurement is evidence. It never defines the category it serves, and it
+    may serve more than one: the same fact can support two categories when they
+    ask different questions. What is forbidden is one fact answering the same
+    question twice under two names, not one fact being read twice.
     """
 
     PE = "pe"
@@ -43,6 +44,9 @@ class MarketMetric(StrEnum):
     CURRENT_RATIO = "current_ratio"
     AVERAGE_VOLUME = "average_volume"
     FLOAT_SHARES = "float_shares"
+    PROFIT_MARGIN = "profit_margin"
+    RETURN_ON_EQUITY = "return_on_equity"
+    FREE_CASH_FLOW_MARGIN = "free_cash_flow_margin"
 
     @property
     def label(self) -> str:
@@ -50,9 +54,19 @@ class MarketMetric(StrEnum):
         return _METRIC_LABELS[self]
 
     @property
-    def category(self) -> Category:
-        """Return the category whose question this measurement serves."""
+    def categories(self) -> tuple[Category, ...]:
+        """Return the categories whose question this measurement helps answer.
+
+        The first entry is the primary category, which is where the evidence
+        item is filed and how a renderer groups it. The rest are the categories
+        that also read the measurement.
+        """
         return _METRIC_CATEGORIES[self]
+
+    @property
+    def primary_category(self) -> Category:
+        """Return the category the evidence for this measurement is filed under."""
+        return self.categories[0]
 
 
 _METRIC_LABELS: dict[MarketMetric, str] = {
@@ -66,19 +80,28 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.CURRENT_RATIO: "Current ratio",
     MarketMetric.AVERAGE_VOLUME: "Average volume",
     MarketMetric.FLOAT_SHARES: "Shares in float",
+    MarketMetric.PROFIT_MARGIN: "Net profit margin",
+    MarketMetric.RETURN_ON_EQUITY: "Return on equity",
+    MarketMetric.FREE_CASH_FLOW_MARGIN: "Free cash flow margin",
 }
 
-_METRIC_CATEGORIES: dict[MarketMetric, Category] = {
-    MarketMetric.PE: Category.VALUATION,
-    MarketMetric.PEG: Category.VALUATION,
-    MarketMetric.EV_EBITDA: Category.VALUATION,
-    MarketMetric.FCF_YIELD: Category.VALUATION,
-    MarketMetric.DCF: Category.VALUATION,
-    MarketMetric.BETA: Category.RISK,
-    MarketMetric.DEBT_TO_EQUITY: Category.RISK,
-    MarketMetric.CURRENT_RATIO: Category.RISK,
-    MarketMetric.AVERAGE_VOLUME: Category.RISK,
-    MarketMetric.FLOAT_SHARES: Category.RISK,
+# Debt to equity and the current ratio are read by Risk and by Fundamental.
+# Risk asks how exposed a thesis is to the state of the balance sheet;
+# Fundamental asks what that state is. One measurement, two questions.
+_METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
+    MarketMetric.PE: (Category.VALUATION,),
+    MarketMetric.PEG: (Category.VALUATION,),
+    MarketMetric.EV_EBITDA: (Category.VALUATION,),
+    MarketMetric.FCF_YIELD: (Category.VALUATION,),
+    MarketMetric.DCF: (Category.VALUATION,),
+    MarketMetric.BETA: (Category.RISK,),
+    MarketMetric.DEBT_TO_EQUITY: (Category.RISK, Category.FUNDAMENTAL),
+    MarketMetric.CURRENT_RATIO: (Category.RISK, Category.FUNDAMENTAL),
+    MarketMetric.AVERAGE_VOLUME: (Category.RISK,),
+    MarketMetric.FLOAT_SHARES: (Category.RISK,),
+    MarketMetric.PROFIT_MARGIN: (Category.FUNDAMENTAL,),
+    MarketMetric.RETURN_ON_EQUITY: (Category.FUNDAMENTAL,),
+    MarketMetric.FREE_CASH_FLOW_MARGIN: (Category.FUNDAMENTAL,),
 }
 
 

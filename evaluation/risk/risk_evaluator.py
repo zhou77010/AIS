@@ -21,15 +21,27 @@ reported as missing coverage and must never be read as an absence of risk:
 * **Business risk** — separating how uncertain a business is from how it is
   currently doing needs more than one snapshot. It needs the same measurement
   over time, which this version does not retrieve.
-* **Valuation risk** — deliberately not measured, because its evidence is the
-  evidence the Valuation category already uses. Measuring the same facts under
-  two headings would count them twice.
+* **Valuation risk** — not measured, because no evidence this version retrieves
+  speaks to it. The measurements behind the Valuation category describe the
+  level of a multiple. Whether a multiple is at risk of compressing needs
+  something about expectations or history, which is not retrieved here. Reusing
+  the valuation measurements would answer the valuation question a second time,
+  not answer this one.
 * **Event risk** — no source of dated events is connected. A rule that guessed
   at events would be stating an opinion, not reading evidence.
 * **Evidence risk** — reported by the coverage line of the category itself and
   of every report, so that it is measured once rather than twice.
 * **Horizon risk** — cannot be measured without knowing the horizon a holder
   needs. AIS is not told that and will not assume it.
+
+Note on shared evidence. Two rules here read measurements the Fundamental
+category also reads: debt to equity and the current ratio. That is not double
+counting. The rule is that the same evidence must not answer the same question
+twice under two names, and these are not the same question. Fundamental asks
+whether the business is financially sound, which describes its state; the rules
+here ask how exposed a thesis is to that state, which describes what could
+invalidate it. One fact may support both. Nothing is recorded twice either: the
+measurement is stored once as evidence and read by both.
 """
 
 from __future__ import annotations

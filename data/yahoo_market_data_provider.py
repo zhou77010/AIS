@@ -193,6 +193,17 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
             MarketMetric.FLOAT_SHARES,
             _raw(summary, "defaultKeyStatistics", "floatShares"),
         ),
+        _point(
+            MarketMetric.PROFIT_MARGIN,
+            _raw(summary, "financialData", "profitMargins"),
+        ),
+        _point(
+            MarketMetric.RETURN_ON_EQUITY,
+            _raw(summary, "financialData", "returnOnEquity"),
+        ),
+        _free_cash_flow_margin_point(
+            free_cash_flow, _raw(summary, "financialData", "totalRevenue")
+        ),
     )
 
 
@@ -229,6 +240,35 @@ def _point(metric: MarketMetric, value: float | None) -> MarketDataPoint:
         metric=metric,
         value=value,
         reason=f"{metric.label} {value} retrieved from {SOURCE_NAME}.",
+    )
+
+
+def _free_cash_flow_margin_point(
+    free_cash_flow: float | None, revenue: float | None
+) -> MarketDataPoint:
+    """Build the free cash flow margin point from the two inputs it needs.
+
+    Free cash flow margin is a ratio rather than a field the source publishes,
+    so the reason spells out the division it comes from and keeps it traceable.
+    """
+    metric = MarketMetric.FREE_CASH_FLOW_MARGIN
+    if free_cash_flow is None or not revenue:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} could not be computed: {SOURCE_NAME} did not "
+                f"report both free cash flow and revenue for this symbol."
+            ),
+        )
+    value = free_cash_flow / revenue
+    return MarketDataPoint(
+        metric=metric,
+        value=value,
+        reason=(
+            f"{metric.label} {value} computed as free cash flow {free_cash_flow} "
+            f"divided by revenue {revenue}, both reported by {SOURCE_NAME}."
+        ),
     )
 
 

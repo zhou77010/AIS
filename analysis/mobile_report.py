@@ -74,7 +74,14 @@ _INDENT = " "
 _UNAVAILABLE_VALUE = "unavailable"
 
 # Metrics that are ratios rather than counts, and read better as percentages.
-_PERCENT_METRICS = frozenset({MarketMetric.FCF_YIELD})
+_PERCENT_METRICS = frozenset(
+    {
+        MarketMetric.FCF_YIELD,
+        MarketMetric.PROFIT_MARGIN,
+        MarketMetric.RETURN_ON_EQUITY,
+        MarketMetric.FREE_CASH_FLOW_MARGIN,
+    }
+)
 
 # What each category counts when it reports how much of itself it assessed.
 # A category absent from this map counts measurements.
@@ -246,8 +253,9 @@ def _select_evidence(
     assessed = _assessed_categories(result)
     by_category: dict[Category, list[MarketDataPoint]] = {}
     for point in points:
-        if point.metric.category in assessed:
-            by_category.setdefault(point.metric.category, []).append(point)
+        primary = point.metric.primary_category
+        if primary in assessed:
+            by_category.setdefault(primary, []).append(point)
     groups = [
         by_category[category] for category in CATEGORY_ORDER if category in by_category
     ]
