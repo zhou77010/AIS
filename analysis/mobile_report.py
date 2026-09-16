@@ -80,12 +80,16 @@ _PERCENT_METRICS = frozenset(
         MarketMetric.PROFIT_MARGIN,
         MarketMetric.RETURN_ON_EQUITY,
         MarketMetric.FREE_CASH_FLOW_MARGIN,
+        MarketMetric.MARKET_DIRECTION,
     }
 )
 
 # What each category counts when it reports how much of itself it assessed.
 # A category absent from this map counts measurements.
-_CATEGORY_UNITS: dict[Category, str] = {Category.RISK: "dimensions"}
+_CATEGORY_UNITS: dict[Category, str] = {
+    Category.RISK: "dimensions",
+    Category.MARKET: "aspects",
+}
 _DEFAULT_UNITS = "measurements"
 
 # Scales for measurements that are counts, and are unreadable written out.

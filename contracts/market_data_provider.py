@@ -47,6 +47,7 @@ class MarketMetric(StrEnum):
     PROFIT_MARGIN = "profit_margin"
     RETURN_ON_EQUITY = "return_on_equity"
     FREE_CASH_FLOW_MARGIN = "free_cash_flow_margin"
+    MARKET_DIRECTION = "market_direction"
 
     @property
     def label(self) -> str:
@@ -83,6 +84,7 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.PROFIT_MARGIN: "Net profit margin",
     MarketMetric.RETURN_ON_EQUITY: "Return on equity",
     MarketMetric.FREE_CASH_FLOW_MARGIN: "Free cash flow margin",
+    MarketMetric.MARKET_DIRECTION: "Broad market 52 week change",
 }
 
 # Debt to equity and the current ratio are read by Risk and by Fundamental.
@@ -102,6 +104,7 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.PROFIT_MARGIN: (Category.FUNDAMENTAL,),
     MarketMetric.RETURN_ON_EQUITY: (Category.FUNDAMENTAL,),
     MarketMetric.FREE_CASH_FLOW_MARGIN: (Category.FUNDAMENTAL,),
+    MarketMetric.MARKET_DIRECTION: (Category.MARKET,),
 }
 
 

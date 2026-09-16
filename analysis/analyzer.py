@@ -14,6 +14,7 @@ from contracts.market_data_provider import MarketDataProvider, MarketDataSnapsho
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
 from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
+from evaluation.market.market_evaluator import MarketEvaluator
 from evaluation.risk.risk_evaluator import RiskEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
@@ -41,6 +42,7 @@ class AssetAnalyzer:
             ValuationEvaluator(),
             RiskEvaluator(),
             FundamentalEvaluator(),
+            MarketEvaluator(),
         )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()

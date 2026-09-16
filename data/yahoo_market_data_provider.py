@@ -204,6 +204,10 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
         _free_cash_flow_margin_point(
             free_cash_flow, _raw(summary, "financialData", "totalRevenue")
         ),
+        _point(
+            MarketMetric.MARKET_DIRECTION,
+            _raw(summary, "defaultKeyStatistics", "SandP52WeekChange"),
+        ),
     )
 
 
