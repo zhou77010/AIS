@@ -208,6 +208,15 @@ def _points(summary: Mapping[str, Any]) -> tuple[MarketDataPoint, ...]:
             MarketMetric.MARKET_DIRECTION,
             _raw(summary, "defaultKeyStatistics", "SandP52WeekChange"),
         ),
+        _trend_range_position_point(
+            _raw(summary, "financialData", "currentPrice"),
+            _raw(summary, "summaryDetail", "fiftyTwoWeekLow"),
+            _raw(summary, "summaryDetail", "fiftyTwoWeekHigh"),
+        ),
+        _point(
+            MarketMetric.TREND_DIRECTION,
+            _raw(summary, "defaultKeyStatistics", "52WeekChange"),
+        ),
     )
 
 
@@ -244,6 +253,39 @@ def _point(metric: MarketMetric, value: float | None) -> MarketDataPoint:
         metric=metric,
         value=value,
         reason=f"{metric.label} {value} retrieved from {SOURCE_NAME}.",
+    )
+
+
+def _trend_range_position_point(
+    price: float | None, low: float | None, high: float | None
+) -> MarketDataPoint:
+    """Build the point describing where the price sits in its 52 week range.
+
+    The position is a ratio rather than a field the source publishes, so the
+    reason spells out the division it comes from and keeps it traceable. A range
+    that does not span anything carries no position, and is reported as absent
+    rather than as the middle of an empty range.
+    """
+    metric = MarketMetric.TREND_RANGE_POSITION
+    if price is None or low is None or high is None or high <= low:
+        return MarketDataPoint(
+            metric=metric,
+            value=None,
+            reason=(
+                f"{metric.label} could not be computed: {SOURCE_NAME} did not "
+                f"report a price and a 52 week range that spans anything for "
+                f"this symbol."
+            ),
+        )
+    value = (price - low) / (high - low)
+    return MarketDataPoint(
+        metric=metric,
+        value=value,
+        reason=(
+            f"{metric.label} {value} computed as the price {price} less the 52 "
+            f"week low {low}, divided by the range from {low} to {high}, all "
+            f"reported by {SOURCE_NAME}."
+        ),
     )
 
 

@@ -48,6 +48,8 @@ class MarketMetric(StrEnum):
     RETURN_ON_EQUITY = "return_on_equity"
     FREE_CASH_FLOW_MARGIN = "free_cash_flow_margin"
     MARKET_DIRECTION = "market_direction"
+    TREND_RANGE_POSITION = "trend_range_position"
+    TREND_DIRECTION = "trend_direction"
 
     @property
     def label(self) -> str:
@@ -85,6 +87,11 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.RETURN_ON_EQUITY: "Return on equity",
     MarketMetric.FREE_CASH_FLOW_MARGIN: "Free cash flow margin",
     MarketMetric.MARKET_DIRECTION: "Broad market 52 week change",
+    # The window is part of the name on purpose. A price trend means nothing
+    # without the window it was measured over, so the window travels with the
+    # measurement and is displayed wherever the measurement is.
+    MarketMetric.TREND_RANGE_POSITION: "Price position in 52 week range",
+    MarketMetric.TREND_DIRECTION: "Price change over 52 weeks",
 }
 
 # Debt to equity and the current ratio are read by Risk and by Fundamental.
@@ -105,6 +112,8 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.RETURN_ON_EQUITY: (Category.FUNDAMENTAL,),
     MarketMetric.FREE_CASH_FLOW_MARGIN: (Category.FUNDAMENTAL,),
     MarketMetric.MARKET_DIRECTION: (Category.MARKET,),
+    MarketMetric.TREND_RANGE_POSITION: (Category.TREND,),
+    MarketMetric.TREND_DIRECTION: (Category.TREND,),
 }
 
 

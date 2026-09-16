@@ -16,6 +16,7 @@ from core.recommendation_engine import RecommendationEngine
 from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
 from evaluation.market.market_evaluator import MarketEvaluator
 from evaluation.risk.risk_evaluator import RiskEvaluator
+from evaluation.trend.trend_evaluator import TrendEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
 from models.recommendation import Recommendation
@@ -43,6 +44,7 @@ class AssetAnalyzer:
             RiskEvaluator(),
             FundamentalEvaluator(),
             MarketEvaluator(),
+            TrendEvaluator(),
         )
         self._overall_evaluator = OverallEvaluator()
         self._recommendation_engine = RecommendationEngine()
