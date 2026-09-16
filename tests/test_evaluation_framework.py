@@ -21,7 +21,9 @@ class _DemoEvaluator(BaseEvaluator):
     """Category independent evaluator used only by the tests."""
 
     def evaluate(self, evidence: EvidenceCollection) -> CategoryScore:
-        return CategoryAssembler(category=Category.MARKET, confidence=1.0).assemble(())
+        return CategoryAssembler(
+            category=Category.MARKET, confidence=1.0, total_units=1
+        ).assemble(())
 
 
 def _asset() -> Asset:

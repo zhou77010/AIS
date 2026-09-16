@@ -24,6 +24,9 @@ Rules it follows:
 * every category the Constitution defines is listed, in the canonical order of
   :data:`models.category.CATEGORY_ORDER`, and a category with no evaluator is
   rendered as ``NOT EVALUATED`` rather than as a score of zero;
+* a category that was judged also reports how much of itself it assessed, so a
+  reader knows not only what AIS thinks but how much of that category the
+  opinion rests on;
 * a category whose judgement rests on no evidence at all is treated the same
   way, because a category assembled from no rule results carries a zero that
   means nothing was measured, not that the worst was measured;
@@ -72,6 +75,11 @@ _UNAVAILABLE_VALUE = "unavailable"
 
 # Metrics that are ratios rather than counts, and read better as percentages.
 _PERCENT_METRICS = frozenset({MarketMetric.FCF_YIELD})
+
+# What each category counts when it reports how much of itself it assessed.
+# A category absent from this map counts measurements.
+_CATEGORY_UNITS: dict[Category, str] = {Category.RISK: "dimensions"}
+_DEFAULT_UNITS = "measurements"
 
 # Scales for measurements that are counts, and are unreadable written out.
 _COUNT_SCALES: tuple[tuple[float, str], ...] = (
@@ -166,11 +174,15 @@ def _thesis_text(result: AnalysisResult) -> str:
 
 
 def _category_lines(result: AnalysisResult) -> list[str]:
-    """Return one line per category, in the canonical category order.
+    """Return the lines describing each category, in the canonical category order.
 
     A category without a judgement is rendered as ``NOT EVALUATED``. It is never
     rendered as a score, because a zero would read as the worst measured value
     rather than as an absent measurement.
+
+    A category that was judged is followed by how much of it was assessed. A
+    score answers what AIS thinks; the coverage answers how much of the category
+    that opinion rests on, and the two are not the same claim.
     """
     assessed = _assessed_categories(result)
     lines: list[str] = []
@@ -178,12 +190,27 @@ def _category_lines(result: AnalysisResult) -> list[str]:
         category_score = assessed.get(category)
         if category_score is None:
             lines.append(f" {category.value:<{_CATEGORY_WIDTH}} {NOT_EVALUATED}")
-        else:
-            lines.append(
-                f" {category.value:<{_CATEGORY_WIDTH}} "
-                f"{category_score.score:.2f}  conf {category_score.confidence:.2f}"
-            )
+            continue
+        lines.append(
+            f" {category.value:<{_CATEGORY_WIDTH}} "
+            f"{category_score.score:.2f}  conf {category_score.confidence:.2f}"
+        )
+        lines.append(
+            f" {'':<{_CATEGORY_WIDTH}} {category_score.coverage.describe()} "
+            f"{_unit_name(category, category_score.coverage.total)}"
+        )
     return lines
+
+
+def _unit_name(category: Category, total: int) -> str:
+    """Return the noun for what a category counts, singular when there is one.
+
+    Most categories count measurements. Risk counts the dimensions the
+    Constitution defines, which are a different kind of unit and must not be
+    labelled as measurements.
+    """
+    name = _CATEGORY_UNITS.get(category, _DEFAULT_UNITS)
+    return name[:-1] if total == 1 else name
 
 
 def _evidence_lines(result: AnalysisResult) -> list[str]:

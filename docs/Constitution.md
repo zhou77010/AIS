@@ -580,6 +580,18 @@ the honest state of the system.
 | Deferred | The question it will settle | Safe to defer because |
 | --- | --- | --- |
 | **AIS Standard Score** | What scale scores live on, and what makes two scores comparable. | Measurements can be recorded on their own scale now and normalized once the scale exists; the reverse is not true. |
+
+**Recorded blocker on the AIS Standard Score.** Until the scale exists, scores
+are aggregated as raw measurement values, and different categories measure in
+different directions: a valuation rule reports a larger number for a more
+expensive asset, while a risk rule reports a larger number for a riskier one.
+The overall score treats a larger number as more favourable, so a measured risk
+currently raises the overall score rather than lowering it.
+
+This is recorded as a blocker rather than worked around. Normalizing, weighting
+or inverting any measurement to compensate would be inventing the scale this
+entry defers, and an invented scale is harder to detect than a known-broken one.
+The report labels every affected score as undefined until the scale is defined.
 | **Decision Thresholds** | Where the boundaries between decision states lie. | A decision state can be reached and shown without the boundaries being final, as long as the reader is told they are provisional. |
 | **Risk Methodology** | How Severity, Likelihood and evidence combine into a judgement of each risk dimension, and how risk constrains a Decision. | Version 0.2 fixed *which* kinds of uncertainty exist (Section 5), so a dimension can now be named and described. What remains deferred is how each is assessed, how they combine, and how far risk may override a conclusion. |
 | **Confidence Aggregation** | How confidence in parts becomes confidence in a whole. | Per-claim confidence is meaningful on its own; only the aggregate is deferred, and an aggregate that is not yet defined must not be invented. |

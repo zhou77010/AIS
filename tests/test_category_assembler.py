@@ -19,9 +19,11 @@ def _normalized(value: float, reason: str, reference: str) -> NormalizedScore:
     )
 
 
-def _assembler(confidence: float = 1.0) -> CategoryAssembler:
+def _assembler(confidence: float = 1.0, total_units: int = 5) -> CategoryAssembler:
     """Return an assembler bound to the VALUATION category."""
-    return CategoryAssembler(category=Category.VALUATION, confidence=confidence)
+    return CategoryAssembler(
+        category=Category.VALUATION, confidence=confidence, total_units=total_units
+    )
 
 
 def test_assembles_a_category_score_for_the_configured_category() -> None:
@@ -30,6 +32,33 @@ def test_assembles_a_category_score_for_the_configured_category() -> None:
     assert isinstance(score, CategoryScore)
     assert score.category is Category.VALUATION
     assert score.confidence == 1.0
+
+
+def test_the_assembled_score_reports_how_much_of_the_category_was_assessed() -> None:
+    score = _assembler(total_units=5).assemble(
+        (
+            _normalized(2.0, "a measured 2.0", "ref-a"),
+            _normalized(3.0, "b measured 3.0", "ref-b"),
+        )
+    )
+
+    assert score.coverage.assessed == 2
+    assert score.coverage.total == 5
+    assert score.coverage.is_complete is False
+
+
+def test_the_assembled_score_accepts_a_coverage_the_caller_counts_itself() -> None:
+    # Risk has four rules covering three dimensions, so counting scores would
+    # overstate what was assessed.
+    score = _assembler(total_units=8).assemble(
+        (
+            _normalized(2.0, "a measured 2.0", "ref-a"),
+            _normalized(3.0, "b measured 3.0", "ref-b"),
+        ),
+        assessed=1,
+    )
+
+    assert score.coverage.describe() == "1/8"
 
 
 def test_aggregates_normalized_values_as_placeholder_mean() -> None:

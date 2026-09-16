@@ -19,6 +19,7 @@ from analysis.analysis_result import AnalysisResult
 from analysis.mobile_report import (
     NOT_EVALUATED,
     PARTIAL_EVIDENCE_NOTICE,
+    SECTION_SEPARATOR,
     _evidence_entry,
     render_mobile_report,
 )
@@ -33,10 +34,12 @@ from contracts.market_data_provider import (
     MarketDataSnapshot,
     MarketMetric,
 )
+from evaluation.risk.risk_dimensions import RiskDimension
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import CATEGORY_ORDER, Category
 from models.category_score import CategoryScore
+from models.coverage import Coverage
 from models.decision_state import DecisionState
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
@@ -95,10 +98,12 @@ _EMPTY_SNAPSHOT = _empty_snapshot()
 
 
 def _category_score(category: Category = Category.VALUATION) -> CategoryScore:
+    total = len(RiskDimension) if category is Category.RISK else 5
     return CategoryScore(
         category=category,
         score=13.10,
         confidence=1.0,
+        coverage=Coverage(assessed=1, total=total),
         summary="summary",
         evidence_references=(f"NVDA.market_data.{category.value}",),
     )
@@ -259,6 +264,51 @@ def test_report_marks_categories_without_an_evaluator() -> None:
         if category is Category.VALUATION:
             continue
         assert f" {category.value:<11} {NOT_EVALUATED}" in report
+
+
+def _category_block(report: str) -> list[str]:
+    """Return the lines of the category block, without its heading."""
+    lines = report.splitlines()
+    start = lines.index("CATEGORIES") + 1
+    end = next(
+        index for index in range(start, len(lines)) if lines[index] == SECTION_SEPARATOR
+    )
+    return lines[start:end]
+
+
+def _coverage_line_for(report: str, category: Category) -> str:
+    """Return the coverage line reported beneath a category."""
+    block = _category_block(report)
+    index = next(
+        position
+        for position, line in enumerate(block)
+        if line.strip().startswith(category.value)
+    )
+    return block[index + 1].strip()
+
+
+def test_report_states_how_much_of_each_assessed_category_was_checked() -> None:
+    report = _render()
+
+    assert _coverage_line_for(report, Category.VALUATION) == "1/5 measurements"
+
+
+def test_report_names_risk_coverage_in_dimensions_rather_than_measurements() -> None:
+    scores = (_category_score(Category.RISK),)
+
+    report = _render(_result(category_scores=scores))
+
+    assert _coverage_line_for(report, Category.RISK) == "1/8 dimensions"
+
+
+def test_an_unevaluated_category_reports_no_coverage() -> None:
+    report = _render()
+    block = _category_block(report)
+
+    # One line per category, plus one coverage line for the single category that
+    # was assessed. A category that was not evaluated reports no coverage.
+    assert len(block) == len(Category) + 1
+    assert sum(1 for line in block if "NOT EVALUATED" in line) == len(Category) - 1
 
 
 def test_report_never_renders_an_absent_category_as_zero() -> None:

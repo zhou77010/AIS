@@ -16,6 +16,7 @@ from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import Category
 from models.category_score import CategoryScore
+from models.coverage import Coverage
 from models.decision_state import DecisionState
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
@@ -296,6 +297,7 @@ def _analysis_result(ticker: str = "AAPL") -> AnalysisResult:
         category=Category.VALUATION,
         score=1.0,
         confidence=1.0,
+        coverage=Coverage(assessed=1, total=5),
         summary="summary",
         evidence_references=(f"{ticker}.ev-1",),
     )

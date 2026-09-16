@@ -23,6 +23,7 @@ from evaluation.risk import (
     liquidity_rule,
     market_risk_rule,
 )
+from evaluation.risk.risk_dimensions import RiskDimension
 from evaluation.risk.risk_evaluator import RiskEvaluator
 from evidence.evidence_collection import EvidenceCollection
 from models.asset import Asset
@@ -220,6 +221,46 @@ def test_evaluator_reads_no_valuation_measurement() -> None:
     score = RiskEvaluator().evaluate(_evidence(pe=26.8, peg=0.46))
 
     assert score.evidence_references == ()
+
+
+def test_evaluator_reports_coverage_over_all_eight_dimensions() -> None:
+    score = RiskEvaluator().evaluate(
+        _evidence(
+            beta=1.24,
+            debt_to_equity=0.87,
+            current_ratio=0.94,
+            average_volume=50_000_000.0,
+            float_shares=2_500_000_000.0,
+        )
+    )
+
+    # Three dimensions measured, with two financial rules between them.
+    assert score.coverage.describe() == "3/8"
+    assert score.coverage.total == len(RiskDimension)
+
+
+def test_evaluator_counts_dimensions_rather_than_rules() -> None:
+    # Both financial rules succeed, but they cover one dimension, not two.
+    score = RiskEvaluator().evaluate(_evidence(debt_to_equity=0.87, current_ratio=0.94))
+
+    assert score.coverage.describe() == "1/8"
+
+
+def test_evaluator_reports_no_coverage_when_nothing_could_be_measured() -> None:
+    score = RiskEvaluator().evaluate(_evidence(pe=26.8))
+
+    assert score.coverage.describe() == "0/8"
+    assert score.evidence_references == ()
+
+
+def test_every_rule_declares_the_dimension_it_speaks_for() -> None:
+    for module in (
+        market_risk_rule,
+        financial_leverage_rule,
+        financial_cover_rule,
+        liquidity_rule,
+    ):
+        assert isinstance(module.DIMENSION, RiskDimension)
 
 
 def test_evaluator_is_deterministic() -> None:

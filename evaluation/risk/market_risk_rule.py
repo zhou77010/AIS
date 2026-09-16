@@ -19,9 +19,12 @@ from __future__ import annotations
 from contracts.market_data_provider import MarketMetric
 from evaluation.evaluation_rule import EvaluationRule
 from evaluation.market_evidence import read_metric
+from evaluation.risk.risk_dimensions import RiskDimension
 from evaluation.rule_result import RuleResult
 from evidence.evidence_collection import EvidenceCollection
 from utils.exceptions import DataError
+
+DIMENSION = RiskDimension.MARKET
 
 RULE_ID = "risk.market"
 _METRIC = MarketMetric.BETA

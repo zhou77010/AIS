@@ -21,6 +21,7 @@ from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import Category
 from models.category_score import CategoryScore
+from models.coverage import Coverage
 from models.decision_state import DecisionState
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
@@ -34,6 +35,7 @@ def _demo_result() -> AnalysisResult:
         category=Category.VALUATION,
         score=42.0,
         confidence=0.5,
+        coverage=Coverage(assessed=1, total=5),
         summary="Demo category summary.",
         evidence_references=("demo.evidence",),
     )

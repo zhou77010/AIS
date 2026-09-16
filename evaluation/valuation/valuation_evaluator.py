@@ -41,7 +41,9 @@ class ValuationEvaluator(BaseEvaluator):
         self._engine = RuleEngine()
         self._normalizer = ScoreNormalizer()
         self._assembler = CategoryAssembler(
-            category=Category.VALUATION, confidence=_PLACEHOLDER_CONFIDENCE
+            category=Category.VALUATION,
+            confidence=_PLACEHOLDER_CONFIDENCE,
+            total_units=len(self._rules),
         )
 
     def collect_results(self, evidence: EvidenceCollection) -> EvaluationResult:
