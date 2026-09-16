@@ -469,4 +469,67 @@ is a chain change and belongs to the review.
 
 ---
 
+### Catalyst stopped being a calendar and became an event layer
+
+**Context.** The first version of Catalyst answered "43 days until the results".
+That is a fact and not an answer: an investor reading it learns nothing about why
+the date matters, and every kind of event was read by its own rule, so a new kind
+of event meant changing the evaluator.
+
+**Decision.** Introduce `CatalystEvent` as a layer of its own, filled by
+providers and classified by AIS, and make the category read events rather than
+measurements. Company, industry and macro are the three layers, and each event
+carries why that kind of event matters.
+
+**Reason.** The question is what could change the investment case, not when
+something happens, and an event is a different kind of fact from a measurement: it
+has a date, a source, and a confidence in the date, none of which fit a number.
+Separating the layer from the evaluator is what makes the category extensible:
+adding a kind of event is a new source or a new row in a table, and the evaluator
+never changes, because it only ever asks how near the nearest event is.
+
+Classification is AIS's rather than the source's for the same reason. A provider
+that decided which layer its event belonged to would be making a judgement about
+AIS's own semantics, and swapping the provider would silently change how AIS
+reads its world.
+
+**Impact.** Two sources are connected: a market data vendor for company dates,
+and the Federal Reserve's published schedule for policy meetings. A curated file
+holds everything else, and it is empty, because AIS may not invent a date. The
+report writes the calendar out by layer with a reason on every line, and the
+industry layer is named as having no source rather than left out.
+
+**Revisit.** The industry layer has no source at all, and the curated file needs
+maintaining by hand. Both are recorded in the backlog.
+
+---
+
+### How many catalysts there are is not a signal
+
+**Context.** With an event layer in place, the obvious scoring was to count
+events: a busier calendar reads as a bigger opportunity.
+
+**Decision.** The reading is the distance to the nearest event that could change
+what the market expects. The count never enters it. Events that move the price
+without moving a view — going ex-dividend, paying one — are written out and left
+out of the reading.
+
+**Reason.** Counting would say that four events next month are four times the
+opportunity of one, which is not something anyone believes and not something AIS
+can support. What a reader needs from a score is whether something is coming and
+how soon; the report is where the calendar itself belongs. Excluding the
+mechanical events keeps the reading from improving because shares are about to go
+ex-dividend, which changes the price by the dividend and changes nobody's view.
+
+**Impact.** Two assets whose nearest event is the same distance away read the
+same number of stars however different their calendars are, and there is a test
+that says so. No event is ranked, weighted or given a probability: AIS has no
+basis for any of those, and a plausible ranking would look exactly like a real
+one.
+
+**Revisit.** When the AIS Standard Score defines what a reading means, the
+exclusion of mechanical events should be restated against it.
+
+---
+
 End of Document

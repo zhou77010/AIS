@@ -483,9 +483,48 @@ and for a category with no evaluator:
 | Trend | Depends entirely on the window. A trend score without its window is meaningless, so the window is displayed with the score rather than stored silently. | Future |
 | Market | Regime and context. Its value is explanatory, so it belongs next to the categories it explains. | Future |
 | Risk | Presented twice: as a category here, and independently in §13. | Blocked |
-| Catalyst | Forward-looking. What is rendered is the **distance** to a dated event and not the date, because a date with no distance to it cannot be said to be coming. When no forthcoming event was retrieved the block says so in words. | Current, partly Future |
+| Catalyst | Rendered from its **event layer**, not from a measurement. Events are grouped by the layer they bear on — company, industry, macro — and every line carries why that kind of event matters. The grade reads how near the nearest event is and never how many there are. See §10.7. | Current, partly Future |
 | HPO | Not a category reading but a synthesis of the other categories. Rendered as named conditions and a sentence; it carries no score of its own. See §10.6. | Current |
 | Positioning | Holdings and crowding are stated as facts. A large holding is not called a good one: no scale says so yet. | Current |
+
+### 10.7 Catalyst — the event block
+
+**Status: Current**, partly Future for the layers with no connected source.
+
+Catalyst answers what could change the investment case, not when something
+happens. A date on its own is a reminder; an event with a reason is information.
+
+```
+催化因素  ★★★☆☆
+ 近期暂无明确催化，未来一段时间主要等待美联储议息会议。
+ 公司
+ · 10月30日 季度财报 — 业绩与指引改变增长预期
+ 宏观
+ · 10月28日 美联储议息会议 — 利率路径影响估值分母
+ · 12月9日 美联储议息会议 — 利率路径影响估值分母
+```
+
+**Rules.**
+
+- **Every event carries why it matters.** The reason is a property of the kind of
+  event, never of the instance: AIS states what this sort of event does to an
+  investment case and never what this particular one will do, because that is not
+  known before it happens.
+- **Events are grouped by layer**, in the order company, industry, macro. A layer
+  with no events is not written at all; a layer with no source is named in the
+  `尚未评估` block.
+- **How many events there are is never shown as a judgement.** It shapes the
+  wording — a busy month reads as a busy month — and never a star.
+- **Only the window is written out.** Events within 90 days are listed, at most
+  six; anything beyond is counted on one line rather than listed.
+- **A date the source has not confirmed is marked** `（未确认）`.
+- **`近期暂无明确催化。` is an answer, not a gap.** It is written as a sentence in
+  the category's own block, and the category is never listed among things nothing
+  was done about.
+- **No event is ranked, scored, or given a probability**, and no news is
+  summarised to produce an event.
+
+---
 
 ### 10.6 HPO — the opportunity block
 

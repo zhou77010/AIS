@@ -211,7 +211,8 @@ The rules these boundaries produce:
 
 - **Report Model → Renderer → Transport.** A report is rendered once, by a renderer, and every transport carries that same text. A notifier only ever receives rendered text; it cannot receive a recommendation, an assessment, or any other model.
 - **Two renderers, one model.** Every renderer renders the same report model. A channel that wants different content does not get a second model, it gets a projection of the one that exists.
-- **One provider contract.** The Data Layer implements `MarketDataProvider` and exposes a factory. Nothing else names a vendor, so a new provider plugs into the same interface.
+- **One provider contract per kind of fact.** The Data Layer implements `MarketDataProvider` for measurements and `CatalystEventProvider` for dated events, and exposes a factory for each. Nothing outside the Data Layer names a vendor, and no vendor field crosses the boundary, so a new source plugs into an existing interface rather than into the components that read it.
+- **A provider returns facts; AIS classifies them.** A catalyst event provider states what kind of event it is and when it falls. Which layer of the investment case that bears on is read from one table in `models/catalyst_event.py`. A provider that decided it would be making a judgement, and this keeps a new source from changing how AIS reads the sources it already has.
 - **One runtime.** The scheduler owns the loop. Everything above it is called, and never waits.
 
 These boundaries are enforced structurally by `tests/test_architecture_boundaries.py`. A boundary that is only written down is a wish; that test is what makes it true.

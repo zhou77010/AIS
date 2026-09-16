@@ -127,6 +127,16 @@ never look like a result.
 Every part of the product is held to this, including the parts that are
 unfinished. A visible gap is a promise; an invisible one is a lie.
 
+**Catalyst answers what could change the investment case, not when something
+happens.** "Results in 43 days" is a fact about a calendar. What an investor
+needs to know is which events could change how the asset is viewed, and why each
+of them matters. A date on its own is a reminder; an event with a reason is
+information.
+
+For the same reason, how many events there are is not a signal. A busy calendar
+is a busy calendar, and it is not a bigger opportunity than a quiet one with a
+single important date in it.
+
 ---
 
 ## 8. Evolution

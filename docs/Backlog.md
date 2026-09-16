@@ -161,6 +161,60 @@ which is a chain change and belongs to the review after the nine categories.
 
 ---
 
+## Catalyst: what is connected, and what is not
+
+Catalyst reads three sources today:
+
+| Layer | Source | State |
+| --- | --- | --- |
+| Company | Market data vendor calendar | Results date, ex-dividend date, dividend date. |
+| Macro | Federal Reserve published schedule | Policy meeting dates, read from the published page. |
+| Industry | **None** | Nothing is connected, so the layer reports that it has nothing. |
+| Company (other) | Curated file, `data/calendar/events.json` | Launch windows, product launches, regulatory dates, investor days — entered by hand, currently empty. |
+
+**What is missing, and why it is not filled in.** Product launches, rocket launch
+windows, FDA decisions, shareholder meetings, industry policy, competition news,
+CPI, payrolls and GDP have no connected source. AIS will not infer a date, and it
+will not summarise news to produce one. Each is named as not covered wherever it
+would have appeared.
+
+**What would close the gap.** A calendar source per layer: an economic calendar
+for the macro releases, an industry or regulatory feed, and a company events feed
+beyond the market data vendor's own calendar. Each is a provider behind
+`CatalystEventProvider`, which is why none of them needs a change to the
+evaluator.
+
+**The curated file needs a person.** It is the only place an unscheduled event
+can enter AIS. It ships empty and stays empty until somebody enters something
+they can point at. See `data/calendar/README.md`.
+
+**The Federal Reserve source reads a page written for people.** It is guarded to
+fail empty rather than wrong: if the markup changes, AIS records no macro events
+and says so, instead of publishing dates it cannot stand behind. A structured
+feed would be better and none exists.
+
+---
+
+## Catalyst: deferred by decision
+
+These are not gaps. They are things AIS has decided not to do, recorded so that
+the decision is not rediscovered as an oversight:
+
+- **Real-time news analysis.** AIS does not report what happened today.
+- **LLM news summarisation.** A summary is an opinion with no evidence behind it,
+  and it would be indistinguishable in the report from a stated fact.
+- **News sentiment scoring.** Sentiment is not evidence about an investment case
+  until somebody defines what it is evidence *of*.
+- **Learned importance ranking.** A model that ranks which events matter would be
+  unauditable, and the ranking would be trusted exactly as much as it looked
+  reasonable.
+
+What AIS does instead is smaller and checkable: it reports events a source
+published, says what layer each bears on, and says why that kind of event
+matters. That reason is a property of the kind, never of the instance.
+
+---
+
 ## Registered blockers
 
 - **AIS Standard Score direction.** Recorded in `docs/Constitution.md`. Until the
@@ -183,9 +237,14 @@ which is a chain change and belongs to the review after the nine categories.
   blocker showing through a single category, and it is recorded rather than
   patched.
 
-- **Catalyst can never report complete coverage.** One of its two parts — events
-  no connected source can date — is unmeasurable today by construction, so it
-  always reports partial coverage and always lists what it could not see.
+- **Catalyst can never report complete coverage.** One of its layers — industry
+  events — has no connected source by construction, so the category always
+  reports partial coverage and always names what it could not see.
+
+- **A layer with no events counts as a layer not looked at.** Coverage counts the
+  layers that produced an event, which conflates "nothing is scheduled" with
+  "nothing is connected". Telling those apart needs each source to report the
+  reach it has, and that is deferred.
 
 - **The movement arrows are a presentation decision.** Whether ▲ means "the
   measurement rose" or "the category improved" has no answer on an undefined
