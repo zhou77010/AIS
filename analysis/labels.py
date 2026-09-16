@@ -41,6 +41,21 @@ CATEGORY_UNIT_NOUNS: dict[Category, str] = {
 
 CATEGORY_DEFAULT_UNIT_NOUN = "项"
 
+# What an assessed category still does not cover, named the way an investor
+# would say it. These are the things a reader is owed when a category was only
+# partly looked at: naming them is more use than a fraction, and the fraction is
+# model bookkeeping.
+#
+# This mirrors what each evaluator documents about itself. If an evaluator
+# starts covering one of these, this list must lose it with it; the report only
+# prints the list when the category's own coverage says it is incomplete, so a
+# category that becomes complete stops printing it.
+UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
+    Category.RISK: ("业务风险", "估值风险", "事件风险", "证据风险", "长期风险"),
+    Category.MARKET: ("市场波动性", "利率环境"),
+    Category.TREND: ("价格路径",),
+}
+
 DECISION_LABELS: dict[DecisionState, str] = {
     DecisionState.WATCH: "观望",
     DecisionState.ACCUMULATE: "增持",

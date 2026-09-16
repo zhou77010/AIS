@@ -214,18 +214,23 @@ def test_report_never_shows_a_raw_category_score() -> None:
     assert "13.1" not in report
 
 
-def test_report_folds_coverage_into_the_sentence_about_the_category() -> None:
+def test_report_never_shows_how_much_of_a_category_was_assessed() -> None:
+    # How much of a category was looked at is bookkeeping about the model. A
+    # reader is told what was not examined, by name, further down.
     report = _render(_result((Category.RISK,), assessed=3))
 
-    block = _block_for(report, Category.RISK)
+    assert "中已评估" not in report
+    assert "已完整评估" not in report
 
-    assert any("8 个维度中已评估 3 个。" in line for line in block)
 
+def test_report_translates_trend_into_a_sentence_rather_than_numbers() -> None:
+    report = _render(_result((Category.TREND,)))
 
-def test_report_says_when_a_category_was_fully_assessed() -> None:
-    report = _render(_result((Category.EARNINGS,)))
+    block = _block_for(report, Category.TREND)
 
-    assert "该类别已完整评估。" in report
+    assert any("整体趋势" in line or "一年" in line for line in block)
+    assert not any("52 周区间位置" in line for line in block)
+    assert not any("一年涨跌幅" in line for line in block)
 
 
 def test_report_shows_no_stars_for_a_category_with_no_graded_measurement() -> None:
@@ -245,15 +250,23 @@ def test_report_shows_no_stars_for_a_category_with_no_graded_measurement() -> No
 def test_report_names_the_categories_it_did_not_judge() -> None:
     report = _render(_result((Category.VALUATION,)))
 
-    line = next(
-        line for line in report.splitlines() if line.startswith(NOT_ASSESSED_PREFIX)
-    )
-
+    assert NOT_ASSESSED_PREFIX in report
     for category in CATEGORY_ORDER:
-        if category is Category.VALUATION:
-            assert category_label(category) not in line
-        else:
-            assert category_label(category) in line
+        if category is not Category.VALUATION:
+            assert category_label(category) in report
+
+
+def test_report_names_the_parts_of_a_category_it_could_not_assess() -> None:
+    report = _render(_result((Category.RISK,), assessed=3))
+
+    assert "事件风险" in report
+    assert "长期风险" in report
+
+
+def test_report_names_a_measurement_it_could_not_retrieve() -> None:
+    report = _render(_result((Category.VALUATION,)))
+
+    assert "DCF 公允价值" in report
 
 
 def test_report_leaves_hpo_unnamed() -> None:
@@ -265,8 +278,11 @@ def test_report_leaves_hpo_unnamed() -> None:
     assert category_label(Category.HPO) == "HPO"
 
 
-def test_report_omits_the_not_assessed_line_when_everything_was_judged() -> None:
-    report = _render(_result(tuple(CATEGORY_ORDER)))
+def test_report_omits_the_not_assessed_block_when_nothing_is_outstanding() -> None:
+    # Every category judged, and every measurement retrieved.
+    complete = _snapshot(**{metric.value: 1.0 for metric in MarketMetric})
+
+    report = _render(_result(tuple(CATEGORY_ORDER), market_data=complete))
 
     assert NOT_ASSESSED_PREFIX not in report
 

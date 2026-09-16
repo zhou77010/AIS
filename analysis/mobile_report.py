@@ -39,16 +39,16 @@ from datetime import datetime
 from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import grade_for_category, stars
 from analysis.labels import (
-    CATEGORY_DEFAULT_UNIT_NOUN,
-    CATEGORY_UNIT_NOUNS,
     PERCENT_METRICS,
     SIGNED_METRICS,
+    UNASSESSED_ITEMS,
     category_label,
     decision_label,
     metric_name,
 )
+from analysis.plain_language import trend_sentence
 from analysis.report import data_quality_label
-from contracts.market_data_provider import MarketDataPoint
+from contracts.market_data_provider import MarketDataPoint, MarketMetric
 from models.category import CATEGORY_ORDER, Category
 from models.category_score import CategoryScore
 
@@ -126,21 +126,25 @@ def _decision_line(result: AnalysisResult) -> str:
 
 def _category_block(result: AnalysisResult, category: Category) -> list[str]:
     """Return the lines describing one category, empty when it was not judged."""
-    category_score = _assessed_categories(result).get(category)
-    if category_score is None:
+    if category not in _assessed_categories(result):
         return []
 
     grade = grade_for_category(result, category)
     heading = f"{category_label(category)}  {stars(grade) if grade else NO_GRADE}"
-
-    lines = [heading]
-    lines.extend(_commentary_lines(result, category))
-    lines.append(_INDENT + _coverage_phrase(category, category_score))
-    return lines
+    return [heading, *_commentary_lines(result, category)]
 
 
 def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
-    """Return what was measured for a category, in the reader's language."""
+    """Return what a category says, in the reader's language.
+
+    A category whose measurements read better as a sentence is written as one.
+    The measurements themselves stay in the evidence, where they support the
+    conclusion rather than being the thing the reader is asked to interpret.
+    """
+    sentence = _sentence_for(result, category)
+    if sentence is not None:
+        return _pack([sentence], separator="", trailing="")
+
     phrases = [
         _measurement_phrase(point)
         for point in _measurements_of(result, category)
@@ -149,6 +153,17 @@ def _commentary_lines(result: AnalysisResult, category: Category) -> list[str]:
     if not phrases:
         return [_INDENT + "尚未取得该类别所需的测量。"]
     return _pack(phrases, separator="、", trailing="。")
+
+
+def _sentence_for(result: AnalysisResult, category: Category) -> str | None:
+    """Return a plain language sentence for a category, when one is written."""
+    if category is not Category.TREND:
+        return None
+    values = {point.metric: point.value for point in _measurements_of(result, category)}
+    return trend_sentence(
+        values.get(MarketMetric.TREND_RANGE_POSITION),
+        values.get(MarketMetric.TREND_DIRECTION),
+    )
 
 
 def _measurements_of(
@@ -170,33 +185,42 @@ def _measurement_phrase(point: MarketDataPoint) -> str:
     return f"{metric_name(point.metric)} {_format_value(point)}"
 
 
-def _coverage_phrase(category: Category, category_score: CategoryScore) -> str:
-    """Return how much of a category was looked at, as a sentence.
-
-    Coverage belongs in the sentence about the category rather than on a line of
-    its own: a reader wants to know how much of the judgement stands on, not to
-    be handed a fraction to interpret.
-    """
-    coverage = category_score.coverage
-    unit = CATEGORY_UNIT_NOUNS.get(category, CATEGORY_DEFAULT_UNIT_NOUN)
-    if coverage.is_complete:
-        return "该类别已完整评估。"
-    if unit == CATEGORY_DEFAULT_UNIT_NOUN:
-        return f"{coverage.total} {unit}中已评估 {coverage.assessed} {unit}。"
-    return f"{coverage.total} {unit}中已评估 {coverage.assessed} 个。"
-
-
 def _not_assessed_lines(result: AnalysisResult) -> list[str]:
-    """Return the line naming the categories with no judgement."""
-    assessed = _assessed_categories(result)
-    missing = [
-        category_label(category)
-        for category in CATEGORY_ORDER
-        if category not in assessed
-    ]
-    if not missing:
+    """Return the block naming everything that was not looked at.
+
+    Nothing here is a proportion. A reader is told what was not examined by
+    name, which is a fact they can act on, rather than by a fraction, which is
+    bookkeeping about the model.
+    """
+    items = _not_assessed_items(result)
+    if not items:
         return []
-    return [f"{NOT_ASSESSED_PREFIX}  " + "、".join(missing)]
+    return [NOT_ASSESSED_PREFIX, *_pack(items, separator="、", trailing="")]
+
+
+def _not_assessed_items(result: AnalysisResult) -> list[str]:
+    """Return the named things this run did not assess, in a stable order."""
+    assessed = _assessed_categories(result)
+    unassessed_categories = [
+        category for category in CATEGORY_ORDER if category not in assessed
+    ]
+
+    items: list[str] = [category_label(category) for category in unassessed_categories]
+
+    for category in CATEGORY_ORDER:
+        category_score = assessed.get(category)
+        if category_score is not None and not category_score.coverage.is_complete:
+            items.extend(UNASSESSED_ITEMS.get(category, ()))
+
+    snapshot = result.market_data
+    if snapshot is not None:
+        items.extend(
+            metric_name(point.metric)
+            for point in snapshot.missing_points
+            if point.metric.primary_category not in unassessed_categories
+        )
+
+    return list(dict.fromkeys(items))
 
 
 def _data_lines(result: AnalysisResult) -> list[str]:

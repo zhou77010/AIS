@@ -21,15 +21,21 @@ internals. They should be translated into investor language — "partly covered"
 or "not yet assessed: event risk, horizon risk" — rather than exposed as ratios.
 The model keeps the numbers; the renderer decides what a reader sees.
 
-**Every category should answer three questions.** What is the judgement, why,
-and what has not been looked at. The intended shape:
+**Translated, not tabulated.** The report no longer shows how much of a category
+was assessed as a fraction. What a reader needs is what was not examined, named:
+"尚未评估：事件风险、长期风险、DCF 公允价值". A proportion is bookkeeping about
+the model, and the model keeps it.
+
+The intended shape, so far:
 
 1. **The judgement**, as a visual grade rather than a number. An investor should
    not be asked to compare `13.26` against `0.48` against `5.95`, which are
    different units on an undefined scale.
-2. **Why**, as one plain sentence — "valuation looks stretched", "cash flow is
-   deteriorating". The summary is the reading; the evidence is only support.
-3. **What was not looked at**, in the investor's language, not as `3/8`.
+2. **Why**, as one plain sentence — valuation looks stretched, cash flow is
+   deteriorating. The summary is what is meant to be read; the evidence is only
+   support. Where a measurement reads better as a sentence, the report writes
+   the sentence and leaves the number in the evidence, as Trend now does.
+3. **What was not looked at**, named rather than counted.
 
 **Chinese first.** Except for technical terms, the report should be in Chinese:
 估值, 风险, 趋势, 盈利, 市场环境, 催化因素, 仓位. Evidence may keep English
@@ -68,6 +74,24 @@ replaced. None of them is Constitution semantics today.
   reading of the Constitution's questions, not definitions from it.
 - `docs/RecommendationReport.md` specifies that a category shows coverage,
   confidence, summary, drivers and warnings. Only the first three exist.
+
+---
+
+## Market must describe the asset's own environment
+
+Market currently reports the broad market's change over a year, and every asset
+therefore reports the same thing. NVDA, HSBC and RKLB sit in different
+environments — semiconductors, banks, space — and a report that says the same
+sentence about all three is not telling an investor anything about the asset.
+
+The broad index is one piece of evidence, not the answer. Market should describe
+the environment this particular asset is being judged in: its industry, its
+sector, the money flowing through it, the prevailing style, and the macro
+backdrop.
+
+Not built today because the evidence is not connected. Naming an industry by
+inference from a ticker would be guessing, and stating an environment AIS cannot
+see would be worse than saying nothing.
 
 ---
 
