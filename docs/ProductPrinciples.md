@@ -137,6 +137,22 @@ For the same reason, how many events there are is not a signal. A busy calendar
 is a busy calendar, and it is not a bigger opportunity than a quiet one with a
 single important date in it.
 
+**AIS is worth more than the facts it repeats.** Its value is not that it can
+list a price to earnings ratio, which any screen can do. It is that it says what
+the ratio means: whether the price already assumes the growth on offer, whether
+profit is being collected in cash, whether the risk is in the price or in the
+business.
+
+So every category says what its evidence amounts to, and not only what the
+evidence is. Repeating a measurement is the one thing a reader can already do for
+themselves.
+
+**An interpretation is not a forecast.** AIS says what the evidence supports and
+stops there. It does not say what will happen, does not give a target, and does
+not put a probability on anything. Every sentence can be traced back to the
+measurements it was read from, so a reader who disagrees has something to
+disagree with — which is not true of a prediction.
+
 ---
 
 ## 8. Evolution

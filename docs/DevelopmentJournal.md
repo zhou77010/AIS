@@ -532,4 +532,83 @@ exclusion of mechanical events should be restated against it.
 
 ---
 
+### AIS moved from facts to insight
+
+**Context.** All nine categories were implemented, and the report was a list of
+measurements with a grade beside each one. "P/E 38.18, PEG 2.67" and "price above
+all moving averages, momentum neutral" are true, and a reader still has to do the
+interpreting themselves — which is the part they came for and the part AIS is in
+a better position to do.
+
+**Decision.** Every category now produces an **insight**: sentences saying what
+its evidence amounts to, built on the analysis side, each naming the evidence it
+was read from. The renderer shows them and composes nothing.
+
+**Reason.** Repeating a measurement adds no value; interpreting it does. And the
+interpretation belongs to analysis rather than to presentation, because a
+renderer that composes its own explanation is doing analysis under a different
+name, and it will do it differently in every renderer.
+
+**Impact.** `analysis/insight/` holds one builder per category and a context that
+offers the measurements, the events and a way to name evidence. Sentences are
+capped at three per category: a fourth is always the least useful of the four,
+and a phone report that is skimmed is worth less than a short one that is read.
+Where the evidence supports nothing, the category falls back to its measurements
+rather than to a sentence nobody can check.
+
+**Revisit.** No.
+
+---
+
+### An insight is not a forecast
+
+**Context.** Once AIS writes sentences, the temptation is to write the sentences
+a reader most wants: what the price will do.
+
+**Decision.** An insight only ever restates what the evidence supports. No
+prediction, no target price, no probability, and no wording that confuses
+distance with importance.
+
+**Reason.** An interpretation can be checked: a reader who disagrees can go to the
+evidence behind the sentence and argue with the rule that produced it. A forecast
+cannot be checked until it is too late to be useful, and by then it has already
+been acted on. The two are indistinguishable in tone, which is exactly why the
+line has to be drawn in the code rather than in a style guide — there is a test
+that fails if forecasting wording appears in an insight.
+
+**Impact.** Every sentence carries evidence identifiers, and `InsightLine` refuses
+to be constructed without them. The chain runs from a sentence to a measurement
+to the source that reported it. A sentence that could not name its evidence would
+be an opinion wearing the same clothes as a reading.
+
+**Revisit.** No. If the line ever moves, it moves by a decision recorded here, not
+by an implementation that gradually drifts across it.
+
+---
+
+### Which catalyst matters is decided by a table, not by a model
+
+**Context.** With a calendar full of events, the report needed to say which of
+them is worth a reader's attention. The obvious approach is a model, or a
+probability, or a score.
+
+**Decision.** Each kind of event carries a priority — primary, secondary, minor —
+from one table, written by hand, in the open. The insight picks the highest
+priority event rather than the nearest one.
+
+**Reason.** AIS cannot estimate how likely an event is to move anything, and a
+number that looked like an estimate would be trusted as one. What AIS can do is
+state which kinds of event force an investment case to be re-examined, which is a
+judgement somebody can disagree with and can see. A primary event forty days out
+outranks a secondary one in two days, because distance is not importance.
+
+**Impact.** No machine learning, no probability and no score anywhere in the
+layer. The ordering is revisitable by editing one table, and the report never
+says "the nearest event", which was the wording that confused the two.
+
+**Revisit.** When industry data is connected, the ordering should be checked
+against what those sources show.
+
+---
+
 End of Document

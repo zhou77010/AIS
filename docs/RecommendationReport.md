@@ -571,6 +571,39 @@ confidence and no coverage figure, because none of those exist for it.
 - **The conditions are provisional** and are thresholds on a presentation grade. They change together
   with the grade they read, never separately.
 
+### 10.8 Insight — what the evidence means
+
+**Status: Current.**
+
+Every category shows what its evidence amounts to, not only what the evidence is.
+The sentences are written by the insight layer and shown here: a renderer composes
+nothing, because composing an interpretation is analysis under a different name.
+
+```
+趋势  ★★★★☆
+ 趋势结构完好，价格站稳全部均线。
+ 走势偏强，但动能并未加速。
+```
+
+**Rules.**
+
+- **Every sentence names the evidence it was read from.** A sentence that cannot
+  is refused at construction, and the chain runs from the sentence to the
+  measurement to the source that reported it.
+- **At most three sentences per category.** A fourth is always the least useful
+  of the four, and a report that is skimmed is worth less than a short one that
+  is read.
+- **No prediction, no target, no probability.** An insight restates what the
+  evidence supports. Wording that forecasts is a defect, and a test fails on it.
+- **A category with nothing to say falls back to its measurements**, because a
+  reader is owed the figures even when AIS cannot say what they amount to. It
+  never falls back to a sentence nothing stands behind.
+- **HPO has no insight.** It is itself an interpretation of the other categories,
+  and interpreting it again would say the same thing twice.
+- **An interpretation may read a measurement its evaluator does not score.** A
+  multiple means one thing beside a growing business and another beside a
+  shrinking one. The sentence still names what it used.
+
 ---
 
 ## 11. Investment Thesis (T4)

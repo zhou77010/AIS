@@ -215,6 +215,51 @@ matters. That reason is a property of the kind, never of the instance.
 
 ---
 
+## The insight layer: what it cannot say yet
+
+Every category now interprets its own evidence. These are the interpretations it
+cannot honestly produce today, and what each one is waiting for.
+
+| Not said | Why not |
+| --- | --- |
+| Market regime and style | Only the broad market's yearly change is connected. Risk appetite, growth versus value and rotation need index and sector data. |
+| Industry position and competition | No industry source exists. A company's place in its market cannot be read off its own figures. |
+| Where the growth is coming from | Segment and product revenue do not exist in the data. A growth rate without its source is one number. |
+| Whether a valuation is fair for the sector | Judging a multiple needs the multiples of comparable businesses, and AIS compares one asset at a time. |
+| Whether the holders are changing | Only the current register is known; institutional and insider *changes* need a second observation over time. |
+| Liquidity and execution | Average volume is known; spread, depth and the cost of building a position are not. |
+| What the price has already discounted | This needs an estimate of expectations, which is the deferred standard score's job. |
+
+None of these is filled in by inference. A category that cannot say something
+says less, and the report names what it did not cover.
+
+**The insight layer itself needs a review point.** The rules behind each sentence
+are conventional thresholds — a 30% margin reads strong, a 45% volatility reads
+high — and they live beside the code that uses them. They are the same kind of
+provisional presentation as the grade bands, and they are to be revisited
+together with it, once the AIS Standard Score defines what a reading means.
+
+---
+
+## Declined by decision, recorded so it is not rediscovered
+
+These are not waiting for data. They are things AIS has decided not to do:
+
+- **LLM news summarisation.** A summary is an opinion with no evidence behind it,
+  and in a report it is indistinguishable from a stated fact.
+- **AI-written research reports.** Prose generated to sound like analysis is
+  analysis nobody can check. Every sentence AIS writes comes from a rule that can
+  be pointed at.
+- **Forecasts.** No prediction of prices, no expected returns.
+- **Target prices.** A target price is a forecast with a number attached, and the
+  number makes it look more considered than it is.
+- **Probabilities.** AIS cannot estimate the likelihood of an event moving a
+  price, and a number that looked like an estimate would be used as one.
+- **News sentiment, learned importance ranking.** Recorded above; both need
+  something AIS has decided it cannot stand behind.
+
+---
+
 ## Registered blockers
 
 - **AIS Standard Score direction.** Recorded in `docs/Constitution.md`. Until the
