@@ -887,4 +887,48 @@ separate decisions.
 
 ---
 
+### The morning report is live, not a review
+
+**This supersedes the entry above.** The rule it reached — that a report has to
+earn its place in the reader's day — still stands. Its reasoning does not: it
+described the morning report as a subset of the evening brief, which is wrong, and
+it left the report's existence conditional on a reader wanting the same thing twice.
+
+**Context.** Having corrected the send time to 09:00 Beijing, the morning report
+was still being described as a recap: the close happened at 04:00, the reader reads
+at 09:00, so the report was the close explained later. That description was wrong,
+and it led to a second wrong conclusion — that the morning report was close to a
+subset of the evening brief and had to justify existing.
+
+**Decision.** The morning report is **live**. It is computed at the moment it is
+sent, from the freshest state available then, covering everything between the
+previous report and this one. It answers what the state is now and what changed to
+get there, and it is never described as a summary of the previous session.
+
+**Reason.** The subset reasoning assumed both reports describe the last closed
+session. They do not: the evening brief goes out **seventeen hours before** that
+session closes, and the morning report **five hours after**. Between the two lie an
+entire US session, the after-hours move and the Asian session. The morning report
+is not a repetition of the brief; it is the only report that can contain the
+session at all.
+
+There is a second reason, and it is about the reader rather than the data. A report
+is worth sending at the moment a reader can act on it, which means it has to reflect
+the world at that moment. Building it at the close and delivering it at breakfast
+would produce a document that is correct, complete, and five hours out of date — the
+worst kind of wrong, because nothing about it looks wrong.
+
+**Impact.** The name is **Live Morning Brief** and the backlog states that it is
+computed at send time, with the timeline that shows why the two reports cannot be
+substitutes for each other. It also surfaced a consequence that had not been
+noticed: a report whose job is to say what changed needs a baseline that outlives
+the process, and AIS keeps both of its baselines — the rating standings and the
+notification fingerprints — in memory only. Today a restart merely makes the next
+report read "first rating" everywhere. With scheduled reports built around change,
+it would erase the only thing they exist to say.
+
+**Revisit.** No.
+
+---
+
 End of Document

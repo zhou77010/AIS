@@ -305,6 +305,15 @@ phone, not a person.
 So a report has two times. One anchored to the close is not therefore sent at the
 close, and one sent in the morning is not therefore computed in the morning.
 
+**And a report is computed when it is sent.** It describes the world as it is at
+the moment the reader receives it, not as it was at the moment AIS last looked. A
+report built at four and delivered at nine is five hours out of date, and it is the
+worst kind of out of date, because nothing about it looks wrong.
+
+This is the part that keeps a scheduled report from becoming a recital. A report
+that only restates an earlier conclusion in different words has taken the reader's
+attention and given them nothing they did not already have.
+
 **And a report has to earn its place in the reader's day.** Arriving at a
 convenient hour is not a reason to exist. If what a report says is already
 contained in another one the reader gets, then sending it is asking for attention

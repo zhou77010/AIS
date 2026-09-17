@@ -18,7 +18,7 @@ Agreed direction, in order:
 | **A** | **Reading Layer** — one owner for what a reading means, so the grade, the insights and HPO stop disagreeing. | Nothing. Highest priority. |
 | **B** | **Watch Universe** — membership sets, replacing the flat ticker list. | A. |
 | **C** | **Market Layer** — what the current environment means for this stock. | New evidence (industry, style, flows). Shares its data with the Theme watchlist. |
-| **D** | **Runtime** — the three triggers: Pre-Market Brief, Daily Review if kept, and the intraday alert with its runtime priority. | **C**, because the Brief's distinguishing content is the market-level evidence C introduces. |
+| **D** | **Runtime** — the three triggers: Pre-Market Brief, Live Morning Brief, and the intraday alert with its runtime priority. | **C**, because the Brief's distinguishing content is the market-level evidence C introduces. |
 | **E** | **IBKR Portfolio Layer** — the fourth question, how much. | An IBKR connection. |
 
 The journal records why A comes before B even though B looks cheaper, and why the
@@ -302,66 +302,125 @@ report is worth sending when somebody can read it. Neither may be inferred from
 the other, and conflating them is what produced the assumption this section now
 removes.
 
+**And a scheduled report is computed when it is sent.** It is built from
+everything available at that moment, not from a snapshot taken earlier and
+delivered late. A report that is only a delayed copy of an earlier computation is
+the same report, and sending it again asks for attention without giving anything
+back.
+
+### The two reports sit at the two ends of the US day
+
+The US extended session runs 04:00–20:00 Eastern. In Beijing time, one US trading
+day looks like this:
+
+| Eastern | Beijing | State |
+| --- | --- | --- |
+| D 04:00 | D 16:00 | Pre-market opens |
+| D 09:30 | D 21:30 | Regular session opens |
+| D 16:00 | D+1 **04:00** | Regular session closes |
+| D 20:00 | D+1 **08:00** | Extended session fully ends |
+| D 21:00 | D+1 **09:00** | ← **Live Morning Brief** |
+| D+1 09:00 | D+1 **21:00** | ← **Pre-Market Brief**, for the next session |
+
+So the two reports are not a preview and a review of the same thing:
+
+- **21:00 Beijing** is thirty minutes before the next open, with that morning's
+  macro releases already out and five hours of pre-market already traded.
+- **09:00 Beijing** is one hour after the entire US day has ended — regular and
+  extended — and while Asia is trading.
+
+Twelve hours separate them, and those twelve hours contain the Asian session, the
+European session and the whole US pre-market. **Each carries information the other
+cannot.**
+
 ### The three triggers
 
 | Trigger | Fires when | Answers | Send time |
 | --- | --- | --- | --- |
-| **Pre-Market Brief** | 30 minutes before the US open | What matters before the open today | **21:00 Beijing** (09:00 ET) |
-| **Daily Review** | *If kept*: a fixed morning time | What happened, and what it means | **09:00 Beijing** (21:00 ET the day before) |
+| **Pre-Market Brief** | 30 minutes before the US open | What matters before the open today | **21:00 Beijing** |
+| **Live Morning Brief** | A fixed morning time | What the state is right now, and what changed to get there | **09:00 Beijing** |
 | **Intraday Alert** | An event happens | Whether this is worth interrupting for | Not scheduled |
 
-**Pre-Market Brief.** Forward-oriented: it says what changed overnight and what
-is on the calendar, never which way the market will go. **Confirmed: it depends
-on the Market Layer.** Its distinguishing content — the environment, macro
-releases, futures, volatility, yields, the dollar, overnight news — is market-level
-evidence that does not exist yet, and without it a brief degenerates into the same
-analysis sent at a different hour, which is the one thing it must not be.
+**Pre-Market Brief.** Forward-oriented: what changed overnight and what is on the
+calendar, never which way the market will go. **Confirmed: it depends on the Market
+Layer.** Its distinguishing content — futures, volatility, yields, the dollar, the
+morning's macro releases, overnight news — is market-level evidence that does not
+exist yet, and without it a brief degenerates into the same analysis sent at a
+different hour. Status: **defined, not settled.**
 
-**Daily Review.** Not settled, and deliberately so. Its content is close to a
-subset of what the Brief already carries, so it earns its place only if a reader
-wants the same analysis twice, twelve hours apart. **If it is kept it is sent at
-09:00 Beijing**, which is five hours after the close and after the after-hours
-results have landed, so it is both easier to read and fuller than the close itself.
-If it is not needed, it is not to be invented to fill a time slot.
+**Live Morning Brief.** *Not* a recap of the previous session, and not to be
+described as one. **Confirmed.** It is computed at 09:00 Beijing from the freshest
+state available at that moment, and it covers everything between the previous
+report and this one: the session that has just finished, the after-hours move,
+anything announced since, and the Asian session trading while it is written. Its
+question is **what the state is now, and what changed to get there** — never what
+yesterday's close was. Unlike the Brief, this one is not conditional on new
+evidence: most of what it needs, AIS already gathers.
 
 **Intraday Alert.** Triggered by an event, never by a clock. It carries Priority,
 which is a runtime result, and it needs a threshold, a rate limit and a record of
 what the reader has already been told — none of which exist. See the Priority
 section below.
 
+### A drafting error, recorded so it is not repeated
+
+An earlier draft of this section described the morning report as close to a subset
+of the pre-market brief's content. **That was wrong.** It assumed both reports
+describe the last closed session, so the later one could only repeat the earlier
+one.
+
+They do not. The 21:00 brief is sent **seventeen hours before** that session
+closes; the 09:00 report is sent **five hours after**. The morning report carries an
+entire trading day the brief could only have anticipated — and AIS does not
+anticipate anything.
+
 ### The assumption this removes
 
-**04:00 Beijing is not a send time.** It is the US close, which is when the data
-becomes complete — an evaluation anchor. It is not, and was never meant to be, the
-moment a reader is told anything. Nothing is ever pushed at 04:00.
+**04:00 Beijing is not a send time.** It is the US regular close, the moment the
+regular session's data becomes complete. Nothing is ever pushed at 04:00, and
+nothing is defined to be.
+
+### A consequence of reports being live
+
+A report that says **what changed** needs something to compare against, and AIS
+holds its two baselines in memory only. `RatingTracker` forgets every standing when
+the process stops, and `ChangeDetector` forgets every fingerprint with it. Today
+that is a small annoyance: a restart makes the next report read "first rating"
+everywhere. With two scheduled reports whose whole job is to say what changed, it
+becomes a defect — a restart erases exactly the thing the reports exist to say.
+
+**The baseline has to survive a restart.** Whether that baseline is the previous
+report, a close-anchored evaluation, or both, is a decision that belongs with the
+runtime design and is not made here.
 
 ### What the runtime would have to change
 
-Not "add two timers". Five things:
+Not "add two timers". Six things:
 
 | # | Change | Where |
 | --- | --- | --- |
 | A | The cadence stops being an interval and becomes **market-anchored**. Today the phase comes from when the process started, which has nothing to do with the market. | `app/scheduler.py`, `app/application.py` |
 | B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. These stay pure calendar arithmetic, so it keeps its place in `utils/`. | `utils/market_clock.py` |
 | C | The **market-open gate moves off the cycle** and onto the triggers that need it. Today it guards every cycle, which is exactly why nothing can fire at 09:00 ET. | `app/application.py` |
-| D | **Notification policy becomes an owned concept.** Today there is one policy, hardwired into the per-asset cycle. Three triggers need three: the Brief always sends, the Review sends only on material change, an alert has to earn the interruption. No component owns this question today. | undecided — Runtime or Communication |
+| D | **Notification policy becomes an owned concept.** Today there is one policy, hardwired into the per-asset cycle. Three triggers need three. No component owns this question today. | undecided — Runtime or Communication |
 | E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. Every piece of evidence today is per-asset. | `contracts/`, `pipeline/` |
+| F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | undecided — needs a store |
 
-**D and E are the two that are easy to underestimate.** D is a responsibility with
-no owner, and by the architecture rules it cannot simply be dropped into an
+**D, E and F are the three that are easy to underestimate.** D is a responsibility
+with no owner, and by the architecture rules it cannot simply be dropped into an
 existing component. E is the same work the Market Layer needs, which is why the
 Brief and the Market Layer should be designed together rather than twice.
 
 ### Still open
 
 - **The Weekly report** is unclassified. It was one of the three older items and
-  none of the three triggers covers it: it is neither event-driven nor a
-  pre-market offset nor a daily review.
+  none of the three triggers covers it: it is neither event-driven, nor a
+  pre-market offset, nor a morning report.
 - **The scope of each trigger** — portfolio, watch universe, or both. This decides
   what each report is actually about, and it is not yet decided.
-- **Whether the Daily Review exists at all.**
 - **Who owns notification policy**, and what counts as material, which needs the
   threshold that is deferred with the AIS Standard Score.
+- **Where the baseline lives**, now that it has to outlive the process.
 
 A single combined daily message would be a new report structure. The report model
 currently describes one asset, and adding a digest is a decision for that review.
