@@ -9,6 +9,22 @@ structure lives in `docs/Architecture.md`.
 
 ---
 
+## Confirmed development order
+
+Agreed direction, in order:
+
+| Phase | Work | Depends on |
+| --- | --- | --- |
+| **A** | **Reading Layer** — one owner for what a reading means, so the grade, the insights and HPO stop disagreeing. | Nothing. Highest priority. |
+| **B** | **Watch Universe** — membership sets, replacing the flat ticker list. | A. |
+| **C** | **Market Layer** — what the current environment means for this stock. | New evidence (industry, style, flows). Shares its data with the Theme watchlist. |
+| **D** | **Intraday Engine** — runtime priority and proactive push. | C for its impact input, and the runtime, which is not built. |
+| **E** | **IBKR Portfolio Layer** — the fourth question, how much. | An IBKR connection. |
+
+The journal records why A comes before B even though B looks cheaper.
+
+---
+
 ## Product review, after all nine categories are evaluated
 
 The report currently speaks in developer language. It is read by an investor, so
@@ -161,6 +177,114 @@ now appear only in the expanded report, which a reader sees only in the log. Tha
 is what the density rule asks for, and it is recorded here so that it stays a
 decision rather than becoming a surprise later. Putting them back on a phone is a
 new feature, and it would have to earn its lines.
+
+---
+
+## Watch Universe — membership sets, not tiers
+
+**Confirmed. Not built.** The universe is configuration; the monitor that reads
+it is not, and the two are deliberately decoupled.
+
+**Tiers were rejected.** A tier is an ordered, exclusive thing, and what AIS
+actually has is membership: NVDA is in the M7, in AI and in Semiconductor at the
+same time, and asking which tier it is in is a question with no good answer.
+Every later operation — what the daily report shows, what the intraday scan
+considers, what gets pushed — would have had to invent its own answer.
+
+Membership sets, all of them unordered and allowed to overlap:
+
+```
+Watch Universe
+  Portfolio
+  Core Watchlist
+  Growth Watchlist
+  Theme Watchlist
+  Temporary Watchlist
+```
+
+**A Theme is an investment logic, not a list of stocks.** AIS holds
+`Theme → representative assets` — AI points at NVDA, AMD, AVGO, MSFT; Space at
+RKLB, LUNR. A theme is never itself a report object; what changes about a theme
+reaches the reader through its representative assets.
+
+**The Theme watchlist must be derived, not listed.** If themes are maintained as
+`Theme → assets`, then the Theme watchlist is their union. Writing it twice — once
+as the mapping and once as a list of members — is how the two drift apart.
+
+### What would have to change
+
+| Module | Change | Size |
+| --- | --- | --- |
+| `models/` | New: the watch universe — the sets, an entry, and the collection. | Small, additive |
+| `config/` | A path to the watchlist file, the same way the curated catalyst calendar has one. | One field |
+| A loader | Reads the file and returns the model. **Its home is undecided** — see below. | Small |
+| `app/application.py` | Iterates the universe instead of `config.tickers`, and stops inventing asset metadata. | Small |
+| Everything else | **Nothing.** Evaluators, pipeline, report model, contracts and scheduler are untouched. | — |
+
+That last row is the point of the design: **membership is configuration and
+orchestration, and it does not enter the judgement chain.**
+
+**With one exception that is not configuration.** The daily report sends one
+message per asset, so a universe of forty names is forty pushes a day with nothing
+built for the intraday case at all. A digest is a **report model** change — the
+backlog already records that "a single combined daily message would be a new
+report structure" — and it has to be decided as part of this phase, not after it.
+
+**An undecided placement.** The file is configuration data, and the model is a
+domain model, but the loader is neither obviously. The options, none chosen:
+
+1. a new `universe/` package, which means a new component in `docs/Architecture.md`;
+2. the loader in `config/`, on the grounds that reading configuration is what
+   configuration does;
+3. `data/`, following the curated calendar — rejected by symmetry, because the
+   architecture defines `data/` as collection from external sources and a watchlist
+   is AIS's own statement about itself, not a fact about the world.
+
+**A side benefit worth taking.** The universe file naturally carries each asset's
+name, exchange, currency and profile, which is exactly what `Application._asset`
+currently invents — it builds every asset as `exchange="UNKNOWN"`,
+`currency="USD"`, `profile=AssetProfile.UNKNOWN`. So `AssetProfile` exists as a
+concept, is consumed nowhere, and has never been set. Populating it from the
+universe file is what finally makes the ETF, bank and cyclical branches anything
+other than dead code.
+
+---
+
+## Priority — a runtime result, not configuration and not analysis
+
+**Confirmed as future design. Not built.**
+
+The intraday engine's question is not which set an asset belongs to. It is:
+
+> Is this worth interrupting the user for, right now?
+
+Priority answers it on five levels — `CRITICAL`, `HIGH`, `NORMAL`, `LOW`,
+`IGNORE` — and it is **computed at runtime from state, never configured**.
+
+**It cannot live in the analysis chain**, and the reason is not that it is
+produced late. It is that the inputs it needs are not there. "Relevance" means how
+much this matters *to this user*: what they already hold, what they have already
+been told today, how many times they have been interrupted. `AssetAnalyzer`
+evaluates one asset at a time, with no portfolio, no history and no sight of any
+other asset. Computing Priority inside it would force the analysis layer to read
+runtime state, which is what Architecture rules 8 and 11 forbid.
+
+So Priority belongs to the runtime, and its inputs are **an analysis result plus
+runtime context**. Two consequences to hold on to:
+
+- **It is not a tenth category and it does not feed HPO.** If it entered the
+  chain it would put a scale nobody has defined into the chain itself, which is
+  the blocker the Constitution already records.
+- **What it needs does not exist yet**: a cross-asset view, thresholds, and a
+  record of what the user has already been told. Its impact input also wants the
+  environment evidence that Market and the themes are waiting for.
+
+**A document will be needed at that point, and not before.** Every principle AIS
+has written describes *the report* — something a reader chooses to open. An alert
+is a different surface: it interrupts, and it has to be worth interrupting for.
+What makes an interruption legitimate is a product question nobody has answered
+yet, so it is recorded here rather than written into
+`docs/ProductPrinciples.md`.
 
 ---
 

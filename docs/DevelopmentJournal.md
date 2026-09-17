@@ -729,4 +729,100 @@ not know about each other.
 
 ---
 
+### The watch universe became membership sets, not tiers
+
+**Context.** The first design for the watchlist put assets in tiers: a permanent
+core, a growth tier, a theme tier, a temporary tier. It looked like a natural way
+to decide what gets looked at and how often.
+
+**Decision.** Drop tiers entirely. The universe is a set of **membership sets** —
+Portfolio, Core, Growth, Theme, Temporary — which are unordered and may overlap.
+An asset belongs to as many as apply, and nothing has to decide which single one
+it is in.
+
+**Reason.** The tier model was contradicted by its own example list: NVDA and TSLA
+appear both in the M7 and in the growth list, because being a mega cap and being a
+growth stock are two different facts that happen to be true at once. A tier is an
+ordered, exclusive concept, and forcing overlapping memberships into it means
+every later operation — what the daily report shows, what an intraday scan
+considers, what is worth pushing — has to invent its own rule for resolving the
+overlap, and they will not agree with each other. Sets state the facts; the
+questions about what to do with them stay separate and are answered once each.
+
+**Impact.** The universe becomes configuration with no judgement in it, which is
+what makes it cheap: no evaluator, no pipeline, no report model and no contract is
+touched, and the only module that changes is the one that decides what to look at.
+Recorded in the backlog with the one part that is not cheap — the daily report
+sends one message per asset, so scaling the universe needs a digest decision that
+has nothing to do with tiers.
+
+**Revisit.** When the Theme sets are built: a theme is an investment logic mapped
+to representative assets, so the theme watchlist has to be **derived** from that
+mapping rather than listed a second time.
+
+---
+
+### Priority belongs to the runtime because only the runtime can see enough
+
+**Context.** The intraday engine needs to decide whether something is worth
+interrupting the user for. The obvious place for a value like that is beside the
+other judgements, as another input the analyzer produces.
+
+**Decision.** Priority is a runtime result. It is computed from state at the
+moment an alert is considered, never configured, and it does not enter the
+analysis chain.
+
+**Reason.** The tempting reading is that Priority is simply produced later than
+the rest. The real reason is stronger: the inputs it needs are not present in the
+analysis layer at all. "Relevance" means how much this matters to this user — what
+they already hold, what they have already been told today, how often they have
+already been interrupted. The analyzer sees one asset, once, with no portfolio, no
+history and no sight of any other asset. Putting Priority there would force the
+analysis layer to read runtime state to do its job, which is exactly what the
+architecture forbids: the scheduler owns the runtime, and no component takes over
+another's responsibility.
+
+There is a second reason. The Constitution records one blocker about scales that
+have not been defined. A priority level is a scale. Sitting in the notification
+path it is a policy, and the worst it can do is interrupt at the wrong moment.
+Sitting in the judgement chain it would be one more undefined scale among the
+scores, and its levels would have to be argued about as though they measured
+something. Keeping it out of the chain is what keeps the question small.
+
+**Impact.** Recorded in the backlog as future design. What Priority needs —
+a cross-asset view, thresholds, a record of what the user has already been told —
+does not exist, so nothing is built. The note also flags that when this phase
+arrives, AIS will need a statement about interrupt-driven surfaces, because every
+principle written so far describes a report a reader chooses to open, and an alert
+is something else. That statement is deliberately not written yet: what makes an
+interruption legitimate is a product decision nobody has taken.
+
+**Revisit.** When the intraday engine is designed.
+
+---
+
+### The reading layer comes before the watch universe
+
+**Context.** The confirmed order is Reading Layer, then Watch Universe, then
+Market, then the Intraday Engine, then the portfolio. The watch universe looks
+cheaper — it is configuration — and it would be easy to do first.
+
+**Decision.** Correctness first: the reading layer is built before the universe
+grows.
+
+**Reason.** The reading layer removes something already wrong: the grade, the
+insights and the opportunity judgement read their own numbers with three sets of
+conventions that do not know about each other, and two of those disagreements are
+already visible in the reports being sent to a phone today. Growing the universe
+first would multiply that by the size of the universe and put the multiplied
+version in front of the reader, which is the opposite of progressive
+completeness: showing more is not progress when what is shown disagrees with
+itself.
+
+**Impact.** Recorded as the confirmed order in the backlog.
+
+**Revisit.** No.
+
+---
+
 End of Document
