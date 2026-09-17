@@ -338,4 +338,24 @@ the same thing starts ignoring both.
 
 ---
 
+## 13. Configuration Says What to Do, Never What Is True
+
+A setting tells AIS how to behave. It does not tell AIS what the world is like.
+
+The line matters because a file that states a fact will eventually state a wrong
+one, and nothing will correct it. Whether a position is held is decided by a broker;
+whether an event is near is decided by a calendar. Written into a settings file,
+those become a second copy of the truth that nobody updates — and by the time the
+two disagree, the copy is the one the system has been reading.
+
+So configuration holds **choices**: which assets to watch, how often to look, where
+to send the result. Everything else comes from the component that owns it, and a
+component that cannot supply it says so rather than having it filled in from a file.
+
+The same reasoning applies inside a file. When the same membership can be written
+two ways — a mapping and a list of its values — it will not stay equal, so it is
+written one way and the other is derived.
+
+---
+
 End of Document

@@ -234,34 +234,64 @@ reaches the reader through its representative assets.
 `Theme → assets`, then the Theme watchlist is their union. Writing it twice — once
 as the mapping and once as a list of members — is how the two drift apart.
 
+### Five sets, and only three of them are configuration
+
+This is the boundary that keeps the universe from arguing with the portfolio and
+with the runtime. The five sets are one concept, but their members come from three
+different places, and only one of those places is a file.
+
+| Set | Where its members come from | Written in the file |
+| --- | --- | --- |
+| Portfolio | The Portfolio Layer, from the broker. Phase E. | **No** |
+| Core Watchlist | Configuration. | Yes |
+| Growth Watchlist | Configuration. | Yes |
+| Theme Watchlist | Derived from `Theme → representative assets`. | **No** |
+| Temporary Watchlist | Added and expired by the runtime, from the calendar. | **No** |
+
+**Portfolio is a fact, not a choice.** Whether AIS holds something is decided by a
+broker, not by a person editing a file. If the file could say `"portfolio": true`,
+the configuration would start asserting a position before there was anything to
+assert it from, and nothing would ever correct it — the file would quietly become a
+second, wrong portfolio. Until the Portfolio Layer exists, the Portfolio set is
+empty, and being empty is the truth.
+
+**Temporary is a result, not a choice.** Its members are put there by the calendar
+and removed when the event passes, which is the runtime's job. A hand-written
+temporary list would be a list nobody removes from.
+
+So the file carries three things and nothing else: the core members, the growth
+members, and the theme mapping.
+
+**A set is a relation, not an attribute.** An asset does not have a set; it belongs
+to some. So the model holds one entry per asset carrying the sets it belongs to,
+and the same symbol may not appear twice — two entries for one symbol would be two
+copies of its name, exchange, currency and profile, and the two could disagree.
+
+### Confirmed boundaries
+
+| Question | Answer |
+| --- | --- |
+| Tiers or sets? | **Sets.** Unordered and overlapping. |
+| Is the Theme watchlist maintained? | **No, derived** from the theme mapping. |
+| Where does the loader live? | **`config/`** — a watchlist is AIS's own configuration and not data collected from the world. |
+| Is Portfolio a set in the file? | **No.** It comes from the Portfolio Layer. |
+| Is Temporary a set in the file? | **No.** The runtime fills it. |
+| Does the universe decide when things run? | **No.** Scanning frequency, per-set polling and push priority are the runtime's, and are deferred. |
+| Does it enter the judgement chain? | **No.** It decides what is looked at, never what is concluded. |
+
 ### What would have to change
 
 | Module | Change | Size |
 | --- | --- | --- |
-| `models/` | New: the watch universe — the sets, an entry, and the collection. | Small, additive |
-| `config/` | A path to the watchlist file, the same way the curated catalyst calendar has one. | One field |
-| A loader | Reads the file and returns the model. **Its home is undecided** — see below. | Small |
+| `models/watch_universe.py` | New: the sets, an entry, and the collection with the lookups over it. | Small, additive |
+| `config/watchlist.py` | New: reads the file, validates it, returns the model. | Small |
+| `utils/constants.py` | One environment variable for the file path. | One line |
+| `config/config.py` | The path, the same way the curated catalyst calendar has one. | One field |
 | `app/application.py` | Iterates the universe instead of `config.tickers`, and stops inventing asset metadata. | Small |
 | Everything else | **Nothing.** Evaluators, pipeline, report model, contracts and scheduler are untouched. | — |
 
 That last row is the point of the design: **membership is configuration and
 orchestration, and it does not enter the judgement chain.**
-
-**With one exception that is not configuration.** The daily report sends one
-message per asset, so a universe of forty names is forty pushes a day with nothing
-built for the intraday case at all. A digest is a **report model** change — the
-backlog already records that "a single combined daily message would be a new
-report structure" — and it has to be decided as part of this phase, not after it.
-
-**An undecided placement.** The file is configuration data, and the model is a
-domain model, but the loader is neither obviously. The options, none chosen:
-
-1. a new `universe/` package, which means a new component in `docs/Architecture.md`;
-2. the loader in `config/`, on the grounds that reading configuration is what
-   configuration does;
-3. `data/`, following the curated calendar — rejected by symmetry, because the
-   architecture defines `data/` as collection from external sources and a watchlist
-   is AIS's own statement about itself, not a fact about the world.
 
 **A side benefit worth taking.** The universe file naturally carries each asset's
 name, exchange, currency and profile, which is exactly what `Application._asset`
@@ -270,6 +300,19 @@ currently invents — it builds every asset as `exchange="UNKNOWN"`,
 concept, is consumed nowhere, and has never been set. Populating it from the
 universe file is what finally makes the ETF, bank and cyclical branches anything
 other than dead code.
+
+**A migration risk that has to be handled.** Replacing `Config.tickers` with a file
+would make the seven assets AIS is watching today disappear the moment the change
+lands, unless there is a path: `AIS_TICKER` is set in the user's environment and is
+the only reason those seven are watched. The intended path is that the ticker list
+stays as the fallback — with no watchlist file, the configured tickers become a
+universe whose only set is Core — so the change is invisible on the day it lands.
+
+**Still not this phase.** The daily report sends one message per asset, so a
+universe of forty names is forty pushes a day. A digest is a **report model**
+change — the backlog records that "a single combined daily message would be a new
+report structure" — and it has to be decided before the universe grows much beyond
+what it is now.
 
 ---
 

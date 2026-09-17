@@ -1000,4 +1000,45 @@ re-derived from it.
 
 ---
 
+### Configuration describes what AIS chooses, never what is true
+
+**Context.** The watch universe has five membership sets — Portfolio, Core, Growth,
+Theme and Temporary — and the obvious reading of that was five lists in a file.
+Two of them cannot be lists in a file without becoming wrong.
+
+**Decision.** The file carries three things: the core members, the growth members,
+and the mapping from a theme to its representative assets. Portfolio and Temporary
+are sets of the same universe and are never written down. The theme watchlist is
+derived from the mapping rather than listed beside it. The loader lives in
+`config/`, because a watchlist is AIS's own configuration and not data collected
+from the world.
+
+**Reason.** Whether AIS holds something is decided by a broker, not by a person
+editing a file. If the file could say so, the configuration would begin asserting a
+position before there was anything to assert it from, and nothing would ever
+correct it — a second portfolio, written by hand, drifting quietly away from the
+real one. The same holds for Temporary, whose members the calendar adds and the
+runtime removes; a hand-written temporary list is a list nobody removes from.
+
+That is the general form, and it is the reason this is a principle rather than a
+note about one file: **a setting tells AIS what to do, and a file that tells it what
+is true is a file that will eventually be lying.** Configuration is where choices
+live. Facts come from the component that owns the fact.
+
+The derived theme watchlist is the same idea applied inside the file. Two lists of
+the same members — one as a mapping and one as a membership — do not stay equal, and
+whichever one a component happens to read becomes the real one.
+
+**Impact.** Recorded in the backlog with the boundary table: five sets, three
+sources, only one of them a file. The model holds one entry per asset carrying the
+sets it belongs to, so a symbol cannot appear twice with two copies of its own
+metadata. The phase stays small for the same reason — the universe decides what is
+looked at and never what is concluded, so no evaluator, no pipeline and no report
+model is touched.
+
+**Revisit.** When the Portfolio Layer arrives, it fills the Portfolio set and
+nothing about the file changes.
+
+---
+
 End of Document
