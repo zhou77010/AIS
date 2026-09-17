@@ -131,32 +131,53 @@ it would split one question across two places.
 
 ---
 
-## Reading Layer — the near-term priority
+## Reading Layer — done, and it is now one layer
 
-**Highest priority.** The conventions AIS uses to read its own numbers are
-currently written down in three places that do not know about each other:
+**Completed.** The conventions AIS uses to read its own numbers were written down in
+three places that did not know about each other, and they disagreed in public:
 
-| Where | What it decides |
-| --- | --- |
-| `analysis/category_grade.py` | The star grade. |
-| `analysis/insight/*.py` | What each sentence claims. |
-| `evaluation/hpo/opportunity_conditions.py` | Whether an opportunity condition holds. |
-
-They already disagree in public. Two examples taken from real reports:
-
-- HPO said **"有近期催化"** while the catalyst block said **"近期暂无明确催化"** —
-  the opportunity condition counts ninety days as near, the sentence counts thirty.
+- HPO said **"有近期催化"** while the catalyst block said **"近期暂无明确催化"** — the
+  condition counted ninety days as near, the sentence counted thirty.
 - HPO said **"估值具备吸引力"** beside a valuation insight saying **"自由现金流为负，
-  估值缺少现金收益支撑"** — the condition reads a rounded star, the sentence reads the
+  估值缺少现金收益支撑"** — the condition read a rounded star, the sentence read the
   measurements.
 
-The work: one module owns what a reading means — the bands, their words and the
-grade they imply — and the grade, the insights and HPO all read it. The eventual
-AIS Standard Score then replaces one place instead of reconciling three first.
-Alongside it, a test that fails when the report contradicts itself.
+There is one owner now, `evaluation/reading/`:
 
-Neither the Constitution nor any method changes: the thresholds stay exactly as
-provisional as they are, in one place instead of three.
+| Module | What it owns |
+| --- | --- |
+| `bands.py` | One scale per measurement: the direction it runs, where its bands fall, the word each band is called, and the score its position carries. |
+| `windows.py` | The time windows, so "near term" means one thing wherever it is said. |
+| `category.py` | What a category's measurements mean together — the mean and the weakest reading. |
+| `conditions.py` | The bar each opportunity condition is decided at. |
+
+The grade is a view of the reading (`analysis/category_grade.py` holds no threshold
+of its own), the sentences read the bands rather than numbers of their own, and HPO
+reads a reading rather than a rounded star. The revised catalyst condition and the
+weakest-reading bar closed both known contradictions, and
+`tests/test_report_consistency.py` now checks a rendered report for new ones.
+
+**What is unified, and what is still provisional.** The *rules* are unified: one
+place decides what a number means, and moving a threshold moves everything that
+reads it. The *values* are as provisional as they were — conventional rules of
+thumb, not the AIS Standard Score, replaced as a whole when it exists. Two things
+remain outside the layer and are recorded rather than hidden:
+
+- **The lookback windows themselves** — a 120 day average, a 20 day volatility, a
+  14 day RSI — are implementation choices in the Data layer, not readings. If they
+  change, the bands they feed should be checked with them.
+- **The wording of a sentence is still chosen by the sentence.** A builder decides
+  which clause to write; the reading layer only decides what the reading is called.
+  A clause can therefore still be keyed to the wrong band, which is what the
+  consistency test exists to catch.
+
+**A consequence worth knowing.** The bars are stricter than they were, because a
+condition now needs the category to read well *and* to hold nothing in the bottom
+two bands. Measured across the seven watched assets, HPO reads 1 for six of them
+and 3 for the seventh. That is the honest output of the conditions as stated — an
+attractive valuation, a trend with nothing weak in it, a catalyst inside a month
+and an acceptable balance sheet are all demanding — but it is worth deciding
+whether that is the intended shape before the report is read by anybody else.
 
 ---
 

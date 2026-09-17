@@ -931,4 +931,73 @@ it would erase the only thing they exist to say.
 
 ---
 
+### One layer decides what a number means
+
+**Context.** AIS read its own numbers with three sets of conventions that did not
+know about each other. The star grade had a table of thresholds; the sentences had
+their own copies of the same numbers; the opportunity judgement had a third on top
+of a rounded average. Two of the disagreements were visible in reports being sent
+to a phone: an asset could be given the near term catalyst condition while the
+sentence forty lines below said there was no clear catalyst in the near term, about
+the same calendar from the same run.
+
+**Decision.** One owner, `evaluation/reading/`, holds every scale, every window and
+every bar. The grade becomes a view of a category's reading and keeps no threshold
+of its own; the sentences read bands instead of numbers of their own; the
+opportunity judgement reads the category's reading instead of its rounded star.
+
+**Reason.** The contradictions were not carelessness; they were the predictable
+result of three components each answering the same question privately. Nothing
+could have caught them, because nothing was comparing one answer with another. The
+second reason is the one that pays later: the standard score will replace exactly
+one thing now, instead of three things that would first have to be argued into
+agreement.
+
+**Impact.** The known contradictions are gone and
+`tests/test_report_consistency.py` checks a rendered report for new ones — whether a
+condition that holds is denied by a sentence drawn from the same readings, and
+whether the headline and the sentence agree about what "near term" means. Writing
+that test found two more overstatements nobody had noticed: a short side described
+as middling was being called heavy in the next line, and a trend structure could be
+called broken while the trend still read well.
+
+**Revisit.** No. The values inside the layer stay provisional and are replaced as a
+whole.
+
+---
+
+### A condition needs two bars, not one
+
+**Context.** The valuation in a real report read four stars and "估值具备吸引力"
+while the sentence beside it said the free cash flow was negative and the valuation
+had no cash support. Both were produced from the same run.
+
+**Decision.** An opportunity condition is decided on two readings of the category:
+the mean, and the weakest measurement. The mean must reach the bar **and** nothing
+in the category may fall into the bottom two bands.
+
+**Reason.** The mean was not wrong; it was answering a different question from the
+sentence. Cheap multiples beside a negative cash flow average out to attractive, and
+a category that reads well on balance has not thereby read well — the question the
+condition asks is whether the category reads well, not whether it reads well on
+average. The second bar is what makes "attractive" mean nothing in the category
+disqualifies it.
+
+How the weakest bar is chosen is a rule rather than a preference: **it is set so
+that no sentence denying the condition can fire.** That drew a line through the
+sentences as well as the bars — a sentence saying the structure has broken, or the
+balance sheet is stretched, or the short side is heavy, had to move down into the
+bands a satisfied condition can never reach. Both ends are held by the consistency
+test.
+
+**Impact.** HPO is stricter, and visibly so: across the seven watched assets it now
+reads one for six of them. That is the honest output of the conditions as stated,
+and it is recorded in the backlog as a shape worth deciding on rather than a defect
+to tune away.
+
+**Revisit.** When the standard score defines what a reading means, both bars are
+re-derived from it.
+
+---
+
 End of Document

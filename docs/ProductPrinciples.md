@@ -286,6 +286,22 @@ time. A number changed in one place and not the others is how a report starts
 contradicting itself — and a report that disagrees with itself is worse than one
 that is merely wrong, because the reader cannot tell which half to believe.
 
+**A reading is decided once, and everything that uses it reads the same decision.**
+The grade, the sentence and the opportunity judgement are three views of one
+reading. Where each of them decided privately what a number meant, AIS said an
+asset had a near term catalyst in one line and no clear catalyst in the near term
+forty lines below it — about the same calendar, from the same run.
+
+**A sentence may not deny the verdict beside it.** If AIS says a category reads
+well, nothing it writes from the same readings may say that it does not. Where a
+threshold would let both appear, the threshold is wrong, not the reader's patience.
+
+**And "reads well" means nothing in it disqualifies it.** A category that reads well
+on average while holding a measurement at the bottom of its scale has not been read
+well; it has been averaged. Cheap multiples beside a negative cash flow are not an
+attractive valuation, and a report that says they are has used a number to avoid a
+judgement.
+
 ---
 
 ## 12. When AIS Thinks and When It Speaks
