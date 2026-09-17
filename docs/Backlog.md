@@ -205,8 +205,33 @@ new feature, and it would have to earn its lines.
 
 ## Watch Universe — membership sets, not tiers
 
-**Confirmed. Not built.** The universe is configuration; the monitor that reads
-it is not, and the two are deliberately decoupled.
+**Built.** The universe is configuration; the monitor that reads it is not, and the
+two are deliberately decoupled.
+
+| Built | Where |
+| --- | --- |
+| The sets, an entry, and the collection with its lookups. | `models/watch_universe.py` |
+| Reading a watchlist, validating it, and the fallback. | `config/watchlist.py` |
+| The path, on `AIS_WATCHLIST`. | `config/config.py` |
+| The universe deciding what is evaluated, and supplying each asset's identity. | `app/application.py` |
+| The watchlist AIS runs on today, with real names, exchanges and profiles. | `config/watchlist.json` |
+
+**The fallback.** A watchlist wins when it can be used. When it is absent, empty or
+unusable the configured tickers are used instead, as a universe whose only set is
+the core watchlist — which is what a watchlist listing the same symbols would
+produce. `AIS_TICKER` is therefore still the way to run without a file, and the
+change that introduced the file did not make any watched asset disappear.
+
+**`AssetProfile` is live.** It was declared, carried through the model, and never
+set: `Application._asset` built every asset as unknown. The watchlist states the
+kind, and the kind now reaches the analyzer. A profile that cannot be recognised is
+left unknown rather than guessed, because a guess about the kind of an asset
+silently changes what AIS is able to say about it.
+
+**A gap the enum has.** `AssetProfile` has no member for a consumer staples
+business, so MNST is honestly left unknown. Adding one is a small change with a
+real decision behind it — what different treatment the kind implies — and it belongs
+with the work below rather than with the file.
 
 **Tiers were rejected.** A tier is an ordered, exclusive thing, and what AIS
 actually has is membership: NVDA is in the M7, in AI and in Semiconductor at the
@@ -290,25 +315,18 @@ copies of its name, exchange, currency and profile, and the two could disagree.
 | `app/application.py` | Iterates the universe instead of `config.tickers`, and stops inventing asset metadata. | Small |
 | Everything else | **Nothing.** Evaluators, pipeline, report model, contracts and scheduler are untouched. | — |
 
-That last row is the point of the design: **membership is configuration and
+That last row held when the work was done: **membership is configuration and
 orchestration, and it does not enter the judgement chain.**
 
-**A side benefit worth taking.** The universe file naturally carries each asset's
-name, exchange, currency and profile, which is exactly what `Application._asset`
-currently invents — it builds every asset as `exchange="UNKNOWN"`,
-`currency="USD"`, `profile=AssetProfile.UNKNOWN`. So `AssetProfile` exists as a
-concept, is consumed nowhere, and has never been set. Populating it from the
-universe file is what finally makes the ETF, bank and cyclical branches anything
-other than dead code.
+**What is still not built, and whose job it is:**
 
-**A migration risk that has to be handled.** Replacing `Config.tickers` with a file
-would make the seven assets AIS is watching today disappear the moment the change
-lands, unless there is a path: `AIS_TICKER` is set in the user's environment and is
-the only reason those seven are watched. The intended path is that the ticker list
-stays as the fallback — with no watchlist file, the configured tickers become a
-universe whose only set is Core — so the change is invisible on the day it lands.
+| Set | Filled by | When |
+| --- | --- | --- |
+| Portfolio | The Portfolio Layer, from the broker. | Phase E |
+| Temporary | The runtime, from the calendar. | Phase D |
+| Theme | It is derived once the file carries a `themes` mapping. The file ships with an empty mapping, so the set is empty because nobody has stated a theme yet — not because anything is missing. | Any time |
 
-**Still not this phase.** The daily report sends one message per asset, so a
+**Not this phase either.** The daily report sends one message per asset, so a
 universe of forty names is forty pushes a day. A digest is a **report model**
 change — the backlog records that "a single combined daily message would be a new
 report structure" — and it has to be decided before the universe grows much beyond
@@ -358,6 +376,41 @@ yet, so it is recorded here rather than written into
 
 Not built. The triggers are defined here; the scheduling that would run them is
 not, and this round changes nothing in the code.
+
+### Only one of the two scheduled reports is active, and it is the morning one
+
+**Confirmed.** When scheduled reports are built, **only the 09:00 Live Morning
+Brief runs.** The 21:00 Pre-Market Brief stays defined and stays off until the
+Market Layer exists.
+
+The reason is not caution, it is that the two would be the same report. AIS reads
+per-asset evidence — a quote summary and a year of daily bars — and that evidence
+changes about once per trading day. At 09:00 Beijing the latest completed US session
+is D-1 and the latest daily bar is D-1's; at 21:00 Beijing the session has not opened
+yet, so the latest completed session is **still D-1** and the bar is the same bar.
+Same evidence, same readings, same sentences, same conclusion.
+
+Two scheduled reports on one piece of evidence is not two reports. It is one report
+sent twice, with the second copy arriving when the reader has already read the first
+— and if the source happens to tick a price in between, the second copy will report
+that tick as though it were news.
+
+**What makes 21:00 a report of its own is Phase C.** A pre-market brief answers what
+changed overnight: pre-market prices, futures, volatility, yields, the dollar, the
+morning's macro releases, overnight news. None of it exists yet, and without it the
+brief has no content of its own. The same evidence gap is why 09:00 is described as
+a *live* brief rather than a recap — there is nothing between the two hours to make
+a recap out of.
+
+So the order holds: **Phase C first, then 21:00 becomes its own report.** Until
+then, one scheduled report, at the hour when the data is freshest — five hours after
+the session it describes, with the after-hours results already in.
+
+**What this does not mean.** It does not mean the trigger exists. Nothing fires at
+09:00 today: the scheduler is an interval whose phase comes from when the process
+started, and the market-open gate skips every cycle outside the US session, which
+09:00 Beijing is. Building the trigger is items A, C and D below, and it is a
+runtime change, not a universe one.
 
 **A report has two times, and they are chosen for different reasons.** The
 **evaluation anchor** is set by the data: an analysis is worth computing once the

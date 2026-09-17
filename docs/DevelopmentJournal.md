@@ -1041,4 +1041,41 @@ nothing about the file changes.
 
 ---
 
+### One scheduled report until the evidence can tell two apart
+
+**Context.** Two scheduled reports were defined: a pre-market brief at 21:00 Beijing
+and a live morning brief at 09:00. Both were about to be built, and the question was
+asked whether they could be sent now.
+
+**Decision.** Only the morning one runs. The pre-market brief stays defined and
+stays off until the Market Layer exists.
+
+**Reason.** The two would be the same report. AIS reads a quote summary and a year
+of daily bars per asset, and that evidence changes about once per trading day. At
+09:00 Beijing the latest completed US session is D-1 — and at 21:00 Beijing the
+session has still not opened, so the latest completed session is **still D-1**, and
+the latest bar is the same bar. Two reports built from one piece of evidence are not
+two reports; they are one report sent twice, and the second copy arrives when the
+reader has already read the first.
+
+There is a worse version of the same problem. If the source ticks a price during
+extended hours, the second copy will not be identical — it will show a movement that
+is not news. **A report whose only change comes from resampling the same data is
+worse than no report**, because it teaches the reader to look for meaning where
+there is only noise.
+
+What makes 21:00 a report of its own is therefore not the clock. It is the
+market-level evidence — pre-market prices, futures, volatility, yields, the dollar,
+the morning's macro releases — that only exists at that hour. Phase C is what turns
+the pre-market brief from a second copy into a report.
+
+**Impact.** Recorded in the backlog as the reason the order is Phase C then 21:00,
+and recorded explicitly that this is not a decision to build the 09:00 trigger: the
+scheduler still has no notion of an hour, and the market-open gate still skips
+everything outside the US session.
+
+**Revisit.** When the Market Layer can answer what changed overnight.
+
+---
+
 End of Document

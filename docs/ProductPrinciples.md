@@ -356,6 +356,14 @@ The same reasoning applies inside a file. When the same membership can be writte
 two ways — a mapping and a list of its values — it will not stay equal, so it is
 written one way and the other is derived.
 
+**And a label that decides what AIS can say must be stated, never guessed.** What
+kind of thing an asset is decides which questions apply to it: an exchange-traded
+fund has no earnings, a bank has no current ratio, and a report that treats those
+absences as zeros has said something false about the asset. So the kind is stated
+where a person can state it, and left unknown where nobody has — because guessing it
+would quietly change what AIS is able to say, and a changed ability to speak is
+never visible in the output.
+
 ---
 
 End of Document
