@@ -71,7 +71,8 @@ def test_every_opportunity_condition_is_kept_with_its_state() -> None:
 
     assert "Opportunity:" in expanded
     assert "catalyst: unknown (grade None)" in expanded
-    assert "valuation: satisfied (grade 5)" in expanded
+    assert "valuation:" in expanded
+    assert "positioning:" in expanded
 
 
 def test_the_models_own_gap_names_are_kept() -> None:

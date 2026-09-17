@@ -223,17 +223,17 @@ def test_the_trend_insight_reads_its_moving_averages() -> None:
     above = _text(
         _insight(
             Category.TREND,
-            trend_ma20_gap=0.04,
-            trend_ma60_gap=0.03,
-            trend_ma120_gap=0.02,
+            trend_ma20_gap=0.06,
+            trend_ma60_gap=0.06,
+            trend_ma120_gap=0.03,
         )
     )
     below = _text(
         _insight(
             Category.TREND,
-            trend_ma20_gap=-0.04,
-            trend_ma60_gap=-0.03,
-            trend_ma120_gap=-0.02,
+            trend_ma20_gap=-0.10,
+            trend_ma60_gap=-0.10,
+            trend_ma120_gap=-0.15,
         )
     )
 

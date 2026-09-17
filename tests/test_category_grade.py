@@ -1,76 +1,190 @@
-"""Tests for the provisional category grade.
+"""Tests for the star grade.
 
-The grade is what an investor sees instead of a category score. These tests
-describe what each measurement reads at, and, most importantly, that a
-degenerate reading never reads as a good one.
+The grade is a view of the category's reading and nothing more. These tests
+describe that it is drawn from the reading layer rather than from a table of its
+own, so that the stars beside a sentence cannot disagree with the sentence.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
-from analysis.category_grade import MAX_GRADE, MIN_GRADE, _reading_of, stars
-from contracts.market_data_provider import MarketMetric
+from analysis.analysis_result import AnalysisResult
+from analysis.category_grade import (
+    MAX_GRADE,
+    MIN_GRADE,
+    catalyst_days,
+    grade_for_category,
+    stars,
+)
+from contracts.market_data_provider import (
+    MarketDataPoint,
+    MarketDataSnapshot,
+    MarketMetric,
+)
+from models.asset import Asset
+from models.asset_profile import AssetProfile
+from models.catalyst_event import CatalystEvent, CatalystEventKind
+from models.category import Category
+from models.category_score import CategoryScore
+from models.coverage import Coverage
+from models.decision_state import DecisionState
+from models.overall_assessment import OverallAssessment
+from models.recommendation import Recommendation
+
+_NOW = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
 
 
-def test_a_low_multiple_reads_better_than_a_high_one() -> None:
-    assert _reading_of(MarketMetric.PE, 10.0) == 5
-    assert _reading_of(MarketMetric.PE, 16.0) == 4
-    assert _reading_of(MarketMetric.PE, 22.0) == 3
-    assert _reading_of(MarketMetric.PE, 30.0) == 2
-    assert _reading_of(MarketMetric.PE, 90.0) == 1
+def _snapshot(**values: float) -> MarketDataSnapshot:
+    return MarketDataSnapshot(
+        symbol="AAPL",
+        source="Test source",
+        retrieved_at=_NOW,
+        points=tuple(
+            MarketDataPoint(
+                metric=metric,
+                value=values.get(metric.value),
+                reason="test reason",
+            )
+            for metric in MarketMetric
+        ),
+    )
 
 
-def test_a_higher_margin_reads_better_than_a_lower_one() -> None:
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, 0.30) == 5
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, 0.15) == 4
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, 0.08) == 3
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, 0.04) == 2
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, 0.01) == 1
+def _result(snapshot: MarketDataSnapshot | None, **events: object) -> AnalysisResult:
+    return AnalysisResult(
+        asset=Asset(
+            ticker="AAPL",
+            name="Apple Inc.",
+            exchange="NASDAQ",
+            currency="USD",
+            profile=AssetProfile.MATURE_TECH,
+        ),
+        assessment=OverallAssessment(
+            overall_score=1.0,
+            confidence=1.0,
+            grade="PLACEHOLDER",
+            category_scores=(
+                CategoryScore(
+                    category=Category.VALUATION,
+                    score=1.0,
+                    confidence=1.0,
+                    coverage=Coverage(assessed=1, total=1),
+                    summary="summary",
+                    evidence_references=("AAPL.market_data.pe",),
+                ),
+            ),
+        ),
+        recommendation=Recommendation(
+            decision_state=DecisionState.WATCH,
+            confidence=1.0,
+            investment_thesis="Placeholder.",
+            evidence_references=("AAPL.market_data.pe",),
+        ),
+        market_data=snapshot,
+        events=events.get("events", ()),  # type: ignore[arg-type]
+    )
 
 
-def test_a_negative_ratio_never_reads_as_cheap() -> None:
-    # A negative enterprise value to EBITDA means there is no EBITDA to measure
-    # against. Reading it as a very low multiple would call it the cheapest
-    # thing on the list.
-    assert _reading_of(MarketMetric.EV_EBITDA, -238.22) == MIN_GRADE
-    assert _reading_of(MarketMetric.PE, -12.0) == MIN_GRADE
-    assert _reading_of(MarketMetric.PEG, -0.4) == MIN_GRADE
+def test_the_grade_is_the_mean_of_the_category_readings() -> None:
+    # Prices to earnings of 10 reads five and a margin of 0.30 reads five; the
+    # valuation category takes only its own measurements.
+    result = _result(_snapshot(pe=10.0, peg=0.8, ev_ebitda=6.0))
+
+    assert grade_for_category(result, Category.VALUATION) == 5
 
 
-def test_negative_owners_equity_reads_as_the_worst_case() -> None:
-    assert _reading_of(MarketMetric.DEBT_TO_EQUITY, -50.0) == MIN_GRADE
+def test_a_cheap_multiple_beside_a_negative_cash_flow_is_not_a_five() -> None:
+    # The valuation grade is an average, and the cash reading is part of it. A
+    # report that showed five stars here would be contradicting its own sentence
+    # about the cash flow.
+    result = _result(_snapshot(pe=10.0, peg=0.8, ev_ebitda=6.0, fcf_yield=-0.30))
+
+    assert grade_for_category(result, Category.VALUATION) == 4
 
 
-def test_a_negative_margin_reads_as_the_worst_case() -> None:
-    assert _reading_of(MarketMetric.PROFIT_MARGIN, -0.215) == MIN_GRADE
-    assert _reading_of(MarketMetric.RETURN_ON_EQUITY, -0.079) == MIN_GRADE
-    assert _reading_of(MarketMetric.FREE_CASH_FLOW_MARGIN, -0.328) == MIN_GRADE
+def test_a_category_with_nothing_read_shows_no_grade() -> None:
+    assert grade_for_category(_result(_snapshot()), Category.VALUATION) is None
+    assert grade_for_category(_result(None), Category.VALUATION) is None
 
 
-def test_beta_is_read_by_how_far_it_moves_not_by_which_way() -> None:
-    assert _reading_of(MarketMetric.BETA, 2.61) == MIN_GRADE
-    assert _reading_of(MarketMetric.BETA, -2.61) == MIN_GRADE
-    assert _reading_of(MarketMetric.BETA, 0.7) == MAX_GRADE
+@pytest.mark.parametrize(
+    ("days", "expected"),
+    [(1, 5), (7, 5), (8, 4), (30, 4), (31, 3), (90, 3), (91, 2), (180, 2), (181, 1)],
+)
+def test_the_catalyst_grade_reads_how_near_the_nearest_event_is(
+    days: int, expected: int
+) -> None:
+    event = CatalystEvent(
+        kind=CatalystEventKind.EARNINGS,
+        occurs_on=_NOW.date() + timedelta(days=days),
+        source="Test source",
+        confirmed=True,
+        description="季度财报",
+    )
+
+    result = _result(_snapshot(), events=(event,))
+
+    assert catalyst_days(result) == days
+    assert grade_for_category(result, Category.CATALYST) == expected
 
 
-def test_a_measurement_with_no_bands_is_not_graded() -> None:
-    assert _reading_of(MarketMetric.AVERAGE_VOLUME, 50_000_000.0) is None
-    assert _reading_of(MarketMetric.FLOAT_SHARES, 2_500_000_000.0) is None
+def test_an_event_that_moves_no_view_does_not_grade_the_catalyst() -> None:
+    event = CatalystEvent(
+        kind=CatalystEventKind.EX_DIVIDEND,
+        occurs_on=_NOW.date() + timedelta(days=2),
+        source="Test source",
+        confirmed=True,
+        description="除息",
+    )
+
+    result = _result(_snapshot(), events=(event,))
+
+    assert catalyst_days(result) is None
+    assert grade_for_category(result, Category.CATALYST) is None
 
 
-def test_a_missing_value_is_not_graded() -> None:
-    assert _reading_of(MarketMetric.PE, None) is None
+def test_how_many_events_there_are_does_not_move_the_grade() -> None:
+    one = _result(
+        _snapshot(),
+        events=(
+            CatalystEvent(
+                kind=CatalystEventKind.EARNINGS,
+                occurs_on=_NOW.date() + timedelta(days=20),
+                source="s",
+                confirmed=True,
+                description="d",
+            ),
+        ),
+    )
+    many = _result(
+        _snapshot(),
+        events=tuple(
+            CatalystEvent(
+                kind=kind,
+                occurs_on=_NOW.date() + timedelta(days=days),
+                source="s",
+                confirmed=True,
+                description="d",
+            )
+            for kind, days in (
+                (CatalystEventKind.EARNINGS, 20),
+                (CatalystEventKind.FOMC, 40),
+                (CatalystEventKind.PRODUCT_LAUNCH, 60),
+            )
+        ),
+    )
+
+    assert grade_for_category(one, Category.CATALYST) == grade_for_category(
+        many, Category.CATALYST
+    )
 
 
 @pytest.mark.parametrize(
     ("grade", "expected"),
-    [
-        (5, "★★★★★"),
-        (4, "★★★★☆"),
-        (3, "★★★☆☆"),
-        (1, "★☆☆☆☆"),
-    ],
+    [(5, "★★★★★"), (4, "★★★★☆"), (3, "★★★☆☆"), (1, "★☆☆☆☆")],
 )
 def test_stars_show_the_grade_out_of_five(grade: int, expected: str) -> None:
     assert stars(grade) == expected
@@ -79,3 +193,5 @@ def test_stars_show_the_grade_out_of_five(grade: int, expected: str) -> None:
 def test_stars_never_leave_the_scale() -> None:
     assert stars(0) == "★☆☆☆☆"
     assert stars(9) == "★★★★★"
+    assert MIN_GRADE == 1
+    assert MAX_GRADE == 5

@@ -18,6 +18,11 @@ from __future__ import annotations
 
 from analysis.insight.context import InsightContext
 from analysis.labels import catalyst_kind_label, catalyst_kind_reason, catalyst_when
+from evaluation.reading.windows import (
+    CATALYST_WINDOW_DAYS,
+    IMMINENT_DAYS,
+    NEAR_TERM_DAYS,
+)
 from models.catalyst_event import (
     CATALYST_PRIORITY_ORDER,
     CatalystEvent,
@@ -26,11 +31,9 @@ from models.catalyst_event import (
 )
 from models.insight import InsightLine
 
-# How far ahead an event is still worth writing an insight about.
-_WINDOW_DAYS = 90
+# How many events make a calendar worth calling busy. It decides wording and never
+# a judgement: the reading is the nearest event and never how many there are.
 _DENSE_EVENTS = 3
-_IMMINENT_DAYS = 7
-_NEAR_DAYS = 30
 
 
 def build(context: InsightContext) -> tuple[InsightLine, ...]:
@@ -82,11 +85,11 @@ def _timing(events: list[CatalystEvent], context: InsightContext) -> InsightLine
     """Return what the calendar amounts to, naming no event."""
     nearest = min(event.days_from(context.moment) for event in events)
     reference = tuple(context.event_reference(event) for event in events)
-    if nearest <= _IMMINENT_DAYS:
+    if nearest <= IMMINENT_DAYS:
         text = "一周内即有事件落地。"
     elif len(events) >= _DENSE_EVENTS:
         text = "未来一个月催化较密集。"
-    elif nearest <= _NEAR_DAYS:
+    elif nearest <= NEAR_TERM_DAYS:
         text = "未来一个月存在可能改变预期的事件。"
     else:
         text = "近期暂无明确催化，等待更远的事件。"
@@ -105,7 +108,7 @@ def _upcoming(context: InsightContext) -> list[CatalystEvent]:
         for event in context.events
         if event.is_upcoming(context.moment)
         and not event.is_mechanical
-        and event.days_from(context.moment) <= _WINDOW_DAYS
+        and event.days_from(context.moment) <= CATALYST_WINDOW_DAYS
     ]
 
 

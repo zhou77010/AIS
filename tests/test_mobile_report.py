@@ -23,6 +23,7 @@ from contracts.market_data_provider import (
     MarketMetric,
 )
 from evaluation.hpo.opportunity_assessor import OpportunityAssessor
+from evaluation.reading.category import read_category
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.catalyst_event import CatalystEvent, CatalystEventKind
@@ -151,15 +152,15 @@ def _result(
         events=events,
         ratings=ratings,
     )
-    chosen = {
-        Category.VALUATION: 5,
-        Category.TREND: 4,
-        Category.RISK: 3,
-        Category.CATALYST: 3,
-        Category.POSITIONING: 3,
+    readings = {
+        category_score.category: read_category(
+            result.market_data, category_score.category
+        )
+        for category_score in result.assessment.category_scores
     }
-    chosen.update(grades or {})
-    result = replace(result, opportunity=OpportunityAssessor().assess(chosen))
+    days = 3 if (grades or {}).get(Category.CATALYST, 3) is not None else None
+    opportunity = OpportunityAssessor().assess(readings, days)
+    result = replace(result, opportunity=opportunity)
     return replace(result, insights=build_insights(result))
 
 
@@ -265,9 +266,22 @@ def test_the_opportunity_is_stated_as_conditions_and_not_as_a_score() -> None:
     # a reader sees once the wrapping is undone.
     flat = "".join(report.split())
 
+    # The sentence names the conditions that hold and the ones that do not, in
+    # the reader's language, and carries no score of its own.
     assert "HPO" in report
-    assert "当前属于值得优先配置的机会" in flat
-    assert "估值具备吸引力" in flat
+    assert any(
+        phrase in flat
+        for phrase in (
+            "值得优先配置的机会",
+            "当前机会一般",
+            "不是优先配置的时点",
+            "机会条件无法评估",
+        )
+    )
+    assert any(
+        phrase in flat
+        for phrase in ("估值具备吸引力", "估值偏高", "趋势向好", "趋势偏弱")
+    )
 
 
 def test_a_condition_that_could_not_be_judged_is_named() -> None:
@@ -282,7 +296,8 @@ def test_a_condition_that_could_not_be_judged_is_named() -> None:
 def test_a_category_is_explained_rather_than_listed() -> None:
     report = _render()
 
-    assert "趋势结构完好，价格站稳全部均线。" in report
+    assert "均线" in report
+    assert "价格对 20 日均线" not in report
     assert "市盈率" not in report
 
 

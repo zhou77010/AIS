@@ -1,12 +1,16 @@
 """What is being paid, and what that says about expectations.
 
-A multiple is a price divided by something the business delivers, and on its own
-it says nothing. What it means depends on what it is measured against: a low
-multiple on a shrinking business is not cheap, and a high one on a business
-growing into it is not expensive.
+A multiple is a price divided by something the business delivers, and on its own it
+says nothing. What it means depends on what it is measured against: a low multiple
+on a shrinking business is not cheap, and a high one on a business growing into it
+is not expensive.
 
 Nothing here says the price will rise or fall. It says what the current price
 already assumes, which is the part a reader can act on.
+
+What is being paid is the category read as a whole, so the sentence about the level
+is the category's own reading — the same number the grade beside it is drawn from.
+Where the bands fall is decided once, in the reading layer, and not here.
 """
 
 from __future__ import annotations
@@ -15,9 +19,12 @@ from analysis.insight.context import InsightContext
 from contracts.market_data_provider import MarketMetric as M
 from models.insight import InsightLine
 
-_CHEAP = 5
-_EXPENSIVE = 2
-_HIGH_GROWTH = 0.20
+_MULTIPLES = (M.PE, M.PEG, M.EV_EBITDA)
+_STRONGEST = 5
+_STRONG = 4
+_WEAK = 3
+_WEAKEST = 2
+_ABSENT = 1
 
 
 def build(context: InsightContext) -> tuple[InsightLine, ...]:
@@ -30,67 +37,43 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
 
 
 def _level(context: InsightContext) -> InsightLine | None:
-    """Return whether the multiples read cheap, fair or expensive together."""
-    rankings = [
-        grade
-        for grade in (
-            _cheapness(context.value(M.PE), 12.0, 18.0, 25.0, 35.0),
-            _cheapness(context.value(M.PEG), 1.0, 1.5, 2.0, 3.0),
-            _cheapness(context.value(M.EV_EBITDA), 8.0, 12.0, 18.0, 25.0),
-        )
-        if grade is not None
-    ]
-    metrics = [
-        metric
-        for metric in (M.PE, M.PEG, M.EV_EBITDA)
-        if context.has(metric) and (context.value(metric) or 0) > 0
-    ]
-    reference = context.reference(*metrics)
-    if not rankings or not reference:
-        return None
+    """Return what the category reads as a whole.
 
-    average = sum(rankings) / len(rankings)
-    if average >= _CHEAP - 0.5:
+    The reading is the category's own, which is what the grade is drawn from. When
+    the sentence and the grade were computed separately they could disagree, and
+    they did: a report could show four stars beside a sentence about how expensive
+    the asset was.
+    """
+    mean = context.reading.mean_score
+    reference = context.reference(
+        *[
+            metric
+            for metric in _MULTIPLES
+            if context.has(metric) and not context.is_absent(metric)
+        ]
+    )
+    if mean is None or not reference:
+        return None
+    if mean >= _STRONG:
         return InsightLine("估值偏低，价格未反映太多乐观预期。", reference)
-    if average <= _EXPENSIVE + 0.5:
+    if mean <= _WEAKEST:
         return InsightLine("估值偏高，市场已经给出明显溢价。", reference)
     return InsightLine("估值处于合理区间，市场尚未给予明显溢价。", reference)
 
 
-def _cheapness(
-    value: float | None, best: float, good: float, fair: float, poor: float
-) -> int | None:
-    """Return how cheap one multiple reads, five being cheapest.
-
-    A multiple that is not positive is not a level to be read: a negative price
-    to earnings means a loss rather than a bargain, and it is left out.
-    """
-    if value is None or value <= 0:
-        return None
-    if value <= best:
-        return 5
-    if value <= good:
-        return 4
-    if value <= fair:
-        return 3
-    if value <= poor:
-        return 2
-    return 1
-
-
 def _expectations(context: InsightContext) -> InsightLine | None:
     """Return whether the price is already assuming the growth on offer."""
-    pe = context.value(M.PE)
-    growth = context.value(M.EARNINGS_GROWTH)
-    expected = context.value(M.EXPECTED_EARNINGS_CHANGE)
-    if pe is None or pe <= 0 or growth is None:
+    pe = context.score(M.PE)
+    growth = context.score(M.EARNINGS_GROWTH)
+    expected = context.score(M.EXPECTED_EARNINGS_CHANGE)
+    if pe is None or growth is None or context.is_absent(M.PE):
         return None
     reference = context.reference(M.PE, M.EARNINGS_GROWTH)
-    if pe >= 25.0 and growth < _HIGH_GROWTH:
+    if pe <= _WEAK and growth <= _STRONG:
         return InsightLine("高估值缺少增长匹配，价格依赖预期。", reference)
-    if pe <= 15.0 and growth >= _HIGH_GROWTH:
+    if pe >= _STRONG and growth == _STRONGEST:
         return InsightLine("增长不低而倍数不高，价格尚未反映。", reference)
-    if expected is not None and expected < 0 and pe >= 25.0:
+    if expected == _ABSENT and pe <= _WEAK:
         return InsightLine(
             "预期转为回落，估值扩张空间有限。",
             context.reference(M.PE, M.EXPECTED_EARNINGS_CHANGE),
@@ -99,13 +82,18 @@ def _expectations(context: InsightContext) -> InsightLine | None:
 
 
 def _cash(context: InsightContext) -> InsightLine | None:
-    """Return whether the price is supported by cash the business produces."""
-    yield_ = context.value(M.FCF_YIELD)
-    if yield_ is None:
+    """Return whether the price is supported by cash the business produces.
+
+    This is the clause that earns its place beside a cheap multiple: a valuation can
+    read well on multiples and still be unsupported, and a reader who is not told
+    will take the level as settling the question.
+    """
+    cash = context.score(M.FCF_YIELD)
+    if cash is None:
         return None
     reference = context.reference(M.FCF_YIELD)
-    if yield_ < 0:
+    if cash == _ABSENT:
         return InsightLine("自由现金流为负，估值缺少现金收益支撑。", reference)
-    if yield_ < 0.02:
+    if cash == _WEAKEST:
         return InsightLine("现金回报很薄，价格由预期支撑。", reference)
     return InsightLine("现金流提供了实际的估值支撑。", reference)

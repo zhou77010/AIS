@@ -11,9 +11,9 @@ from dataclasses import replace
 from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
-from analysis.category_grade import grade_for_category
-from analysis.insight.builder import build_insights
-from analysis.plain_language import measurements_of, sentence_for
+from analysis.category_grade import catalyst_days, grade_for_category, reading_for
+from analysis.insight.builder import build_insights, insight_for
+from analysis.plain_language import measurements_of
 from app.rating_tracker import RatingTracker
 from config.logging_config import get_logger
 from contracts.catalyst_event_provider import CatalystEventProvider
@@ -32,6 +32,7 @@ from evaluation.trend.trend_evaluator import TrendEvaluator
 from evaluation.valuation.valuation_evaluator import ValuationEvaluator
 from models.asset import Asset
 from models.catalyst_event import CatalystEvent
+from models.category import Category
 from models.category_rating import CategoryRating
 from models.opportunity_assessment import OpportunityAssessment
 from models.recommendation import Recommendation
@@ -130,21 +131,23 @@ class AssetAnalyzer:
     def _assess_opportunity(self, result: AnalysisResult) -> OpportunityAssessment:
         """Return the opportunity judgement for a result just produced.
 
-        The judgement reads the grade of each category and nothing else: no
-        evidence is consulted again, because HPO is a synthesis of judgements
-        already reached rather than a second reading of the data.
+        The judgement reads what each category's measurements read as, and nothing
+        else: no evidence is consulted again, because HPO is a synthesis of
+        judgements already reached rather than a second reading of the data. The
+        catalyst is passed as a distance rather than as a reading, because a date
+        is not a measurement that fits a snapshot.
 
         Args:
             result: Analysis result just produced.
 
         Returns:
-            Opportunity judgement over the categories that were graded.
+            Opportunity judgement over the categories that could be read.
         """
-        grades = {
-            category_score.category: grade_for_category(result, category_score.category)
+        readings = {
+            category_score.category: reading_for(result, category_score.category)
             for category_score in result.assessment.category_scores
         }
-        return self._opportunity_assessor.assess(grades)
+        return self._opportunity_assessor.assess(readings, catalyst_days(result))
 
     def _rate(self, asset: Asset, result: AnalysisResult) -> tuple[CategoryRating, ...]:
         """Return the rating of every category a judgement was reached for.
@@ -170,9 +173,7 @@ class AssetAnalyzer:
             grade = grade_for_category(result, category_score.category)
             if grade is None:
                 continue
-            reason = (
-                sentence_for(result, category_score.category) or category_score.summary
-            )
+            reason = _reason_for(result, category_score.category)
             readings = {
                 point.metric: point.value
                 for point in measurements_of(result, category_score.category)
@@ -235,3 +236,25 @@ class AssetAnalyzer:
         events = self._event_provider.fetch_events(asset.ticker)
         self._logger.info("catalyst events for %s: %d", asset.ticker, len(events))
         return events
+
+
+def _reason_for(result: AnalysisResult, category: Category) -> str:
+    """Return one line saying what a category reads as, for the rating record.
+
+    The interpretation belongs to the insight layer, so this takes its first
+    sentence rather than writing one: a reason composed here would be a second
+    opinion about what the category means, which is what the reading layer exists
+    to prevent. A category the insight layer had nothing to say about falls back to
+    the summary the assembler built.
+    """
+    insight = insight_for(result, category)
+    if insight is not None and not insight.is_empty:
+        return insight.lines[0].text
+    return next(
+        (
+            score.summary
+            for score in result.assessment.category_scores
+            if score.category is category
+        ),
+        "",
+    )

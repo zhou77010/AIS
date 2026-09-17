@@ -33,6 +33,8 @@ from contracts.market_data_provider import (
     MarketDataSnapshot,
     MarketMetric,
 )
+from evaluation.hpo.opportunity_assessor import OpportunityAssessor
+from evaluation.reading.category import read_category
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.catalyst_event import CatalystEvent, CatalystEventKind
@@ -45,6 +47,9 @@ from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
 _NOW = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
+
+# How far away the nearest catalyst is in the fixtures, inside the near term.
+CATALYST_DAYS = 12
 
 # A plausible full set of measurements, taken from a real run.
 _FULL: dict[str, float] = {
@@ -129,8 +134,6 @@ def _result(
     ratings: tuple[CategoryRating, ...] = (),
 ) -> AnalysisResult:
     """Return a result with its insights and opportunity built, as a run produces."""
-    from evaluation.hpo.opportunity_assessor import OpportunityAssessor
-
     judged = categories or tuple(
         category for category in CATEGORY_ORDER if category is not Category.HPO
     )
@@ -162,14 +165,12 @@ def _result(
         events=events,
         ratings=ratings,
     )
-    grades = {
-        Category.VALUATION: 5,
-        Category.TREND: 4,
-        Category.RISK: 3,
-        Category.CATALYST: 3,
-        Category.POSITIONING: 3,
+    readings = {
+        category_score.category: read_category(market_data, category_score.category)
+        for category_score in result.assessment.category_scores
     }
-    result = replace(result, opportunity=OpportunityAssessor().assess(grades))
+    opportunity = OpportunityAssessor().assess(readings, CATALYST_DAYS)
+    result = replace(result, opportunity=opportunity)
     return replace(result, insights=build_insights(result))
 
 

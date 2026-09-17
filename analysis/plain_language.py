@@ -1,68 +1,26 @@
-"""Turning measurements into the sentences an investor reads.
+"""Turning an opportunity judgement into the sentence an investor reads.
 
-A report is not a table of numbers. A reader wants to be told what the numbers
-amount to, in their own language: "整体趋势向上" rather than a range position of
-0.717 beside a change of +24.6%.
+A report is not a table of numbers, and it is not a list of conditions either. The
+opportunity judgement is a set of named conditions that hold or do not; a reader
+wants the sentence those conditions amount to.
 
-Everything here is a translation, never a new judgement. Each sentence restates
-measurements that were retrieved and says nothing that those measurements do not
-already say. Where a measurement is missing, the sentence is not written at all;
-nothing is inferred to fill it.
+**What is no longer here.** This module used to translate measurements into
+sentences about trends, holdings and the calendar. The insight layer does that now,
+and it does it from the same bands the grade is read from. Keeping a second set of
+sentences here meant two places decided what a measurement meant, which is how the
+report came to describe the same number two ways.
 
-The bands below are the same kind of provisional presentation as the category
-grade: conventional readings, not methodology and not Constitution semantics,
-and to be replaced once the standard score is defined. See
-:mod:`analysis.category_grade`.
+What remains is the one sentence nothing else owns: what the opportunity conditions
+amount to, and what the report's headline says about them.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
-
 from analysis.analysis_result import AnalysisResult
-from analysis.labels import (
-    catalyst_kind_label,
-    opportunity_condition_label,
-    opportunity_headline,
-)
-from contracts.market_data_provider import MarketDataPoint, MarketMetric
-from models.catalyst_event import CatalystEvent
+from analysis.labels import opportunity_condition_label, opportunity_headline
+from contracts.market_data_provider import MarketDataPoint
 from models.category import Category
 from models.opportunity_assessment import OpportunityAssessment
-
-# Which moving averages the price is measured against, nearest first.
-_MOVING_AVERAGES = (
-    MarketMetric.TREND_MA20_GAP,
-    MarketMetric.TREND_MA60_GAP,
-    MarketMetric.TREND_MA120_GAP,
-)
-
-_MACD_STRONG = 0.010
-_MACD_WEAK = -0.010
-_RSI_STRONG = 60.0
-_RSI_WEAK = 40.0
-_VOLUME_BUSY = 0.30
-_VOLUME_QUIET = -0.30
-
-# Older readings, used only when no indicator could be computed. Where the
-# price sits within the range it has traded in.
-_POSITION_BANDS: tuple[tuple[float, str], ...] = (
-    (0.80, "接近一年高位"),
-    (0.60, "位于一年高位区间"),
-    (0.40, "位于一年中段"),
-    (0.20, "位于一年低位区间"),
-    (float("-inf"), "接近一年低位"),
-)
-
-# Which way the price has moved over the window.
-_DIRECTION_BANDS: tuple[tuple[float, str], ...] = (
-    (0.20, "整体趋势向上"),
-    (0.05, "整体小幅上行"),
-    (-0.05, "整体横盘"),
-    (-0.20, "整体小幅下行"),
-    (float("-inf"), "整体趋势向下"),
-)
 
 
 def measurements_of(
@@ -70,8 +28,8 @@ def measurements_of(
 ) -> list[MarketDataPoint]:
     """Return the retrieved measurements that bear on one category.
 
-    A measurement may support more than one category, so a category's readings
-    are the ones whose categories include it, not only the ones filed under it.
+    A measurement may support more than one category, so a category's readings are
+    the ones whose categories include it, not only the ones filed under it.
     """
     snapshot = result.market_data
     if snapshot is None:
@@ -83,270 +41,14 @@ def measurements_of(
     ]
 
 
-def sentence_for(result: AnalysisResult, category: Category) -> str | None:
-    """Return the plain language sentence for a category, when one is written.
-
-    Only categories whose measurements read better as a sentence have one. The
-    rest report their measurements, and this returns None for them.
-    """
-    if category is Category.CATALYST:
-        return catalyst_sentence(result.events, _moment_for(result))
-    if category not in _SENTENCE_BUILDERS:
-        return None
-    values = {
-        point.metric: point.value
-        for point in measurements_of(result, category)
-        if point.value is not None
-    }
-    return _SENTENCE_BUILDERS[category](values)
-
-
-def _moment_for(result: AnalysisResult) -> datetime:
-    """Return the moment a reading is measured against."""
-    snapshot = result.market_data
-    return datetime.now() if snapshot is None else snapshot.retrieved_at
-
-
-# Which categories are written as a sentence, and the function that writes it.
-# Every sentence restates measurements that were retrieved and adds nothing to
-# them; a category whose readings are simply a list of figures is not here.
-# Catalyst is not here either: it is written from its events rather than from
-# measurements, and it is handled in :func:`sentence_for`.
-_SENTENCE_BUILDERS: dict[
-    Category, Callable[[Mapping[MarketMetric, float]], str | None]
-] = {
-    Category.TREND: lambda values: trend_sentence(values),
-    Category.POSITIONING: lambda values: positioning_sentence(values),
-}
-
-
-def trend_sentence(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return what the price has been doing, in plain language.
-
-    The sentence restates the measurements that were retrieved and says nothing
-    they do not already say. A measurement that is missing removes its clause
-    rather than being inferred.
-
-    Args:
-        values: Retrieved trend measurements, keyed by metric.
-
-    Returns:
-        A sentence, or None when none of the measurements were retrieved.
-    """
-    clauses: list[str] = []
-
-    alignment = _alignment_clause(values)
-    if alignment is not None:
-        clauses.append(alignment)
-
-    momentum = _momentum_clause(values)
-    if momentum is not None:
-        clauses.append(momentum)
-
-    volume = _volume_clause(values)
-    if volume is not None:
-        clauses.append(volume)
-
-    if not clauses:
-        return _fallback_sentence(values)
-    return "，".join(clauses) + "。"
-
-
-def _alignment_clause(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return where the price sits against its moving averages."""
-    gaps = [values[metric] for metric in _MOVING_AVERAGES if metric in values]
-    if not gaps:
-        return None
-    above = sum(1 for gap in gaps if gap > 0)
-    if above == len(gaps):
-        return "价格站上全部均线"
-    if above * 2 > len(gaps):
-        return "价格位于多数均线上方"
-    if above == 0:
-        return "价格跌破全部均线"
-    return "价格在多空均线之间"
-
-
-def _momentum_clause(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return what momentum and strength read as."""
-    macd = values.get(MarketMetric.TREND_MACD)
-    rsi = values.get(MarketMetric.TREND_RSI)
-
-    if macd is not None and macd >= _MACD_STRONG:
-        return "动能明显转强"
-    if macd is not None and macd <= _MACD_WEAK:
-        return "动能转弱"
-    if rsi is not None and rsi >= _RSI_STRONG:
-        return "走势偏强"
-    if rsi is not None and rsi <= _RSI_WEAK:
-        return "走势偏弱"
-    if macd is not None or rsi is not None:
-        return "动能中性"
-    return None
-
-
-def _volume_clause(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return what trading activity reads as."""
-    ratio = values.get(MarketMetric.TREND_VOLUME_RATIO)
-    if ratio is None:
-        return None
-    if ratio >= _VOLUME_BUSY:
-        return "成交量明显放大"
-    if ratio <= _VOLUME_QUIET:
-        return "成交量明显萎缩"
-    return None
-
-
-def _fallback_sentence(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return a sentence from the older readings, when no indicator was computed."""
-    position = values.get(MarketMetric.TREND_RANGE_POSITION)
-    direction = values.get(MarketMetric.TREND_DIRECTION)
-    parts: list[str] = []
-    if direction is not None:
-        parts.append(_band(direction, _DIRECTION_BANDS))
-    if position is not None:
-        parts.append(_band(position, _POSITION_BANDS))
-    if not parts:
-        return None
-    return "，".join(parts) + "。"
-
-
-def _band(value: float, bands: tuple[tuple[float, str], ...]) -> str:
-    """Return the phrase a value reads at, first matching band winning."""
-    for threshold, phrase in bands:
-        if value >= threshold:
-            return phrase
-    return bands[-1][1]
-
-
-# How near an event has to be to count as the thing likely to move the price.
-_NEAR_EVENT_DAYS = 30.0
-_IMMINENT_EVENT_DAYS = 7.0
-# Above this many events in the window, the calendar is busy enough to say so.
-_DENSE_CALENDAR_EVENTS = 3
-
-# Conventional readings for who is holding, and how crowded that is.
-_INSTITUTIONAL_HEAVY = 0.60
-_INSTITUTIONAL_LIGHT = 0.20
-_INSIDER_HIGH = 0.10
-_SHORT_HEAVY = 0.10
-_SHORT_LIGHT = 0.03
-_COVER_HEAVY_DAYS = 4.0
-_COVER_LIGHT_DAYS = 2.0
-
-
-def catalyst_sentence(events: Sequence[CatalystEvent], moment: datetime) -> str | None:
-    """Return what could change the investment case, in plain language.
-
-    The sentence is about whether anything is coming and how soon, which is the
-    question a reader has. It says when and does not say which way: whether a
-    report will be good, whether a decision will surprise anyone, whether a
-    launch will succeed — none of that is known before it happens, and a
-    sentence that implied otherwise would be a forecast.
-
-    How many events there are shapes the wording and never a judgement: a busy
-    calendar reads as a busy calendar, not as a better opportunity.
-
-    Args:
-        events: The forthcoming events, in date order.
-        moment: Moment the reading is taken.
-
-    Returns:
-        A sentence, or None when there is no forthcoming event to write about.
-    """
-    upcoming = _upcoming_events(events, moment)
-    if not upcoming:
-        return None
-
-    nearest = upcoming[0]
-    days = nearest.days_from(moment)
-    if days <= _IMMINENT_EVENT_DAYS:
-        return "未来一周即有事件落地，短期可能进入事件驱动阶段。"
-    if days <= _NEAR_EVENT_DAYS and len(upcoming) >= _DENSE_CALENDAR_EVENTS:
-        return "未来一个月催化较密集，短期可能进入事件驱动阶段。"
-    if days <= _NEAR_EVENT_DAYS:
-        return "未来一个月存在可能改变预期的事件。"
-    waiting = catalyst_kind_label(nearest.kind, nearest.description)
-    return f"近期暂无明确催化，未来一段时间主要等待{waiting}。"
-
-
-def _upcoming_events(
-    events: Sequence[CatalystEvent], moment: datetime
-) -> list[CatalystEvent]:
-    """Return the forthcoming events that could change a view, nearest first."""
-    return sorted(
-        (
-            event
-            for event in events
-            if event.is_upcoming(moment) and not event.is_mechanical
-        ),
-        key=lambda event: (event.days_from(moment), event.kind),
-    )
-
-
-def positioning_sentence(values: Mapping[MarketMetric, float]) -> str | None:
-    """Return who is holding the asset, and how crowded that is.
-
-    Holdings and crowding are stated as they were retrieved. A large holding is
-    not called a good one: the scale that would say so is not defined yet, and a
-    sentence is not the place to invent it.
-
-    Args:
-        values: Retrieved positioning measurements, keyed by metric.
-
-    Returns:
-        A sentence, or None when none of the measurements were retrieved.
-    """
-    clauses: list[str] = []
-
-    institutions = values.get(MarketMetric.INSTITUTIONAL_OWNERSHIP)
-    if institutions is not None:
-        if institutions >= _INSTITUTIONAL_HEAVY:
-            clauses.append("筹码以机构为主")
-        elif institutions <= _INSTITUTIONAL_LIGHT:
-            clauses.append("机构参与度不高")
-        else:
-            clauses.append("机构与个人共同持有")
-
-    insiders = values.get(MarketMetric.INSIDER_OWNERSHIP)
-    if insiders is not None and insiders >= _INSIDER_HIGH:
-        clauses.append("管理层持股较重")
-
-    crowding = _crowding_clause(
-        values.get(MarketMetric.SHORT_PERCENT_OF_FLOAT),
-        values.get(MarketMetric.SHORT_RATIO),
-    )
-    if crowding is not None:
-        clauses.append(crowding)
-
-    if not clauses:
-        return None
-    return "，".join(clauses) + "。"
-
-
-def _crowding_clause(short_share: float | None, cover_days: float | None) -> str | None:
-    """Return how crowded the short side of the trade is, or None when unmeasured."""
-    if short_share is None and cover_days is None:
-        return None
-    heavy = (short_share is not None and short_share >= _SHORT_HEAVY) or (
-        cover_days is not None and cover_days >= _COVER_HEAVY_DAYS
-    )
-    if heavy:
-        return "空头力量较重"
-    light = (short_share is None or short_share <= _SHORT_LIGHT) and (
-        cover_days is None or cover_days <= _COVER_LIGHT_DAYS
-    )
-    return "空头力量有限" if light else "空头力量中性"
-
-
 def opportunity_sentence(assessment: OpportunityAssessment) -> str:
     """Return why this is, or is not, one of the better opportunities today.
 
     The sentence names the conditions that hold and the conditions that do not,
     which is the whole of what the judgement contains: there is no combined score
-    behind it to explain, because none was computed. A condition that could not
-    be judged is left out of the sentence and named separately by the report,
-    rather than being written as though it had failed.
+    behind it to explain, because none was computed. A condition that could not be
+    judged is named by the report rather than written into the sentence, so that a
+    question which was never asked is never read as one that was answered.
 
     Args:
         assessment: Opportunity judgement to write.

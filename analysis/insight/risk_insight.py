@@ -1,11 +1,17 @@
 """Where the risk is coming from, and what that means for taking a position.
 
-A list of volatility, beta and drawdown tells a reader that the asset moves. It
-does not tell them whether the movement comes from the price or from the
-business, and that difference decides how a position should be built.
+A list of volatility, beta and drawdown tells a reader that the asset moves. It does
+not tell them whether the movement comes from the price or from the business, and
+that difference decides how a position should be built.
 
-Nothing here says the asset will fall. It says where the uncertainty sits and
-what kind of exposure a buyer is taking on.
+Nothing here says the asset will fall. It says where the uncertainty sits and what
+kind of exposure a buyer is taking on.
+
+**Every sentence is drawn from the band the reading fell in.** A sentence that fired
+at a different threshold from the band beside it was a sentence that could deny the
+grade: volatility reading "middling" could be described as clearly high, and a
+balance sheet reading "middling" could be called heavily indebted. The thresholds
+are band positions now, so the words and the numbers say the same thing.
 """
 
 from __future__ import annotations
@@ -14,13 +20,10 @@ from analysis.insight.context import InsightContext
 from contracts.market_data_provider import MarketMetric as M
 from models.insight import InsightLine
 
-_HIGH_VOLATILITY = 0.45
-_ELEVATED_VOLATILITY = 0.30
-_HIGH_BETA = 1.30
-_DEEP_DRAWDOWN = -0.35
-_NOTABLE_DRAWDOWN = -0.20
-_HEAVY_DEBT = 100.0
-_THIN_LIQUIDITY = 1.0
+_STRONGEST = 5
+_STRONG = 4
+_WEAK = 3
+_WEAKEST = 2
 
 
 def build(context: InsightContext) -> tuple[InsightLine, ...]:
@@ -46,16 +49,16 @@ def _source(context: InsightContext) -> InsightLine | None:
     if not price or not financial:
         return None
 
-    volatility = context.value(M.RISK_VOLATILITY)
-    beta = context.value(M.BETA)
-    debt = context.value(M.DEBT_TO_EQUITY)
-    ratio = context.value(M.CURRENT_RATIO)
+    volatility = context.score(M.RISK_VOLATILITY)
+    beta = context.score(M.BETA)
+    debt = context.score(M.DEBT_TO_EQUITY)
+    ratio = context.score(M.CURRENT_RATIO)
 
-    price_high = (volatility is not None and volatility >= _HIGH_VOLATILITY) or (
-        beta is not None and abs(beta) >= _HIGH_BETA
+    price_high = (volatility is not None and volatility <= _WEAK) or (
+        beta is not None and beta <= _WEAK
     )
-    finances_sound = (debt is None or debt <= _HEAVY_DEBT) and (
-        ratio is None or ratio >= _THIN_LIQUIDITY
+    finances_sound = (debt is None or debt >= _WEAK) and (
+        ratio is None or ratio >= _WEAK
     )
     reference = context.reference(*price, *financial)
     if price_high and finances_sound:
@@ -64,53 +67,47 @@ def _source(context: InsightContext) -> InsightLine | None:
 
 
 def _price_risk(context: InsightContext) -> InsightLine | None:
-    """Return how much the price moves compared with the market."""
-    volatility = context.value(M.RISK_VOLATILITY)
-    beta = context.value(M.BETA)
-    reference = context.reference(
-        *[metric for metric in (M.BETA, M.RISK_VOLATILITY) if context.has(metric)]
-    )
-    if not reference:
+    """Return how much the price moves, in the words of the band it read in."""
+    score = context.score(M.RISK_VOLATILITY)
+    word = context.word(M.RISK_VOLATILITY)
+    if score is None or word is None:
         return None
-    if volatility is not None and volatility >= _HIGH_VOLATILITY:
-        return InsightLine("波动明显偏高，不宜一次性重仓。", reference)
-    if beta is not None and abs(beta) >= _HIGH_BETA:
-        return InsightLine("波动高于市场平均，仓位需要相应控制。", reference)
-    if volatility is not None and volatility >= _ELEVATED_VOLATILITY:
-        return InsightLine("波动高于多数标的，但不属于极端水平。", reference)
-    if volatility is not None:
-        return InsightLine("波动相对温和，价格层面的风险有限。", reference)
-    return None
+    reference = context.reference(M.RISK_VOLATILITY)
+    if score <= _WEAKEST:
+        return InsightLine(f"波动{word}，不宜一次性重仓。", reference)
+    if score == _WEAK:
+        return InsightLine(f"波动{word}，仓位需要相应控制。", reference)
+    if score == _STRONG:
+        return InsightLine(f"波动{word}，尚不属于极端水平。", reference)
+    return InsightLine(f"波动{word}，价格层面的风险有限。", reference)
 
 
 def _drawdown(context: InsightContext) -> InsightLine | None:
     """Return how far the asset has fallen from a peak, and what that says."""
-    drawdown = context.value(M.RISK_DRAWDOWN)
-    if drawdown is None:
+    score = context.score(M.RISK_DRAWDOWN)
+    word = context.word(M.RISK_DRAWDOWN)
+    if score is None or word is None:
         return None
     reference = context.reference(M.RISK_DRAWDOWN)
-    if drawdown <= _DEEP_DRAWDOWN:
-        return InsightLine("历史回撤幅度较大，说明下跌具有方向性。", reference)
-    if drawdown <= _NOTABLE_DRAWDOWN:
-        return InsightLine("回撤幅度不算小，价格有明显的下行段。", reference)
-    return InsightLine("回撤控制得较好，尚未出现深度下跌。", reference)
+    if score <= _WEAKEST:
+        return InsightLine(f"历史回撤{word}，说明下跌具有方向性。", reference)
+    if score == _WEAK:
+        return InsightLine("回撤幅度中等，价格有过明显的下行段。", reference)
+    return InsightLine(f"历史回撤{word}，尚未出现深度下跌。", reference)
 
 
 def _financial_risk(context: InsightContext) -> InsightLine | None:
     """Return whether the balance sheet adds uncertainty of its own."""
-    debt = context.value(M.DEBT_TO_EQUITY)
-    ratio = context.value(M.CURRENT_RATIO)
-    reference = context.reference(
-        *[
-            metric
-            for metric in (M.DEBT_TO_EQUITY, M.CURRENT_RATIO)
-            if context.has(metric)
-        ]
-    )
+    debt = context.score(M.DEBT_TO_EQUITY)
+    ratio = context.score(M.CURRENT_RATIO)
+    metrics = [
+        metric for metric in (M.DEBT_TO_EQUITY, M.CURRENT_RATIO) if context.has(metric)
+    ]
+    reference = context.reference(*metrics)
     if not reference:
         return None
-    if debt is not None and debt >= _HEAVY_DEBT:
+    if debt is not None and debt <= _WEAKEST:
         return InsightLine("负债水平偏高，财务质量本身构成风险。", reference)
-    if ratio is not None and ratio < _THIN_LIQUIDITY:
-        return InsightLine("短期偿债能力偏紧，需要关注流动性。", reference)
+    if ratio is not None and ratio <= _WEAKEST:
+        return InsightLine("短期偿债能力偏紧，需要留意流动性。", reference)
     return InsightLine("资产负债表本身没有构成额外风险。", reference)
