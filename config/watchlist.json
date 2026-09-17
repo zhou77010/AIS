@@ -1,0 +1,59 @@
+{
+  "members": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "profile": "mature_tech",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "CGDV",
+      "name": "Capital Group Dividend Value ETF",
+      "exchange": "NYSE Arca",
+      "currency": "USD",
+      "profile": "etf",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "APP",
+      "name": "AppLovin Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "profile": "high_growth",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "BABA",
+      "name": "Alibaba Group Holding Limited",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "HSBC",
+      "name": "HSBC Holdings plc",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "profile": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "MNST",
+      "name": "Monster Beverage Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "RKLB",
+      "name": "Rocket Lab Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "profile": "high_growth",
+      "sets": ["growth"]
+    }
+  ],
+  "themes": {}
+}

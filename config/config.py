@@ -25,6 +25,9 @@ DEFAULT_ANALYSIS_INTERVAL_MINUTES = 30
 # The curated catalyst calendar lives in the repository, because it holds events
 # no connected source reports and a person maintains it.
 DEFAULT_CALENDAR_RELATIVE_PATH = Path("data") / "calendar" / "events.json"
+# The watchlist holds AIS's own statement about what to watch, so it lives with the
+# configuration rather than with the data collected from the world.
+DEFAULT_WATCHLIST_RELATIVE_PATH = Path("config") / "watchlist.json"
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class Config:
     pushplus_token: str | None = None
     analysis_interval_minutes: int = DEFAULT_ANALYSIS_INTERVAL_MINUTES
     catalyst_calendar_file: Path = PROJECT_ROOT / DEFAULT_CALENDAR_RELATIVE_PATH
+    watchlist_file: Path = PROJECT_ROOT / DEFAULT_WATCHLIST_RELATIVE_PATH
 
     @property
     def log_file_path(self) -> Path:
@@ -69,7 +73,17 @@ class Config:
             pushplus_token=_read_value(EnvVar.PUSHPLUS_TOKEN),
             analysis_interval_minutes=_read_analysis_interval_minutes(),
             catalyst_calendar_file=_resolve_calendar_file(),
+            watchlist_file=_resolve_watchlist_file(),
         )
+
+
+def _resolve_watchlist_file() -> Path:
+    """Return the watchlist, resolved against the root."""
+    raw = _read_value(EnvVar.WATCHLIST)
+    if raw is None:
+        return PROJECT_ROOT / DEFAULT_WATCHLIST_RELATIVE_PATH
+    path = Path(raw).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def _resolve_calendar_file() -> Path:

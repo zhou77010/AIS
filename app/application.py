@@ -29,10 +29,11 @@ from communication.wechat import WeChatNotifier
 from communication.wecom_app import WeComAppNotifier
 from config.config import Config
 from config.logging_config import configure_logging, get_logger
+from config.watchlist import load_watch_universe, universe_from_tickers
 from data.catalyst_events import build_catalyst_event_provider
 from data.market_data import build_market_data_provider
 from models.asset import Asset
-from models.asset_profile import AssetProfile
+from models.watch_universe import WatchUniverse
 from utils.constants import APP_NAME, APP_VERSION, CycleStatus, LoggerName
 from utils.exceptions import AISException
 from utils.market_clock import MarketClock
@@ -57,6 +58,7 @@ class Application:
                 retrieves market data over the network.
         """
         self._config = config if config is not None else Config.from_environment()
+        self._universe, self._universe_loaded = _resolve_universe(self._config)
         self._market_clock = market_clock if market_clock is not None else MarketClock()
         self._analyzer = (
             analyzer
@@ -81,8 +83,12 @@ class Application:
         configure_logging(self._config)
         self._logger.info("%s %s started", APP_NAME, APP_VERSION)
         self._logger.info(
-            "analysing %s on a %d minute interval",
-            ", ".join(self._config.tickers),
+            "watching %s from %s",
+            ", ".join(self._universe.tickers),
+            "the watchlist" if self._universe_loaded else "the configured tickers",
+        )
+        self._logger.info(
+            "analysing on a %d minute interval",
             self._config.analysis_interval_minutes,
         )
         try:
@@ -92,7 +98,7 @@ class Application:
         self._logger.info("%s stopped", APP_NAME)
 
     def _run_cycle(self) -> CycleStatus:
-        """Run one evaluation cycle over every configured asset.
+        """Run one evaluation cycle over every watched asset.
 
         Each asset is evaluated and decided on its own, and reports its own
         outcome. The status returned is the one outcome of the cycle as a whole.
@@ -105,21 +111,22 @@ class Application:
             self._logger.info("Skipped evaluation: %s", status.reason)
             return CycleStatus.MARKET_CLOSED
 
-        outcomes = [self._run_asset(ticker) for ticker in self._config.tickers]
+        outcomes = [self._run_asset(asset) for asset in self._universe.assets]
         summary = _summarise(outcomes)
         self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
         return summary
 
-    def _run_asset(self, ticker: str) -> CycleStatus:
+    def _run_asset(self, asset: Asset) -> CycleStatus:
         """Evaluate one asset and notify when its recommendation changed.
 
         Args:
-            ticker: Symbol to evaluate.
+            asset: Asset to evaluate, carrying the identity the watch universe gave
+                it.
 
         Returns:
             The outcome of this asset within the cycle.
         """
-        asset = self._asset(ticker)
+        ticker = asset.ticker
         try:
             result = self._analyzer.analyze_result(asset)
         except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
@@ -146,16 +153,6 @@ class Application:
 
         self._logger.info("Notification sent (%s)", fingerprint.describe())
         return CycleStatus.NOTIFICATION_SENT
-
-    def _asset(self, ticker: str) -> Asset:
-        """Return the asset for one configured symbol."""
-        return Asset(
-            ticker=ticker,
-            name=ticker,
-            exchange="UNKNOWN",
-            currency="USD",
-            profile=AssetProfile.UNKNOWN,
-        )
 
     def _notify(self, result: AnalysisResult) -> None:
         """Send the report through every configured channel.
@@ -240,6 +237,27 @@ class Application:
             raise AISException(
                 "every notification channel failed: " + "; ".join(failures)
             )
+
+
+def _resolve_universe(config: Config) -> tuple[WatchUniverse, bool]:
+    """Return the universe to run with, and whether a watchlist supplied it.
+
+    A watchlist wins when it can be used. When it is absent, empty or unusable the
+    configured tickers are used instead, as a universe whose only set is the core
+    watchlist — which is what a watchlist listing the same symbols would produce.
+    The fallback is not a degraded mode: it is the same universe, with nothing
+    known about the assets beyond their symbols.
+
+    Args:
+        config: Configuration naming both the watchlist and the fallback tickers.
+
+    Returns:
+        The universe, and whether it came from the watchlist.
+    """
+    from_watchlist = load_watch_universe(config.watchlist_file)
+    if from_watchlist is not None:
+        return from_watchlist, True
+    return universe_from_tickers(config.tickers), False
 
 
 def _summarise(outcomes: list[CycleStatus]) -> CycleStatus:

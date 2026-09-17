@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -272,8 +273,17 @@ class _Analyzer:
         return self._result
 
 
-def _config(interval_minutes: int = 30, tickers: tuple[str, ...] = ("AAPL",)) -> Config:
-    """Return a configuration with no notification channel configured."""
+def _config(
+    interval_minutes: int = 30,
+    tickers: tuple[str, ...] = ("AAPL",),
+    watchlist_file: Path | None = None,
+) -> Config:
+    """Return a configuration with no notification channel and no watchlist.
+
+    The watchlist path points at a file that does not exist, so these tests
+    exercise the fallback to the configured tickers. A test that wants the file to
+    win passes a path of its own.
+    """
     return Config(
         environment=Environment.TEST,
         log_level=LogLevel.INFO,
@@ -281,6 +291,7 @@ def _config(interval_minutes: int = 30, tickers: tuple[str, ...] = ("AAPL",)) ->
         log_file_name="ais.log",
         tickers=tickers,
         analysis_interval_minutes=interval_minutes,
+        watchlist_file=watchlist_file or Path("missing") / "watchlist.json",
     )
 
 
@@ -414,6 +425,122 @@ def test_cycle_reports_evaluation_failed_when_notification_raises(
     monkeypatch.setattr(application, "_notify", failing_notify)
 
     assert application._run_cycle() is CycleStatus.EVALUATION_FAILED
+
+
+# --------------------------------------------------------------------------
+# What the run watches
+# --------------------------------------------------------------------------
+
+
+def test_a_watchlist_supplies_the_assets_to_evaluate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The file wins when it can be used. The configured tickers name two symbols
+    # the file does not, and neither of them is evaluated.
+    path = tmp_path / "watchlist.json"
+    path.write_text(
+        json.dumps(
+            {
+                "members": [
+                    {
+                        "symbol": "NVDA",
+                        "name": "NVIDIA Corporation",
+                        "exchange": "NASDAQ",
+                        "currency": "USD",
+                        "profile": "high_growth",
+                        "sets": ["growth"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "BABA"), watchlist_file=path),
+    )
+
+    assert application._run_cycle() is CycleStatus.NOTIFICATION_SENT
+    assert analyzer.seen == ["NVDA"]
+
+
+def test_the_watchlist_supplies_the_asset_identity(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # AssetProfile was declared, carried and never set: every asset was built as
+    # unknown. The watchlist is what finally gives an asset its kind.
+    path = tmp_path / "watchlist.json"
+    path.write_text(
+        json.dumps(
+            {
+                "members": [
+                    {
+                        "symbol": "CGDV",
+                        "name": "Capital Group Dividend Value ETF",
+                        "exchange": "NYSE Arca",
+                        "currency": "USD",
+                        "profile": "etf",
+                        "sets": ["core"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL",), watchlist_file=path),
+    )
+
+    application._run_cycle()
+
+    asset = application._universe.assets[0]
+    assert asset.ticker == "CGDV"
+    assert asset.name == "Capital Group Dividend Value ETF"
+    assert asset.exchange == "NYSE Arca"
+    assert asset.profile is AssetProfile.ETF
+
+
+def test_an_unusable_watchlist_leaves_the_configured_tickers_watching(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A file that cannot be trusted is not used, and nothing goes missing quietly
+    # on the way back to the tickers.
+    path = tmp_path / "watchlist.json"
+    path.write_text("{not json", encoding="utf-8")
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "BABA"), watchlist_file=path),
+    )
+
+    assert application._run_cycle() is CycleStatus.NOTIFICATION_SENT
+    assert analyzer.seen == ["AAPL", "BABA"]
+
+
+def test_without_a_watchlist_the_configured_tickers_are_watched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyzer = _PerTickerAnalyzer()
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "RKLB")),
+    )
+
+    application._run_cycle()
+
+    assert analyzer.seen == ["AAPL", "RKLB"]
+    assert application._universe_loaded is False
 
 
 def test_every_cycle_status_is_distinct() -> None:
