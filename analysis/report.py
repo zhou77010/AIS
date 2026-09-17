@@ -3,6 +3,12 @@
 Renders one analysis result as plain text for console or log output. It uses no
 formatting framework and prints nothing itself.
 
+This is the **expanded report**: the daily report is a projection of the same
+result, and everything the phone leaves out is kept here rather than dropped.
+Every sentence the insight layer wrote, the whole event calendar, the opportunity
+conditions and the model's own names for what was not looked at are all in this
+output.
+
 This module also owns the vocabulary that states where the numbers in a report
 came from, so that every renderer labels the same run the same way.
 """
@@ -10,6 +16,7 @@ came from, so that every renderer labels the same run the same way.
 from __future__ import annotations
 
 from analysis.analysis_result import AnalysisResult
+from analysis.labels import UNASSESSED_ITEMS
 
 LIVE_DATA_LABEL = "LIVE MARKET DATA"
 PLACEHOLDER_DATA_LABEL = "PLACEHOLDER DATA"
@@ -54,7 +61,13 @@ def describe_data_source(result: AnalysisResult) -> str:
 
 
 def generate_report(result: AnalysisResult) -> str:
-    """Render the analysis result as a human readable report.
+    """Render the analysis result as the expanded report.
+
+    This is the layer the daily report projects from. Everything the phone report
+    leaves out is here: every sentence the insight layer wrote, the whole event
+    calendar, the opportunity conditions as they were decided, and the model's own
+    name for each thing that was not looked at. Nothing is dropped from AIS when
+    it is dropped from a phone screen; it moves here.
 
     Args:
         result: Analysis result to render.
@@ -84,11 +97,81 @@ def generate_report(result: AnalysisResult) -> str:
             f"(confidence {category_score.confidence})"
         )
         lines.append(f"      summary: {category_score.summary}")
+    lines.extend(_insight_lines(result))
+    lines.extend(_opportunity_lines(result))
+    lines.extend(_event_lines(result))
+    lines.extend(_gap_lines(result))
     lines.append(
         "  Evidence references: " + ", ".join(recommendation.evidence_references)
     )
     lines.append(f"  Investment thesis: {recommendation.investment_thesis}")
     return "\n".join(lines)
+
+
+def _insight_lines(result: AnalysisResult) -> list[str]:
+    """Return every sentence the insight layer wrote, with what it stands on."""
+    lines = ["  Insights:"]
+    for insight in result.insights:
+        lines.append(f"    {insight.category.value}:")
+        for entry in insight.lines:
+            lines.append(f"      - {entry.text}")
+            lines.append(f"        from: {', '.join(entry.references)}")
+    return lines
+
+
+def _opportunity_lines(result: AnalysisResult) -> list[str]:
+    """Return the opportunity judgement and every condition behind it."""
+    opportunity = result.opportunity
+    if opportunity is None:
+        return []
+    lines = ["  Opportunity:"]
+    grade = "none" if opportunity.grade is None else str(opportunity.grade)
+    lines.append(f"    grade: {grade}")
+    lines.append(f"    summary: {opportunity.summary}")
+    for entry in opportunity.conditions:
+        state = (
+            "unknown"
+            if entry.satisfied is None
+            else ("satisfied" if entry.satisfied else "not satisfied")
+        )
+        lines.append(f"    - {entry.condition.value}: {state} (grade {entry.grade})")
+    return lines
+
+
+def _event_lines(result: AnalysisResult) -> list[str]:
+    """Return every dated event the run was built on, in date order."""
+    if not result.events:
+        return []
+    lines = ["  Catalyst events:"]
+    for event in result.events:
+        confirmation = "confirmed" if event.confirmed else "unconfirmed"
+        lines.append(
+            f"    - {event.occurs_on} {event.kind.value} ({event.scope.value}, "
+            f"{event.priority.value}, {confirmation}) {event.description} "
+            f"[{event.source}]"
+        )
+    return lines
+
+
+def _gap_lines(result: AnalysisResult) -> list[str]:
+    """Return what was not looked at, named the way the model names it.
+
+    The daily report names whole categories and no more. The dimension-level and
+    metric-level detail is a reader's reference rather than their reading, so it
+    is kept here.
+    """
+    snapshot = result.market_data
+    lines = ["  Not assessed:"]
+    for category_score in result.assessment.category_scores:
+        if not category_score.evidence_references:
+            lines.append(f"    - {category_score.category.value}: no judgement")
+    for category, items in UNASSESSED_ITEMS.items():
+        for item in items:
+            lines.append(f"    - {category.value}: {item}")
+    if snapshot is not None:
+        for point in snapshot.missing_points:
+            lines.append(f"    - {point.metric.value}: {point.reason}")
+    return lines
 
 
 def data_provenance_lines(result: AnalysisResult) -> list[str]:

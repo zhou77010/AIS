@@ -46,9 +46,7 @@ def _register(context: InsightContext) -> InsightLine | None:
         return None
     if institutions is not None and institutions >= _INSTITUTIONAL_HEAVY:
         if insiders is not None and insiders >= _INSIDER_HIGH:
-            return InsightLine(
-                "筹码以机构为主，管理层同时持有较重，结构相对稳定。", reference
-            )
+            return InsightLine("筹码以机构为主，管理层持有较重。", reference)
         return InsightLine("筹码以机构为主，持有结构相对稳定。", reference)
     if institutions is not None and institutions <= _INSTITUTIONAL_LIGHT:
         return InsightLine("机构参与度不高，持有结构以个人为主。", reference)
@@ -84,6 +82,6 @@ def _pressure(context: InsightContext) -> InsightLine | None:
     if share is None or share < _SHORT_NOTABLE:
         return None
     return InsightLine(
-        "仍需关注空头是否继续增加，那会改变筹码结构。",
+        "空头持仓处于值得留意的水平。",
         context.reference(M.SHORT_PERCENT_OF_FLOAT),
     )

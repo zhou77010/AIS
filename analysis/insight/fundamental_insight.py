@@ -50,7 +50,7 @@ def _profitability(context: InsightContext) -> InsightLine | None:
     if not reference:
         return None
     if margin is not None and margin >= _STRONG_MARGIN:
-        return InsightLine("盈利能力较强，毛利率到净利的转化效率高。", reference)
+        return InsightLine("盈利能力较强，净利转化效率高。", reference)
     if margin is not None and margin < 0:
         return InsightLine("目前仍处于亏损状态，盈利尚未形成。", reference)
     if return_on_equity is not None and return_on_equity >= _STRONG_RETURN:
@@ -73,11 +73,11 @@ def _quality(context: InsightContext) -> InsightLine | None:
         return None
     reference = context.reference(M.PROFIT_MARGIN, M.FREE_CASH_FLOW_MARGIN)
     if margin >= _GOOD_MARGIN and cash < _WEAK_CASH:
-        return InsightLine("利润质量存在疑问：有利润，但现金流没有跟上。", reference)
+        return InsightLine("利润质量存疑：有利润，但没有现金流。", reference)
     if margin >= _GOOD_MARGIN and cash >= _STRONG_CASH:
         return InsightLine("利润有现金流支撑，盈利质量较好。", reference)
     if margin < 0 and cash < 0:
-        return InsightLine("亏损与现金流出同时出现，需要外部资金支持。", reference)
+        return InsightLine("亏损与现金流出同时出现。", reference)
     return None
 
 

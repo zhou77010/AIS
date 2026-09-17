@@ -51,7 +51,7 @@ def _level(context: InsightContext) -> InsightLine | None:
 
     average = sum(rankings) / len(rankings)
     if average >= _CHEAP - 0.5:
-        return InsightLine("估值处于偏低区间，价格没有反映太多乐观预期。", reference)
+        return InsightLine("估值偏低，价格未反映太多乐观预期。", reference)
     if average <= _EXPENSIVE + 0.5:
         return InsightLine("估值偏高，市场已经给出明显溢价。", reference)
     return InsightLine("估值处于合理区间，市场尚未给予明显溢价。", reference)
@@ -87,12 +87,12 @@ def _expectations(context: InsightContext) -> InsightLine | None:
         return None
     reference = context.reference(M.PE, M.EARNINGS_GROWTH)
     if pe >= 25.0 and growth < _HIGH_GROWTH:
-        return InsightLine("高估值缺少与之匹配的增长，价格依赖预期兑现。", reference)
+        return InsightLine("高估值缺少增长匹配，价格依赖预期。", reference)
     if pe <= 15.0 and growth >= _HIGH_GROWTH:
-        return InsightLine("增长不低而倍数不高，价格尚未反映已实现的增长。", reference)
+        return InsightLine("增长不低而倍数不高，价格尚未反映。", reference)
     if expected is not None and expected < 0 and pe >= 25.0:
         return InsightLine(
-            "估值不低而预期转为回落，估值扩张的空间有限。",
+            "预期转为回落，估值扩张空间有限。",
             context.reference(M.PE, M.EXPECTED_EARNINGS_CHANGE),
         )
     return None
@@ -107,5 +107,5 @@ def _cash(context: InsightContext) -> InsightLine | None:
     if yield_ < 0:
         return InsightLine("自由现金流为负，估值缺少现金收益支撑。", reference)
     if yield_ < 0.02:
-        return InsightLine("现金回报很薄，价格主要由预期而非现金流支撑。", reference)
+        return InsightLine("现金回报很薄，价格由预期支撑。", reference)
     return InsightLine("现金流提供了实际的估值支撑。", reference)

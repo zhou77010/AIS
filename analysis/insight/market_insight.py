@@ -27,9 +27,7 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
         return ()
     reference = context.reference(M.MARKET_DIRECTION)
     if direction >= _RISING:
-        return (
-            InsightLine("过去一年大盘整体上行，环境对承担风险相对友好。", reference),
-        )
+        return (InsightLine("大盘整体上行，环境对风险资产偏友好。", reference),)
     if direction <= _FALLING:
-        return (InsightLine("过去一年大盘整体下行，环境对新增仓位不利。", reference),)
+        return (InsightLine("大盘整体下行，环境对新增仓位不利。", reference),)
     return (InsightLine("大盘整体横盘，环境没有提供方向。", reference),)

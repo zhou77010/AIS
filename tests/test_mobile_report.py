@@ -1,26 +1,22 @@
-"""Tests for the mobile report renderer.
+"""Tests for the language the mobile report is written in.
 
-The report is what the user reads on their phone, so these tests describe what
-it must say and, just as importantly, what it must never say: model bookkeeping,
-raw scores on incomparable scales, or a low grade where nothing was read at all.
+What the report is allowed to contain, how long it may be and what has to be on
+the first screen are asserted in ``test_report_projection.py``. This module is
+about the words: that a reader is given the vocabulary they use rather than the
+model's, and that nothing the model thinks in reaches the screen.
 """
 
 from __future__ import annotations
 
-import unicodedata
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from analysis.analysis_result import AnalysisResult
 from analysis.insight.builder import build_insights
-from analysis.labels import METRIC_NAMES, category_label
-from analysis.mobile_report import (
-    DATA_PREFIX,
-    NOT_ASSESSED_PREFIX,
-    SECTION_SEPARATOR,
-    render_mobile_report,
-)
-from analysis.report import LIVE_DATA_LABEL
+from analysis.labels import METRIC_NAMES, category_label, decision_label
+from analysis.mobile_report import render_mobile_report
 from contracts.market_data_provider import (
     MarketDataPoint,
     MarketDataSnapshot,
@@ -35,104 +31,115 @@ from models.category_rating import CategoryRating
 from models.category_score import CategoryScore
 from models.coverage import Coverage
 from models.decision_state import DecisionState
-from models.opportunity_assessment import OpportunityAssessment
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
-_GENERATED_AT = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
-_SOURCE = "Yahoo Finance"
-_LINE_WIDTH = 42
+_NOW = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
 
-_UNITS: dict[Category, int] = {Category.RISK: 8, Category.MARKET: 3, Category.TREND: 3}
+_VALUES: dict[str, float] = {
+    "pe": 27.3,
+    "peg": 0.46,
+    "ev_ebitda": 25.3,
+    "fcf_yield": 0.022,
+    "beta": 2.22,
+    "debt_to_equity": 16.97,
+    "current_ratio": 4.59,
+    "profit_margin": 0.637,
+    "return_on_equity": 1.172,
+    "free_cash_flow_margin": 0.138,
+    "market_direction": 0.149,
+    "trend_ma20_gap": 0.03,
+    "trend_ma60_gap": 0.02,
+    "trend_ma120_gap": 0.01,
+    "trend_macd": 0.02,
+    "trend_rsi": 61.0,
+    "risk_volatility": 0.35,
+    "risk_drawdown": -0.25,
+    "earnings_growth": 0.271,
+    "expected_earnings_change": 0.100,
+    "short_percent_of_float": 0.0096,
+    "short_ratio": 2.97,
+    "institutional_ownership": 0.663,
+    "insider_ownership": 0.0165,
+    "average_volume": 53_800_000.0,
+    "float_shares": 14_600_000_000.0,
+}
 
 
 def _asset() -> Asset:
     return Asset(
         ticker="NVDA",
         name="NVDA",
-        exchange="UNKNOWN",
+        exchange="NASDAQ",
         currency="USD",
-        profile=AssetProfile.UNKNOWN,
+        profile=AssetProfile.HIGH_GROWTH,
     )
-
-
-def _point(metric: MarketMetric, value: float) -> MarketDataPoint:
-    return MarketDataPoint(metric=metric, value=value, reason="test reason")
 
 
 def _snapshot(**values: float) -> MarketDataSnapshot:
-    points = tuple(
-        MarketDataPoint(
-            metric=metric,
-            value=values.get(metric.value),
-            reason="test reason",
-        )
-        for metric in MarketMetric
-    )
+    merged = dict(_VALUES)
+    merged.update(values)
     return MarketDataSnapshot(
         symbol="NVDA",
-        source=_SOURCE,
-        retrieved_at=_GENERATED_AT,
-        points=points,
-    )
-
-
-def _live(**values: float) -> MarketDataSnapshot:
-    """Return a snapshot with a plausible full set of measurements."""
-    defaults = {
-        "pe": 27.3,
-        "peg": 0.46,
-        "ev_ebitda": 25.3,
-        "fcf_yield": 0.008,
-        "beta": 2.22,
-        "debt_to_equity": 16.97,
-        "current_ratio": 4.59,
-        "profit_margin": 0.637,
-        "return_on_equity": 1.172,
-        "free_cash_flow_margin": 0.138,
-        "market_direction": 0.149,
-        "trend_range_position": 0.717,
-        "trend_direction": 0.246,
-        "earnings_growth": 1.259,
-        "expected_earnings_change": 0.974,
-    }
-    defaults.update(values)
-    return _snapshot(**defaults)
-
-
-def _score(category: Category, assessed: int | None = None) -> CategoryScore:
-    total = _UNITS.get(category, 5)
-    return CategoryScore(
-        category=category,
-        score=13.10,
-        confidence=1.0,
-        coverage=Coverage(
-            assessed=total if assessed is None else assessed, total=total
+        source="Yahoo Finance",
+        retrieved_at=_NOW,
+        points=tuple(
+            MarketDataPoint(
+                metric=metric,
+                value=merged.get(metric.value),
+                reason="test reason",
+            )
+            for metric in MarketMetric
         ),
-        summary="summary",
-        evidence_references=(f"NVDA.market_data.{category.value}",),
     )
+
+
+def _rating(**overrides) -> CategoryRating:
+    settings = {
+        "category": Category.TREND,
+        "grade": 4,
+        "momentum": 0.05,
+        "changed_at": _NOW,
+        "changed": False,
+        "previous_grade": None,
+        "reason": "reason",
+        "since": _NOW - timedelta(days=6),
+        "driver": MarketMetric.TREND_MA20_GAP,
+        "driver_from": 0.01,
+        "driver_to": 0.02,
+    }
+    settings.update(overrides)
+    return CategoryRating(**settings)
 
 
 def _result(
-    categories: tuple[Category, ...] = (Category.VALUATION,),
+    categories: tuple[Category, ...] | None = None,
+    *,
     market_data: MarketDataSnapshot | None = None,
-    assessed: int | None = None,
-    ratings: tuple[CategoryRating, ...] = (),
-    opportunity: OpportunityAssessment | None = None,
     events: tuple[CatalystEvent, ...] = (),
+    ratings: tuple[CategoryRating, ...] = (),
+    grades: dict[Category, int | None] | None = None,
 ) -> AnalysisResult:
-    scores = tuple(
-        _score(category, assessed) if assessed is not None else _score(category)
-        for category in categories
+    judged = categories or tuple(
+        category for category in CATEGORY_ORDER if category is not Category.HPO
     )
-    return AnalysisResult(
+    result = AnalysisResult(
         asset=_asset(),
         assessment=OverallAssessment(
             overall_score=13.10,
             confidence=1.0,
             grade="PLACEHOLDER",
-            category_scores=scores,
+            category_scores=tuple(
+                CategoryScore(
+                    category=category,
+                    score=13.10,
+                    confidence=1.0,
+                    coverage=Coverage(assessed=1, total=1),
+                    summary="summary",
+                    evidence_references=(f"NVDA.market_data.{category.value}",),
+                )
+                for category in judged
+            ),
         ),
         recommendation=Recommendation(
             decision_state=DecisionState.WATCH,
@@ -140,540 +147,223 @@ def _result(
             investment_thesis="Placeholder decision.",
             evidence_references=("NVDA.market_data.pe",),
         ),
-        market_data=_live() if market_data is None else market_data,
-        ratings=ratings,
-        opportunity=opportunity,
+        market_data=_snapshot() if market_data is None else market_data,
         events=events,
+        ratings=ratings,
     )
+    chosen = {
+        Category.VALUATION: 5,
+        Category.TREND: 4,
+        Category.RISK: 3,
+        Category.CATALYST: 3,
+        Category.POSITIONING: 3,
+    }
+    chosen.update(grades or {})
+    result = replace(result, opportunity=OpportunityAssessor().assess(chosen))
+    return replace(result, insights=build_insights(result))
 
 
-def _opportunity(**grades: int | None) -> OpportunityAssessment:
-    """Return an opportunity judgement reached from the grades given."""
-    return OpportunityAssessor().assess(
-        {Category.VALUATION: 5, Category.TREND: 4, Category.RISK: 3} | grades
-    )
+def _render(result: AnalysisResult | None = None) -> str:
+    return render_mobile_report(result or _result(), generated_at=_NOW)
 
 
-def _event(
-    kind: CatalystEventKind,
-    days: int,
-    *,
-    confirmed: bool = True,
-    description: str = "",
-) -> CatalystEvent:
-    """Return a catalyst event the given number of days from the report moment.
-
-    Distances are counted from the moment the report is rendered rather than from
-    today, so that an assertion can state the distance the report will write.
-    """
+def _event(kind: CatalystEventKind, days: int, *, confirmed: bool = True):
     return CatalystEvent(
         kind=kind,
-        occurs_on=_GENERATED_AT.date() + timedelta(days=days),
+        occurs_on=_NOW.date() + timedelta(days=days),
         source="Test source",
         confirmed=confirmed,
-        description=description,
+        description="",
         symbol="NVDA",
     )
 
 
-def _stars_in(report: str) -> str:
-    """Return the star line of the catalyst block."""
-    block = _block_for(report, Category.CATALYST)
-    return next(line for line in block if "★" in line)
-
-
-def _rating(
-    momentum: float,
-    *,
-    changed: bool = False,
-    previous_grade: int | None = None,
-    grade: int = 4,
-    changed_at: datetime = _GENERATED_AT,
-    since: datetime | None = None,
-    driver: MarketMetric | None = None,
-    driver_from: float | None = None,
-    driver_to: float | None = None,
-    category: Category = Category.VALUATION,
-) -> CategoryRating:
-    """Return a rating for one category of the test asset."""
-    return CategoryRating(
-        category=category,
-        grade=grade,
-        momentum=momentum,
-        changed_at=changed_at,
-        changed=changed,
-        previous_grade=previous_grade,
-        reason="reason",
-        since=changed_at if since is None else since,
-        driver=driver,
-        driver_from=driver_from,
-        driver_to=driver_to,
-    )
-
-
-def _render(result: AnalysisResult | None = None) -> str:
-    return render_mobile_report(result or _result(), generated_at=_GENERATED_AT)
-
-
-def _width(line: str) -> int:
-    return sum(2 if unicodedata.east_asian_width(c) in {"W", "F"} else 1 for c in line)
-
-
-def _block_for(report: str, category: Category) -> list[str]:
-    """Return the lines of one category's block."""
-    lines = report.splitlines()
-    start = next(
-        index
-        for index, line in enumerate(lines)
-        if line.startswith(category_label(category))
-    )
-    end = next(
-        index
-        for index in range(start + 1, len(lines))
-        if lines[index] == SECTION_SEPARATOR or not lines[index].startswith(" ")
-    )
-    return lines[start:end]
-
-
 # --------------------------------------------------------------------------
-# What AIS concluded
+# The reader's language
 # --------------------------------------------------------------------------
 
 
-def test_report_states_the_decision_in_the_readers_language() -> None:
+def test_the_decision_is_written_in_the_readers_language() -> None:
     report = _render()
 
     assert "结论  观望" in report
-    assert "信心  100%" in report
     assert DecisionState.WATCH.value not in report
+    assert decision_label(DecisionState.WATCH) == "观望"
 
 
-def test_report_carries_the_symbol_and_the_time() -> None:
+def test_every_category_is_named_in_the_readers_language() -> None:
     report = _render()
 
-    assert report.splitlines()[0] == "AIS 日报 · NVDA"
-    assert "2026-09-16 03:20" in report
+    for category in CATEGORY_ORDER:
+        assert category_label(category) in report, category
+        assert category.value not in report, category
+
+
+def test_the_report_carries_the_symbol_and_the_time() -> None:
+    lines = _render().splitlines()
+
+    assert lines[0] == "AIS 日报 · NVDA"
+    assert "2026-09-16 03:20" in lines[1]
+    assert "北京时间" in lines[1]
+
+
+def test_a_measurement_keeps_the_name_an_investor_reads_elsewhere() -> None:
+    # The name is still defined for the evidence and for the expanded report;
+    # the phone report simply does not need it once the meaning is written.
+    assert METRIC_NAMES[MarketMetric.PE] == "市盈率"
 
 
 # --------------------------------------------------------------------------
-# What each category says
+# What the report must never show
 # --------------------------------------------------------------------------
 
 
-def test_report_grades_each_assessed_category() -> None:
-    report = _render(_result((Category.VALUATION, Category.TREND)))
-
-    assert "估值  " in report
-    assert "趋势  " in report
-    assert "★" in report
-
-
-def test_report_explains_each_category_in_the_readers_language() -> None:
-    report = _render(_result((Category.VALUATION,)))
-
-    assert "市盈率 27.30" in report
-    assert category_label(Category.VALUATION) in report
-
-
-def test_report_names_measurements_as_an_investor_reads_them() -> None:
-    for metric in (MarketMetric.PE, MarketMetric.BETA, MarketMetric.PROFIT_MARGIN):
-        assert metric.value not in _render(), metric
-        assert METRIC_NAMES[metric]
-
-
-def test_report_shows_a_movement_inside_a_grade() -> None:
-    # A valuation score falling is a valuation improving, so the arrow points up.
-    report = _render(_result(ratings=(_rating(-0.05),)))
-
-    block = _block_for(report, Category.VALUATION)
-
-    assert any("▲5%" in line for line in block)
-
-
-def test_report_shows_a_movement_the_other_way_too() -> None:
-    report = _render(_result(ratings=(_rating(0.03),)))
-
-    assert "▼3%" in report
-
-
-def test_report_says_how_long_a_movement_has_lasted() -> None:
-    rating = _rating(-0.05, since=_GENERATED_AT - timedelta(days=6))
-
-    report = _render(_result(ratings=(rating,)))
-
-    assert "近6天累计改善" in report
-
-
-def test_report_says_what_moved_while_the_category_moved() -> None:
-    rating = _rating(
-        -0.05,
-        since=_GENERATED_AT - timedelta(days=6),
-        driver=MarketMetric.TREND_MA20_GAP,
-        driver_from=0.010,
-        driver_to=0.020,
-        category=Category.TREND,
-    )
-
-    report = _render(_result((Category.TREND,), ratings=(rating,)))
-
-    assert "原因：" in report
-    assert "均线" in report
-
-
-def test_report_shows_the_movement_in_the_order_grade_time_reason() -> None:
-    rating = _rating(
-        -0.05,
-        since=_GENERATED_AT - timedelta(days=6),
-        driver=MarketMetric.TREND_MA20_GAP,
-        driver_from=0.010,
-        driver_to=0.020,
-        category=Category.TREND,
-    )
-
-    block = _block_for(
-        _render(_result((Category.TREND,), ratings=(rating,))), Category.TREND
-    )
-
-    assert "★" in block[0]
-    assert "▼5%" in block[1]
-    assert "近6天" in block[2]
-    assert block[3].lstrip().startswith("原因：")
-
-
-def test_report_says_when_a_grade_changed_instead_of_showing_movement() -> None:
-    rating = _rating(0.0, changed=True, previous_grade=3, grade=4)
-
-    report = _render(_result(ratings=(rating,)))
-
-    assert "（9月16日 升级）" in report
-    assert "▲" not in report
-
-
-def test_report_calls_a_first_rating_a_first_rating() -> None:
-    rating = _rating(0.0, changed=True, previous_grade=None, grade=4)
-
-    report = _render(_result(ratings=(rating,)))
-
-    assert "（9月16日 首次评级）" in report
-
-
-def test_a_movement_that_rounds_to_nothing_is_not_shown() -> None:
-    report = _render(_result(ratings=(_rating(0.0002),)))
-
-    assert "▲0%" not in report
-    assert "▼0%" not in report
-
-
-def test_report_omits_movement_when_no_rating_was_taken() -> None:
-    report = _render(_result())
-
-    assert "▲" not in report
-    assert "▼" not in report
-    assert "首次评级" not in report
-
-
-def test_report_never_shows_a_raw_category_score() -> None:
-    # The scores are means of measurements on different scales. Showing one
-    # beside another invites a comparison that cannot be made.
+def test_the_report_never_shows_a_raw_category_score() -> None:
     report = _render()
 
     assert "13.10" not in report
     assert "13.1" not in report
 
 
-def test_report_never_shows_how_much_of_a_category_was_assessed() -> None:
-    # How much of a category was looked at is bookkeeping about the model. A
-    # reader is told what was not examined, by name, further down.
-    report = _render(_result((Category.RISK,), assessed=3))
+def test_the_report_never_shows_how_much_of_a_category_was_assessed() -> None:
+    report = _render()
 
-    assert "中已评估" not in report
-    assert "已完整评估" not in report
+    assert "已评估" not in report
+    assert "覆盖" not in report
 
 
-def test_report_translates_trend_into_a_sentence_rather_than_numbers() -> None:
-    report = _render(_result((Category.TREND,)))
-
-    block = _block_for(report, Category.TREND)
-
-    assert any("整体趋势" in line or "一年" in line for line in block)
-    assert not any("52 周区间位置" in line for line in block)
-    assert not any("一年涨跌幅" in line for line in block)
-
-
-def test_report_shows_no_stars_for_a_category_with_no_graded_measurement() -> None:
-    # Only the liquidity measurements, which carry no grade.
-    snapshot = _snapshot(average_volume=50_000_000.0, float_shares=2_500_000_000.0)
-
-    report = _render(_result((Category.RISK,), market_data=snapshot))
-
-    assert "暂无评级" in report
-
-
-# --------------------------------------------------------------------------
-# What was not looked at
-# --------------------------------------------------------------------------
-
-
-def test_report_names_the_categories_it_did_not_judge() -> None:
-    report = _render(_result((Category.VALUATION,)))
-
-    assert NOT_ASSESSED_PREFIX in report
-    for category in CATEGORY_ORDER:
-        if category is not Category.VALUATION:
-            assert category_label(category) in report
-
-
-def test_report_names_the_parts_of_a_category_it_could_not_assess() -> None:
-    report = _render(_result((Category.RISK,), assessed=3))
-
-    assert "事件风险" in report
-    assert "长期风险" in report
-
-
-def test_report_names_a_measurement_it_could_not_retrieve() -> None:
-    report = _render(_result((Category.VALUATION,)))
-
-    assert "DCF 公允价值" in report
-
-
-def test_report_leaves_hpo_unnamed() -> None:
-    # The Constitution does not specify what HPO means, so it cannot be
-    # translated without inventing a meaning for it.
-    report = _render(_result((Category.VALUATION,)))
-
-    assert "HPO" in report
-    assert category_label(Category.HPO) == "HPO"
-
-
-def test_report_omits_the_not_assessed_block_when_nothing_is_outstanding() -> None:
-    # Every category judged, and every measurement retrieved.
-    complete = _snapshot(**{metric.value: 1.0 for metric in MarketMetric})
-
-    report = _render(_result(tuple(CATEGORY_ORDER), market_data=complete))
-
-    assert NOT_ASSESSED_PREFIX not in report
-
-
-# --------------------------------------------------------------------------
-# Whether this is worth allocating to today
-# --------------------------------------------------------------------------
-
-
-def test_report_states_the_opportunity_before_the_categories() -> None:
-    report = _render(_result(opportunity=_opportunity()))
-
-    lines = report.splitlines()
-    hpo = next(index for index, line in enumerate(lines) if line.startswith("HPO"))
-
-    assert hpo < next(
-        index for index, line in enumerate(lines) if line.startswith("估值")
-    )
-
-
-def test_report_writes_the_opportunity_as_conditions_and_not_a_score() -> None:
-    report = _render(_result(opportunity=_opportunity()))
-
-    assert "当前属于值得优先配置的机会" in report
-    assert "估值具备吸引力" in report
-    assert "趋势向好" in report
-
-
-def test_report_names_the_opportunity_conditions_that_do_not_hold() -> None:
-    report = _render(_result(opportunity=_opportunity(valuation=1)))
-
-    assert "但估值偏高" in report
-
-
-def test_report_names_the_opportunity_condition_it_could_not_judge() -> None:
-    # A condition nothing could be said about is reported by name rather than
-    # written as though it had failed.
-    report = _render(_result(opportunity=_opportunity(catalyst=None)))
-
-    assert "未评估的条件：" in report
-    assert "暂无近期催化" in report
-
-
-def test_report_gives_no_opportunity_grade_when_nothing_could_be_judged() -> None:
-    report = _render(_result(opportunity=OpportunityAssessor().assess({})))
-
-    assert "暂无评级" in report
-    assert "机会条件无法评估" in report
-
-
-def test_report_does_not_name_the_opportunity_among_the_things_not_looked_at() -> None:
-    report = _render(
-        _result((Category.VALUATION,), opportunity=_opportunity(catalyst=None)),
-    )
-    block = report.split(NOT_ASSESSED_PREFIX)[1]
-
-    assert "HPO" not in block
-
-
-# --------------------------------------------------------------------------
-# What could change the picture, and who is holding
-# --------------------------------------------------------------------------
-
-
-def test_report_says_when_there_is_no_catalyst() -> None:
-    report = _render(_result((Category.VALUATION,)))
-
-    block = _block_for(report, Category.CATALYST)
-
-    assert "近期暂无明确催化。" in "".join(block)
-
-
-def test_report_groups_catalysts_by_the_layer_they_bear_on() -> None:
-    report = _render(
-        _result(
-            (Category.CATALYST,),
-            events=(
-                _event(CatalystEventKind.EARNINGS, 43),
-                _event(CatalystEventKind.INDUSTRY_POLICY, 20),
-                _event(CatalystEventKind.FOMC, 0),
-            ),
-        )
-    )
-
-    block = _block_for(report, Category.CATALYST)
-
-    assert any(line.strip() == "公司" for line in block)
-    assert any(line.strip() == "行业" for line in block)
-    assert any(line.strip() == "宏观" for line in block)
-    assert any("今日" in line for line in block)
-
-
-def test_report_shows_the_interpretation_and_not_the_measurements() -> None:
-    # What the numbers mean is written by the insight layer; the renderer shows
-    # it and does not compose one of its own.
-    result = _result((Category.VALUATION,), market_data=_snapshot(pe=45.0, peg=3.2))
-
-    report = _render(replace(result, insights=build_insights(result)))
-    block = _block_for(report, Category.VALUATION)
-
-    assert any("估值偏高" in line for line in block)
-    assert not any("市盈率" in line for line in block)
-
-
-def test_report_falls_back_to_measurements_when_there_is_no_insight() -> None:
-    # A reader is owed the figures even when AIS cannot say what they amount to.
-    report = _render(_result((Category.VALUATION,)))
-
-    block = _block_for(report, Category.VALUATION)
-
-    assert any("市盈率" in line for line in block)
-
-
-def test_report_never_shows_a_probability_or_a_target() -> None:
-    result = _result((Category.VALUATION,), market_data=_snapshot(pe=45.0))
-
-    report = _render(replace(result, insights=build_insights(result)))
+def test_the_report_never_shows_a_probability_or_a_target() -> None:
+    report = _render()
 
     assert "概率" not in report
     assert "目标价" not in report
 
 
-def test_report_says_why_each_event_matters() -> None:
-    report = _render(
-        _result((Category.CATALYST,), events=(_event(CatalystEventKind.EARNINGS, 12),))
-    )
-
-    block = _block_for(report, Category.CATALYST)
-
-    assert any("12 天后" in line and "—" in line for line in block)
-    assert any("改变增长预期" in line for line in block)
-
-
-def test_report_marks_a_date_the_source_has_not_confirmed() -> None:
-    report = _render(
-        _result(
-            (Category.CATALYST,),
-            events=(_event(CatalystEventKind.LAUNCH_WINDOW, 9, confirmed=False),),
-        )
-    )
-
-    assert "未确认" in report
-
-
-def test_report_does_not_show_a_count_of_catalysts_as_a_grade() -> None:
-    # Two calendars whose nearest event is the same distance apart read the same
-    # number of stars, however many events each holds.
-    one = _render(
-        _result((Category.CATALYST,), events=(_event(CatalystEventKind.EARNINGS, 20),))
-    )
-    many = _render(
-        _result(
-            (Category.CATALYST,),
-            events=(
-                _event(CatalystEventKind.EARNINGS, 20),
-                _event(CatalystEventKind.FOMC, 40),
-                _event(CatalystEventKind.PRODUCT_LAUNCH, 60),
-            ),
-        )
-    )
-
-    assert _stars_in(one) == _stars_in(many)
-
-
-def test_report_says_the_month_is_busy_when_it_is() -> None:
-    report = _render(
-        _result(
-            (Category.CATALYST,),
-            events=(
-                _event(CatalystEventKind.FOMC, 12),
-                _event(CatalystEventKind.EARNINGS, 20),
-                _event(CatalystEventKind.PRODUCT_LAUNCH, 26),
-            ),
-        )
-    )
-
-    assert "未来一个月催化较密集" in report
-
-
-def test_report_states_positioning_as_a_sentence() -> None:
-    snapshot = _live(
-        institutional_ownership=0.66,
-        insider_ownership=0.016,
-        short_percent_of_float=0.0096,
-        short_ratio=2.97,
-    )
-
-    report = _render(_result((Category.POSITIONING,), market_data=snapshot))
-
-    block = _block_for(report, Category.POSITIONING)
-
-    assert any("筹码以机构为主" in line for line in block)
-    assert any("空头力量" in line for line in block)
-    assert not any("机构持股比例" in line for line in block)
-
-
-# --------------------------------------------------------------------------
-# Where the figures came from
-# --------------------------------------------------------------------------
-
-
-def test_report_states_the_data_quality() -> None:
+def test_the_report_never_shows_a_raw_metric_key() -> None:
     report = _render()
 
-    assert f"{DATA_PREFIX}  {LIVE_DATA_LABEL}" in report
-    assert f"来源  {_SOURCE}" in report
+    for metric in MarketMetric:
+        assert metric.value not in report, metric
 
 
-def test_report_says_the_scale_is_not_defined() -> None:
+def test_the_report_never_shows_the_models_own_gap_names() -> None:
     report = _render()
 
-    assert "综合评分刻度尚未定义，" in report
-    assert "不构成投资建议。" in report
+    for name in ("业务风险", "估值风险", "证据风险", "长期风险", "价格路径"):
+        assert name not in report, name
 
 
 # --------------------------------------------------------------------------
-# Shape
+# What each part says
 # --------------------------------------------------------------------------
 
 
-def test_report_keeps_every_line_within_the_readable_width() -> None:
-    for line in _render(_result(tuple(CATEGORY_ORDER))).splitlines():
-        assert _width(line) <= _LINE_WIDTH, line
+def test_the_opportunity_is_stated_as_conditions_and_not_as_a_score() -> None:
+    report = _render()
+
+    # A sentence is wrapped to fit the screen, so the check is made against what
+    # a reader sees once the wrapping is undone.
+    flat = "".join(report.split())
+
+    assert "HPO" in report
+    assert "当前属于值得优先配置的机会" in flat
+    assert "估值具备吸引力" in flat
 
 
-def test_report_is_deterministic() -> None:
-    assert _render() == _render()
+def test_a_condition_that_could_not_be_judged_is_named() -> None:
+    result = _result(grades={Category.CATALYST: None})
+
+    report = _render(result)
+
+    assert "未评估" in report
+    assert "有近期催化" in report or "暂无近期催化" in report
+
+
+def test_a_category_is_explained_rather_than_listed() -> None:
+    report = _render()
+
+    assert "趋势结构完好，价格站稳全部均线。" in report
+    assert "市盈率" not in report
+
+
+def test_a_movement_says_how_much_how_long_and_what_moved() -> None:
+    report = _render(_result(ratings=(_rating(),)))
+
+    assert "▲5%" in report
+    assert "6天" in report
+    assert "重新站上 20 日均线" in report
+
+
+def test_a_movement_that_rounds_to_nothing_is_not_shown() -> None:
+    report = _render(_result(ratings=(_rating(momentum=0.0002),)))
+
+    assert "▲0%" not in report
+    assert "▼0%" not in report
+
+
+def test_a_grade_change_is_reported_as_a_change_of_grade() -> None:
+    rating = _rating(changed=True, previous_grade=3, grade=4, momentum=0.0)
+
+    assert "趋势 升级" in _render(_result(ratings=(rating,)))
+
+
+def test_a_downgrade_is_reported_too() -> None:
+    rating = _rating(changed=True, previous_grade=4, grade=3, momentum=0.0)
+
+    assert "趋势 降级" in _render(_result(ratings=(rating,)))
+
+
+def test_the_report_shows_no_stars_for_a_category_with_no_graded_measurement() -> None:
+    snapshot = _snapshot(
+        **dict.fromkeys((), 0.0),
+    )
+    thin = MarketDataSnapshot(
+        symbol="NVDA",
+        source="Yahoo Finance",
+        retrieved_at=_NOW,
+        points=tuple(
+            MarketDataPoint(
+                metric=metric,
+                value=(1.0 if metric is MarketMetric.TREND_RANGE_POSITION else None),
+                reason="test reason",
+            )
+            for metric in MarketMetric
+        ),
+    )
+
+    report = _render(_result((Category.MARKET,), market_data=thin))
+
+    assert "暂无评级" in report
+    assert snapshot is not None
+
+
+def test_a_category_nothing_was_judged_for_is_named_at_the_end() -> None:
+    report = _render(_result((Category.MARKET,)))
+
+    assert "尚未评估  基本面" in report
+
+
+def test_the_block_is_left_out_when_every_category_was_judged() -> None:
+    report = _render()
+
+    assert "尚未评估" not in report
+
+
+def test_the_closing_line_names_the_source_and_the_disclaimer() -> None:
+    lines = _render().splitlines()
+
+    assert "Yahoo Finance" in lines[-1]
+    assert "不构成投资建议" in lines[-1]
+
+
+def test_the_report_is_deterministic() -> None:
+    result = _result(ratings=(_rating(),))
+
+    assert _render(result) == _render(result)
+
+
+@pytest.mark.parametrize("ticker", ["AAPL", "RKLB", "CGDV"])
+def test_the_symbol_reaches_the_title(ticker: str) -> None:
+    result = replace(_result(), asset=replace(_asset(), ticker=ticker))
+
+    assert _render(result).splitlines()[0] == f"AIS 日报 · {ticker}"

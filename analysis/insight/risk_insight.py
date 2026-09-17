@@ -73,7 +73,7 @@ def _price_risk(context: InsightContext) -> InsightLine | None:
     if not reference:
         return None
     if volatility is not None and volatility >= _HIGH_VOLATILITY:
-        return InsightLine("波动明显偏高，适合分批建仓而非一次性重仓。", reference)
+        return InsightLine("波动明显偏高，不宜一次性重仓。", reference)
     if beta is not None and abs(beta) >= _HIGH_BETA:
         return InsightLine("波动高于市场平均，仓位需要相应控制。", reference)
     if volatility is not None and volatility >= _ELEVATED_VOLATILITY:

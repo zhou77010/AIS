@@ -33,13 +33,9 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
 
     if reported is not None and expected is not None:
         if reported < _NEGATIVE <= expected:
-            return (
-                InsightLine("已公布盈利下滑，但预期转为改善，分歧较大。", reference),
-            )
+            return (InsightLine("盈利下滑但预期改善，分歧较大。", reference),)
         if reported >= _NEGATIVE and expected < _NEGATIVE:
-            return (
-                InsightLine("盈利已经改善，但预期转为回落，需要观察原因。", reference),
-            )
+            return (InsightLine("盈利改善但预期回落。", reference),)
         if reported >= _STRONG and expected > 0:
             return (InsightLine("已公布与预期同向改善，盈利方向一致。", reference),)
         if reported < _NEGATIVE and expected < _NEGATIVE:

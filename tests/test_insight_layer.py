@@ -281,14 +281,14 @@ def test_the_valuation_insight_reads_the_multiples_together() -> None:
     cheap = _text(_insight(Category.VALUATION, pe=9.0, peg=0.8, ev_ebitda=6.0))
     dear = _text(_insight(Category.VALUATION, pe=45.0, peg=3.2, ev_ebitda=30.0))
 
-    assert "估值处于偏低区间" in cheap
+    assert "估值偏低" in cheap
     assert "估值偏高" in dear
 
 
 def test_a_high_multiple_without_the_growth_to_match_it_is_called_out() -> None:
     text = _text(_insight(Category.VALUATION, pe=45.0, earnings_growth=0.02))
 
-    assert "缺少与之匹配的增长" in text
+    assert "缺少增长匹配" in text
 
 
 def test_the_fundamental_insight_calls_out_profit_without_cash() -> None:
@@ -303,7 +303,7 @@ def test_the_fundamental_insight_calls_out_profit_without_cash() -> None:
         )
     )
 
-    assert "利润质量存在疑问" in text
+    assert "利润质量存疑" in text
 
 
 def test_the_fundamental_insight_reads_a_sound_business_as_sound() -> None:
