@@ -134,6 +134,7 @@ External Providers
 | `dashboard/` | Dashboard generation. |
 | `communication/` | Notification system. |
 | `models/` | Shared domain models. |
+| `state/` | What the runtime remembers between restarts. |
 | `utils/` | Shared utilities. |
 | `logs/` | Runtime logs. |
 | `tests/` | Unit and integration tests. |
@@ -166,6 +167,8 @@ External Providers
 **`communication/`** — Notification system. Sends notifications such as WeChat messages, daily briefs, and event alerts.
 
 **`models/`** — Shared domain models. Domain types used across more than one layer, so shared structures are defined once.
+
+**`state/`** — What the runtime remembers between restarts, written by the runtime rather than configured by a person. It records what AIS has done, never anything about the world: a fact about the world has an owner, and a copy of one in a file is a copy that will go stale.
 
 **`utils/`** — Shared utilities. Small shared helpers without business meaning. Must not become a home for duplicated business logic.
 

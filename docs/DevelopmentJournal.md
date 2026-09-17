@@ -1078,4 +1078,101 @@ everything outside the US session.
 
 ---
 
+### The runtime stopped being an interval and became a set of schedules
+
+**Context.** AIS ran one thing on one cadence: the evaluation cycle, every thirty
+minutes, its phase set by whatever moment the process happened to start. Everything
+else about when AIS speaks was decided inside that cycle — whether the market was
+open, whether the conclusion had changed — so the two questions "when should this
+run" and "should it speak" were answered in the same place, by the same code.
+
+**Decision.** The scheduler now runs **schedules**, each of which answers one
+question: when am I next owed? It sleeps to the earliest answer and runs what is
+due. Two are wired — the cycle on its interval, and the morning brief at an hour of
+the day — and each carries its own rules about the market and about change.
+
+**Reason.** The brief could not be built any other way. It is owed at 09:00 Beijing,
+which falls outside the United States session by definition, so a cycle that skips
+whenever the market is closed can never reach it; and it is expected every day, so a
+cycle that says nothing when nothing changed is the wrong shape for it. Both of
+those were properties of the *cycle*, not of the work, and separating the schedules
+is what let the brief have its own.
+
+**Impact.** The loop still lives in one place and still owns nothing but timing. The
+market gate and the change detector stayed exactly where they were for the cycle, so
+nothing about the existing behaviour moved; the brief simply does not consult either.
+Adding the pre-market brief later is another schedule and nothing else.
+
+**Revisit.** No.
+
+---
+
+### A brief is owed; an alert has to earn it
+
+**Context.** AIS had one rule about speaking: say nothing unless the conclusion
+changed. The morning brief says something every day, which reads at first like the
+opposite of that rule.
+
+**Decision.** Separate the two. A report the reader is expecting is owed whether or
+not it has news; an interruption the reader is not expecting has to earn the
+interruption.
+
+**Reason.** The change rule exists so that an unchanged conclusion does not become a
+stream of identical messages. It works because the reader did not ask for those
+messages. A brief is different in kind: the reader chose the hour and opened the slot
+for it, and "nothing has changed" is the answer to the question they asked, not a
+failure to answer it. Applying the change rule to the brief would mean the report
+arrives on the days something happened and silently does not on the days nothing did
+— which turns a daily report into an unpredictable one, and makes its absence
+ambiguous.
+
+There is a second reason, about what "unchanged" even means over a day. The brief is
+sent once per trading day, and the evidence behind it changes about that often, so it
+describes a state that has genuinely moved. It is not the same report again merely
+because the conclusion held; the change rule governs interruptions, not repetition,
+and a report that describes the present is not a repetition of one that described
+yesterday.
+
+**Impact.** The brief sends whatever it finds. The change detector still guards the
+cycle, unchanged. What both share is the analysis: one engine, two reasons to speak,
+and the reasons kept apart.
+
+**Revisit.** When the intraday alert is designed, which is the case that really does
+have to earn its interruption.
+
+---
+
+### "Once a day" is not something a process can remember
+
+**Context.** The brief is owed once per local day, and the process that sends it is
+restarted whenever the machine is restarted.
+
+**Decision.** The day the brief was last sent is written to `state/runtime.json`,
+by replacement, and read at startup. A brief missed because the process was not
+running is sent late rather than dropped.
+
+**Reason.** Neither half of "once" survives memory. A process that starts at noon
+cannot know whether the brief already went out, and one that starts at ten cannot
+know whether it was missed. Both questions are about the past, and the only thing
+that answers a question about the past is something written down. The written day
+also settles the case a person would ask about first: a restart an hour after the
+brief does not send a second copy to the same phone.
+
+Two details are worth keeping. The day is recorded **whatever the outcome**, because
+retrying a delivery failure would send a second copy to whoever the first attempt
+reached and would repeat a full evaluation of the universe on every wake until it
+stopped failing — a failure is reported as a failure instead. And the day is
+remembered **in memory as well as on disk**, so a state file that cannot be written
+does not make the brief permanently due.
+
+**Impact.** `state/` is a new directory, gitignored, holding what AIS has done rather
+than anything about the world. The backlog records the half of the problem that is
+still open: the runtime remembers what it owes, and still does not remember what it
+concluded.
+
+**Revisit.** When the baseline a report compares against has to survive a restart
+too.
+
+---
+
 End of Document

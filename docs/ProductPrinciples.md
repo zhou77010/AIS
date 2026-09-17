@@ -321,6 +321,19 @@ phone, not a person.
 So a report has two times. One anchored to the close is not therefore sent at the
 close, and one sent in the morning is not therefore computed in the morning.
 
+**And a report the reader is expecting is owed; an interruption has to earn it.**
+These are different in kind and must not be run by one rule. A message that arrives
+because something changed earns its place by carrying news — and if there is no
+news, it does not arrive. A report that arrives at an hour the reader chose is owed
+whether or not it has news, because the reader opened that slot for it and "nothing
+has changed" is an answer to the question they asked.
+
+Applying the change rule to an expected report turns it into an unpredictable one:
+it arrives on the days something happened and silently does not on the days nothing
+did, and its absence stops meaning anything. **A report that describes the present
+is not a repetition of one that described yesterday**, even when it reaches the same
+conclusion — the change rule governs interruptions, not repetition.
+
 **And a report is computed when it is sent.** It describes the world as it is at
 the moment the reader receives it, not as it was at the moment AIS last looked. A
 report built at four and delivered at nine is five hours out of date, and it is the

@@ -374,14 +374,41 @@ yet, so it is recorded here rather than written into
 
 ## Runtime — three triggers, three times
 
-Not built. The triggers are defined here; the scheduling that would run them is
-not, and this round changes nothing in the code.
+**The 09:00 brief is built.** The other two are defined and are not.
+
+| Trigger | State | Where |
+| --- | --- | --- |
+| **Live Morning Brief** — 09:00 Beijing | **Built** | `app/morning_brief.py`, scheduled by `app/scheduler.py` |
+| **Pre-Market Brief** — 21:00 Beijing | Defined, off until the Market Layer exists | — |
+| **Intraday Alert** | Defined, not built | — |
+
+**How it is built.** The scheduler no longer runs one cycle on an interval. It runs
+**schedules**, each of which answers "when am I next owed", and sleeps to the
+earliest answer. Two are wired: the evaluation cycle on its interval, and the brief
+at an hour of the day. Adding 21:00 later is another schedule and nothing else.
+
+**What the brief does not consult.** It does not consult the market clock, because
+the hour it is owed at falls outside the United States session by definition and a
+report that waits for a market to open never arrives at the hour it was asked for.
+It does not consult the change detector, because it is expected: "nothing has
+changed" is what most days look like, not a reason to say nothing. And it is
+computed at the hour it is sent, so there is no earlier result delivered late.
+
+**What it remembers.** Which local day it was last sent, in `state/runtime.json`,
+written by replacement so a process killed mid-write leaves the previous state
+intact. The day is read at startup, so a restart neither sends a second copy nor
+loses a brief that was missed because the process was not running. `AIS_STATE_FILE`
+moves the file; the path is in the configuration like every other path.
+
+**A failure is not retried.** The day is recorded whatever the outcome, because a
+retry would send a second copy to whoever the first attempt reached and would repeat
+a full evaluation of the universe on every wake until the failure stopped. A failed
+brief is logged as an error and reported in the cycle status.
 
 ### Only one of the two scheduled reports is active, and it is the morning one
 
-**Confirmed.** When scheduled reports are built, **only the 09:00 Live Morning
-Brief runs.** The 21:00 Pre-Market Brief stays defined and stays off until the
-Market Layer exists.
+**Confirmed.** **Only the 09:00 Live Morning Brief runs.** The 21:00 Pre-Market
+Brief stays defined and stays off until the Market Layer exists.
 
 The reason is not caution, it is that the two would be the same report. AIS reads
 per-asset evidence — a quote summary and a year of daily bars — and that evidence
@@ -512,18 +539,31 @@ runtime design and is not made here.
 
 ### What the runtime would have to change
 
-Not "add two timers". Six things:
+The five things below were the prerequisites for the morning brief. What is done is
+marked; **B and E belong to the pre-market brief and the intraday alert** and are
+still open.
 
-| # | Change | Where |
-| --- | --- | --- |
-| A | The cadence stops being an interval and becomes **market-anchored**. Today the phase comes from when the process started, which has nothing to do with the market. | `app/scheduler.py`, `app/application.py` |
-| B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. These stay pure calendar arithmetic, so it keeps its place in `utils/`. | `utils/market_clock.py` |
-| C | The **market-open gate moves off the cycle** and onto the triggers that need it. Today it guards every cycle, which is exactly why nothing can fire at 09:00 ET. | `app/application.py` |
-| D | **Notification policy becomes an owned concept.** Today there is one policy, hardwired into the per-asset cycle. Three triggers need three. No component owns this question today. | undecided — Runtime or Communication |
-| E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. Every piece of evidence today is per-asset. | `contracts/`, `pipeline/` |
-| F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | undecided — needs a store |
+| # | Change | Where | State |
+| --- | --- | --- | --- |
+| A | The cadence stops being an interval and becomes **moment-anchored**. The phase used to come from when the process started, which has nothing to do with a clock. | `app/scheduler.py` | **Done** — schedules answer when they are next owed |
+| C | The **market-open gate moves off the cycle** and onto the triggers that need it. It used to guard every cycle, which is why nothing could ever fire at 09:00 ET. | `app/application.py` | **Done** for the brief; the cycle still keeps its own gate, which is what an alert should do |
+| D | **Notification policy becomes an owned concept.** There used to be one policy, hardwired into the per-asset cycle. The brief is the second, and it lives with the brief. | `app/morning_brief.py` | **Partly** — the brief owns its policy; an alert's does not exist |
+| F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | `app/runtime_state.py` | **Partly** — what is *owed* survives a restart; what AIS *concluded* still does not |
+| B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. | `utils/market_clock.py` | Open — needed by the close-anchored part of F |
+| E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. | `contracts/`, `pipeline/` | Open — Phase C |
 
-**D, E and F are the three that are easy to underestimate.** D is a responsibility
+**E is the one that blocks the most.** It is the same work the Market Layer needs,
+which is why the pre-market brief and the Market Layer should be designed together
+rather than twice.
+
+**F is half done and the other half matters.** The runtime now remembers the day the
+brief was sent. It still does not remember what the brief *said*, so a restarted
+process cannot tell a reader what changed since — `RatingTracker` and
+`ChangeDetector` remain memory only, and a restart still makes the next report read
+"first rating" everywhere. That is a smaller problem now than it was, because the
+brief's own content does not depend on it, but it is not fixed.
+
+**The three that are easy to underestimate.** D is a responsibility
 with no owner, and by the architecture rules it cannot simply be dropped into an
 existing component. E is the same work the Market Layer needs, which is why the
 Brief and the Market Layer should be designed together rather than twice.
