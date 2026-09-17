@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from analysis.analysis_result import AnalysisResult
 from app.application import Application
-from app.scheduler import Scheduler
+from app.scheduler import IntervalSchedule, Scheduler
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
 from config.config import Config
 from models.asset import Asset
@@ -180,7 +180,7 @@ def test_scheduler_runs_a_single_cycle_when_the_interval_is_zero(
     monkeypatch.setattr("app.scheduler.time.sleep", _no_sleep)
     statuses: list[CycleStatus] = []
 
-    Scheduler(0).run(lambda: _record(statuses))
+    Scheduler().run(IntervalSchedule(0, lambda: _record(statuses)))
 
     assert statuses == [CycleStatus.MARKET_CLOSED]
 
@@ -188,18 +188,18 @@ def test_scheduler_runs_a_single_cycle_when_the_interval_is_zero(
 def test_scheduler_repeats_on_the_configured_interval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The clock is supplied, because a real sleep advances the wall clock and a
+    # pretend one does not: without it the scheduler would never see the interval
+    # elapse and the test would be checking nothing.
     slept: list[float] = []
-
-    def fake_sleep(seconds: float) -> None:
-        slept.append(seconds)
-        if len(slept) == 2:
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr("app.scheduler.time.sleep", fake_sleep)
+    moment = [_START]
+    _install_clock(monkeypatch, moment, slept, interrupt_on=2)
     statuses: list[CycleStatus] = []
 
     with pytest.raises(KeyboardInterrupt):
-        Scheduler(30).run(lambda: _record(statuses))
+        Scheduler(lambda: moment[0]).run(
+            IntervalSchedule(30, lambda: _record(statuses))
+        )
 
     # Two cycles and two waits: the interrupt lands during the second wait.
     assert len(statuses) == 2
@@ -210,21 +210,44 @@ def test_scheduler_keeps_running_when_a_cycle_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     slept: list[float] = []
-
-    def fake_sleep(seconds: float) -> None:
-        slept.append(seconds)
-        if len(slept) == 2:
-            raise KeyboardInterrupt
+    moment = [_START]
+    _install_clock(monkeypatch, moment, slept, interrupt_on=2)
 
     def failing_cycle() -> CycleStatus:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("app.scheduler.time.sleep", fake_sleep)
-
     with pytest.raises(KeyboardInterrupt):
-        Scheduler(30).run(failing_cycle)
+        Scheduler(lambda: moment[0]).run(IntervalSchedule(30, failing_cycle))
 
     assert slept == [1800, 1800]
+
+
+_START = datetime(2026, 9, 18, 0, 0, 0, tzinfo=UTC)
+
+
+def _install_clock(
+    monkeypatch: pytest.MonkeyPatch,
+    moment: list[datetime],
+    slept: list[float],
+    *,
+    interrupt_on: int,
+) -> None:
+    """Make the scheduler's wait advance a clock the test owns.
+
+    Args:
+        monkeypatch: Fixture used to replace the wait.
+        moment: One element holding the moment the scheduler reads.
+        slept: Collects how long each wait lasted.
+        interrupt_on: Which wait raises, stopping the loop.
+    """
+
+    def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+        moment[0] += timedelta(seconds=seconds)
+        if len(slept) == interrupt_on:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("app.scheduler.time.sleep", fake_sleep)
 
 
 def _no_sleep(seconds: float) -> None:

@@ -19,8 +19,10 @@ from analysis.analysis_result import AnalysisResult
 from analysis.analyzer import AssetAnalyzer
 from analysis.mobile_report import render_mobile_report
 from analysis.report import generate_report
+from app.morning_brief import MorningBrief
 from app.rating_tracker import RatingTracker
-from app.scheduler import Scheduler
+from app.runtime_state import RuntimeState
+from app.scheduler import IntervalSchedule, Scheduler
 from communication.bark import BarkNotifier
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
 from communication.pushplus import PushPlusNotifier
@@ -35,8 +37,15 @@ from data.market_data import build_market_data_provider
 from models.asset import Asset
 from models.watch_universe import WatchUniverse
 from utils.constants import APP_NAME, APP_VERSION, CycleStatus, LoggerName
+from utils.daily_moment import DailyMoment
 from utils.exceptions import AISException
 from utils.market_clock import MarketClock
+
+# The hour the daily brief is owed at. It is stated in Beijing time because that is
+# where the reader is, and it falls half an hour before the United States session
+# opens, which is the point: the reader gets the freshest state before the market
+# they are exposed to starts moving again.
+MORNING_BRIEF_MOMENT = DailyMoment.beijing(hour=9, minute=0)
 
 
 class Application:
@@ -70,15 +79,20 @@ class Application:
             )
         )
         self._change_detector = ChangeDetector()
-        self._scheduler = Scheduler(self._config.analysis_interval_minutes)
+        self._scheduler = Scheduler()
         self._logger = get_logger(LoggerName.APPLICATION.value)
 
     def run(self) -> None:
-        """Run evaluation cycles until the process is interrupted.
+        """Run the runtime until the process is interrupted.
 
-        The first cycle runs immediately; the rest follow on the configured
-        interval. A keyboard interrupt stops the scheduler politely instead of
-        tearing the process down.
+        Two things are owed, and they are owed differently. The evaluation cycle
+        runs on an interval for as long as the process lives; the morning brief runs
+        once a day at an hour that comes from the clock. They are separate schedules
+        because they answer different questions, and neither borrows the other's
+        rules about when to speak.
+
+        A keyboard interrupt stops the scheduler politely instead of tearing the
+        process down.
         """
         configure_logging(self._config)
         self._logger.info("%s %s started", APP_NAME, APP_VERSION)
@@ -91,11 +105,48 @@ class Application:
             "analysing on a %d minute interval",
             self._config.analysis_interval_minutes,
         )
+        self._logger.info("morning brief at %s", MORNING_BRIEF_MOMENT.describe())
         try:
-            self._scheduler.run(self._run_cycle)
+            self._scheduler.run(
+                IntervalSchedule(
+                    self._config.analysis_interval_minutes, self._run_cycle
+                ),
+                self._morning_brief(),
+            )
         except KeyboardInterrupt:
             self._logger.info("shutdown requested")
         self._logger.info("%s stopped", APP_NAME)
+
+    def _morning_brief(self) -> MorningBrief:
+        """Return the daily brief, reading and writing what it has already done."""
+        return MorningBrief(
+            MORNING_BRIEF_MOMENT,
+            RuntimeState(path=self._config.state_file),
+            self._run_brief,
+        )
+
+    def _run_brief(self) -> CycleStatus:
+        """Produce and deliver the morning brief for every watched asset.
+
+        No market clock and no change detector is consulted. The hour was chosen by
+        a reader and falls outside the United States session by definition, and a
+        brief that waits for a market to open never arrives at the hour it is owed
+        at. Nothing is suppressed either: the brief is expected, and "nothing has
+        changed" is what most days look like rather than a reason to say nothing.
+
+        Each asset is analysed as it is now — the state the brief describes is the
+        state at the hour it is about, so computing it earlier and delivering it
+        later would describe a moment the reader is not in.
+
+        Returns:
+            The single status describing what the brief did.
+        """
+        outcomes = [
+            self._run_asset(asset, always_notify=True)
+            for asset in self._universe.assets
+        ]
+        self._logger.info("brief outcome: %s", _describe_outcomes(outcomes))
+        return _summarise(outcomes)
 
     def _run_cycle(self) -> CycleStatus:
         """Run one evaluation cycle over every watched asset.
@@ -116,12 +167,16 @@ class Application:
         self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
         return summary
 
-    def _run_asset(self, asset: Asset) -> CycleStatus:
-        """Evaluate one asset and notify when its recommendation changed.
+    def _run_asset(self, asset: Asset, *, always_notify: bool = False) -> CycleStatus:
+        """Evaluate one asset and notify.
 
         Args:
             asset: Asset to evaluate, carrying the identity the watch universe gave
                 it.
+            always_notify: Whether to send the report even when the recommendation
+                has not changed. The evaluation cycle says nothing when nothing
+                changed, because it exists to report change; the morning brief is
+                expected every day and says so whatever it finds.
 
         Returns:
             The outcome of this asset within the cycle.
@@ -137,7 +192,8 @@ class Application:
             self._logger.info("%s", line)
 
         fingerprint = RecommendationFingerprint.of(result.recommendation, ticker)
-        if not self._change_detector.observe(fingerprint):
+        changed = self._change_detector.observe(fingerprint)
+        if not changed and not always_notify:
             self._logger.info(
                 "Skipped notification for %s: recommendation unchanged (%s)",
                 ticker,
