@@ -825,4 +825,66 @@ itself.
 
 ---
 
+### A report has two times, and they are not the same time
+
+**Context.** The trigger list said a Daily Review fires when the market close is
+confirmed. Read literally, that is 16:00 Eastern — four in the morning in Beijing
+— and it was carried into the design as though it were the time the reader is
+told anything. The reader objected, and was right.
+
+**Decision.** Separate the two moments and never infer one from the other. The
+**evaluation anchor** is set by the data: an analysis is worth computing once the
+information behind it is complete, which the close is. The **send time** is set by
+the reader: a report is worth sending when somebody can read it. 04:00 Beijing is
+an anchor and is not a send time; nothing is pushed at it.
+
+**Reason.** The two questions look like one question and are answered by different
+things. The close is a statement about data; breakfast is a statement about a
+person. A trigger named after the close will be read as a send time by everyone who
+comes across it, which is exactly what happened here — and the resulting report
+would have been correct, complete, and unread.
+
+The corrected times also happen to be better on content, not only on comfort: a
+review sent at 09:00 Beijing is five hours after the close, so the after-hours
+results have landed and the after-hours move has happened. The close is the moment
+the data is complete; it is not the moment the day's information is complete.
+
+**Impact.** Recorded in the backlog with the timeline it produces: the close at
+04:00 Beijing is the anchor, the review if it exists is sent at 09:00, and the
+pre-market brief at 21:00 sits thirty minutes before the open and after that
+morning's macro releases. The assumption that anything is pushed at 04:00 is
+removed explicitly, so that it cannot be reintroduced by reading the trigger list.
+
+**Revisit.** No.
+
+---
+
+### The Daily Review is kept only if it earns its place
+
+**Context.** Once the pre-market brief was defined, the review next to it stopped
+being obviously necessary. The brief already carries the analysis of the last
+closed session, and it arrives twelve hours later with everything that happened in
+between.
+
+**Decision.** Do not treat the Daily Review as required. If it is kept, it is sent
+at 09:00 Beijing; if it is not, it is not invented in order to fill a time slot.
+The analysis it would contain is computed either way, because the brief needs it.
+
+**Reason.** A report earns its place by what it tells a reader that they do not
+already have. The review's content is close to a subset of the brief's, delivered
+earlier: the same conclusion, from the same closed session, with less of the
+overnight information. That may still be worth having — a reader who wants to think
+in the morning gets value from it — but it is a choice about the reader's day, not
+a hole in the design that needs filling. Building it because the schedule has a
+gap would be adding a report for the sake of the schedule.
+
+**Impact.** Recorded in the backlog as the one trigger that is not settled. The
+distinction that makes it safe to leave open is that the **evaluation** at the close
+is needed regardless; only the **delivery** is in question, and the two are now
+separate decisions.
+
+**Revisit.** When the runtime is designed, and when there is a reader to ask.
+
+---
+
 End of Document

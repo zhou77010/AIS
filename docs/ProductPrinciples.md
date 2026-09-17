@@ -288,4 +288,29 @@ that is merely wrong, because the reader cannot tell which half to believe.
 
 ---
 
+## 12. When AIS Thinks and When It Speaks
+
+Working out what AIS thinks and telling the reader are two different moments,
+chosen for two different reasons, and neither may be assumed from the other.
+
+**When AIS thinks is decided by the data.** An analysis is worth computing once
+the information behind it is complete — after a session has closed, after a
+release has landed. That moment belongs to the market and to the calendar, and it
+has nothing to do with whether anybody is awake.
+
+**When AIS speaks is decided by the reader.** A report is worth sending when
+somebody can read it. A conclusion delivered at four in the morning reaches a
+phone, not a person.
+
+So a report has two times. One anchored to the close is not therefore sent at the
+close, and one sent in the morning is not therefore computed in the morning.
+
+**And a report has to earn its place in the reader's day.** Arriving at a
+convenient hour is not a reason to exist. If what a report says is already
+contained in another one the reader gets, then sending it is asking for attention
+without giving anything back — and a reader who is asked for attention twice for
+the same thing starts ignoring both.
+
+---
+
 End of Document
