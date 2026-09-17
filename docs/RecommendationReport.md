@@ -894,17 +894,38 @@ of §7.3.
 
 ### 15.1 Line budget
 
+**The budgets are asserted, not described.** `tests/test_report_projection.py` fails when a line is
+wider than 42 display columns, when a report is longer than 32 lines, or when the five things below
+do not all appear on the first screen. A budget that only lives in a document had already been
+exceeded — the widest line in a real report was 93 columns before this was enforced.
+
+| Budget | Value |
+| --- | --- |
+| Width of any line | **≤ 42 display columns** (a Chinese character is 2) |
+| Length of the whole report | **≤ 32 lines** |
+| The first screen | **≤ 20 lines**, and it closes the question |
+
+The projection, in order:
+
 | Block | Lines | Purpose |
 | --- | --- | --- |
-| Identity | 3 | Asset, plus separators |
-| Decision | 3 | Decision, confidence + coverage, score + grade |
-| Why | 5 | Header plus up to three drivers |
-| Risk | 2 | Level and the single most important finding |
-| Portfolio | 2 | Current → suggested, or `NOT APPLICABLE` |
-| Provenance | 4 | Source, coverage, as-of, unavailable inputs |
-| Footer | 2 | Generated time, link to the full report |
-| Separators | 4 | |
-| **Total** | **≤ 25** | |
+| Identity | 2 | Symbol and the moment the data is from |
+| Opportunity | 1–3 | HPO: whether today is worth attention, and why |
+| Decision | 1 | What to do, and how much it can be trusted |
+| Changes | 0–3 | What moved since the last run, largest first |
+| Focus | 0–2 | The one or two events most worth watching |
+| Categories | ≤ 16 | Eight categories, a heading and **one sentence** each |
+| Tail | 2 | What was not judged, and where the data came from |
+| Separators | 2 | |
+
+**The first screen closes the question.** A reader who stops after one screen must have been told:
+which stock, whether it is worth attention, what to do, what changed, and what to watch. If those
+five cannot be answered inside the first 20 lines, the report has failed regardless of its content.
+
+**Nothing is deleted; it moves.** What the phone leaves out is in the expanded report that
+`generate_report` writes: every sentence the insight layer wrote with the evidence behind it, the
+whole event calendar with its layer and priority, the opportunity conditions as they were decided,
+and the model's own name for every dimension and metric nothing was measured on.
 
 ### 15.2 Rules
 

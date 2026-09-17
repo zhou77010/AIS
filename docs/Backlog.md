@@ -142,20 +142,25 @@ provisional as they are, in one place instead of three.
 
 ---
 
-## Report first impression and density
+## Report first impression and density — done, and now enforced
 
-Two rules agreed and not yet applied to the report as it stands:
+**Completed.** The report is a projection with three asserted budgets: 32 lines,
+42 columns, and the first 20 lines answering the whole question — which stock,
+whether it is worth attention, what to do, what changed, what to watch. Measured
+across the seven watched assets: 23–29 lines, and no line over 42 columns. What
+the phone leaves out is in the expanded report that `generate_report` writes.
 
-- **The first fifteen seconds.** Opening the report must say why today matters
-  for this stock, or why it does not. Today it opens with an opportunity grade and
-  a decision, and the reader has to assemble the answer from eight category blocks.
-- **Density.** Every sentence must help an investment decision. The report has
-  grown a layer per round to roughly forty eight lines, and no round has removed
-  anything.
+**What is not finished about it.** The budgets are asserted against four
+representative shapes rather than against every possible input, so a shape nobody
+thought of could still exceed them. Width is the only budget that holds
+universally, because it is enforced line by line as the text is written.
 
-This needs a decision before it needs code: **what is the line budget, and what
-gets cut when something new arrives?** Until that exists, every later round will
-add and nothing will ever leave.
+**A trade that was made deliberately.** The sub-dimensional gaps — the risk
+dimensions that were not assessed, the measurements that could not be retrieved —
+now appear only in the expanded report, which a reader sees only in the log. That
+is what the density rule asks for, and it is recorded here so that it stays a
+decision rather than becoming a surprise later. Putting them back on a phone is a
+new feature, and it would have to earn its lines.
 
 ---
 

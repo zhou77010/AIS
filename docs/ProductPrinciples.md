@@ -120,6 +120,17 @@ The corollary matters just as much: when something is added, something else
 usually has to go. A report that grows every round until nobody finishes it has
 stopped being a report, and the reader will go back to their own screen.
 
+**Nothing is deleted; it moves.** Cutting a line from the daily report is not the
+same as deciding the fact does not matter. A fact that is real and traceable goes
+to the expanded report, which keeps everything the phone leaves out. AIS is
+allowed to show a reader less; it is not allowed to know less, and it is never
+allowed to quietly drop something it had already said.
+
+**A budget that is not enforced is not a budget.** Limits on length, width and
+what the first screen must contain are held by tests, not by good intentions and
+not by the person adding the next feature. The report had already grown past a
+width it claimed to respect, and nobody noticed until it was measured.
+
 ---
 
 ## 6. Natural Language

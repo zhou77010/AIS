@@ -689,4 +689,44 @@ thirty seconds.
 
 ---
 
+### The daily report became a projection with a budget
+
+**Context.** The report had reached 54 to 61 lines, and the widest line was 93
+columns against a stated limit of 42. Both numbers were discovered by measuring
+the real output rather than by anyone noticing: each round had added a layer, and
+every addition was defensible on its own. The first screen held the market
+environment and the fundamentals — not because they mattered that day, but
+because that is the order the categories are declared in — while the most
+time-sensitive category, Catalyst, sat eighth.
+
+**Decision.** Rebuild the report as a projection with three enforced budgets: 32
+lines, 42 columns, and the first 20 lines answering the whole question — which
+stock, whether it is worth attention, what to do, what changed, what to watch.
+Everything the phone leaves out moves to the expanded report rather than
+disappearing. Each category gets a heading and **one** sentence; the movement
+lines move out of the categories and into a single changes block, because what
+changed is the question the report exists to answer.
+
+**Reason.** Three specific failures drove it. The report contradicted itself in
+public — HPO said "有近期催化" while the catalyst block said "近期暂无明确催化" —
+because nothing owned the question of what the report as a whole was saying. The
+same fact appeared twice, once as an insight sentence and once as an event list
+line under it. And the budget was a comment: a limit nobody had made checkable
+had already been broken by a factor of two on the most important line in the
+report.
+
+**Impact.** The first sentence of a category is now written to a width the
+projection can show in one line, which shortened several of them; the model is
+unchanged and the expanded report still holds every sentence. The three budgets
+are asserted in `tests/test_report_projection.py`, and a second module asserts
+that everything removed from the phone is present in `generate_report`. The
+report went from 54–61 lines to 23–29 across the seven watched assets, with no
+line over the width.
+
+**Revisit.** The reading layer is still the next priority: the report is now
+short, but it still reads its own numbers with three sets of conventions that do
+not know about each other.
+
+---
+
 End of Document
