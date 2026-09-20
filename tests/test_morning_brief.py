@@ -41,9 +41,23 @@ _BEFORE = _NINE_BEIJING_UTC - timedelta(minutes=30)
 
 
 def _brief(
-    work, state: RuntimeState, moment: DailyMoment | None = None
+    work,
+    state: RuntimeState,
+    moment: DailyMoment | None = None,
+    clock=None,
 ) -> MorningBrief:
-    return MorningBrief(moment or MORNING_BRIEF_MOMENT, state, work)
+    """Return a brief that reads the moment it is run at from a supplied clock.
+
+    The day recorded is the day the brief ran, so a test that asserted a particular
+    day against the system clock would pass on the day it was written and start
+    failing later. Every test here supplies the moment instead.
+    """
+    return MorningBrief(
+        moment or MORNING_BRIEF_MOMENT,
+        state,
+        work,
+        clock if clock is not None else lambda: _NINE_BEIJING_UTC,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -391,20 +405,49 @@ def _application(
     )
 
 
-def test_the_brief_is_produced_while_the_market_is_closed(
+def _deliveries(monkeypatch: pytest.MonkeyPatch, application: Application) -> list:
+    """Capture what the brief sends, as the (title, message) each channel carries."""
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        application,
+        "_deliver",
+        lambda title, message: sent.append((title, message)),
+    )
+    return sent
+
+
+def test_the_brief_is_one_message_however_many_assets_are_watched(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # Two assets are analysed and one message is sent. This is the change of shape:
+    # the watch universe and the message are no longer the same size.
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer)
-    sent: list[str] = []
-    monkeypatch.setattr(
-        application, "_notify", lambda result: sent.append(result.asset.ticker)
-    )
+    sent = _deliveries(monkeypatch, application)
 
     status = application._run_brief()
 
     assert status is CycleStatus.NOTIFICATION_SENT
-    assert sent == ["AAPL", "RKLB"]
+    assert len(sent) == 1
+    title, message = sent[0]
+    assert title.startswith("AIS 晨报")
+    assert message.startswith("AIS 晨报")
+    assert "AAPL" in message and "RKLB" in message
+
+
+def test_the_brief_is_produced_while_the_market_is_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The hour the brief is owed at falls outside the United States session by
+    # definition, so the market clock must not be consulted at all.
+    analyzer = _Analyzer()
+    application = _application(tmp_path, analyzer)
+    sent = _deliveries(monkeypatch, application)
+
+    status = application._run_brief()
+
+    assert status is CycleStatus.NOTIFICATION_SENT
+    assert len(sent) == 1
 
 
 def test_the_brief_sends_even_when_nothing_changed(
@@ -414,33 +457,61 @@ def test_the_brief_sends_even_when_nothing_changed(
     # change. The brief is expected, and most days look like this one.
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer)
-    sent: list[str] = []
-    monkeypatch.setattr(
-        application, "_notify", lambda result: sent.append(result.asset.ticker)
-    )
+    sent = _deliveries(monkeypatch, application)
 
     application._run_brief()
     application._run_brief()
 
-    assert sent == ["AAPL", "RKLB", "AAPL", "RKLB"]
+    assert len(sent) == 2
 
 
-def test_the_cycle_still_says_nothing_when_nothing_changed(
+def test_the_brief_covers_every_asset_it_does_not_write_out(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Coverage and projection are different sets, and the brief states both: a
+    # reader who is told only what is shown cannot tell a quiet universe from a
+    # narrow one.
+    analyzer = _Analyzer()
+    application = _application(tmp_path, analyzer)
+    sent = _deliveries(monkeypatch, application)
+
+    application._run_brief()
+
+    assert analyzer.seen == ["AAPL", "RKLB"]
+    assert "分析 2 个标的" in sent[0][1]
+
+
+def test_the_cycle_still_sends_one_message_per_changed_asset(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The cycle reports change about an asset and is not a brief: one asset
+    # changed, so a message about that asset is its own report.
+    analyzer = _Analyzer()
+    application = _application(tmp_path, analyzer, _OpenMarket())
+    sent = _deliveries(monkeypatch, application)
+
+    first = application._run_brief()
+    second = application._run_cycle()
+    third = application._run_cycle()
+
+    assert first is CycleStatus.NOTIFICATION_SENT
+    assert second is CycleStatus.RECOMMENDATION_UNCHANGED
+    assert third is CycleStatus.RECOMMENDATION_UNCHANGED
+    assert len(sent) == 1
+
+
+def test_a_cycle_message_is_about_one_asset(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer, _OpenMarket())
-    sent: list[str] = []
-    monkeypatch.setattr(
-        application, "_notify", lambda result: sent.append(result.asset.ticker)
-    )
+    sent = _deliveries(monkeypatch, application)
 
-    first = application._run_brief()
-    second = application._run_cycle()
+    application._run_cycle()
 
-    assert first is CycleStatus.NOTIFICATION_SENT
-    assert second is CycleStatus.RECOMMENDATION_UNCHANGED
-    assert sent == ["AAPL", "RKLB"]
+    title, message = sent[0]
+    assert "AIS Recommendation" in title
+    assert "AIS 日报" in message
 
 
 def test_the_brief_is_computed_when_it_is_sent(
@@ -450,11 +521,27 @@ def test_the_brief_is_computed_when_it_is_sent(
     # deliver late.
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer)
-    monkeypatch.setattr(application, "_notify", lambda result: None)
+    _deliveries(monkeypatch, application)
 
     assert analyzer.seen == []
     application._run_brief()
     assert analyzer.seen == ["AAPL", "RKLB"]
+
+
+def test_the_expanded_report_of_every_asset_is_still_produced(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Nothing is dropped by being left out of the message: the full report of every
+    # asset is written to the log, which is where a reader looks a fact up.
+    analyzer = _Analyzer()
+    application = _application(tmp_path, analyzer)
+    _deliveries(monkeypatch, application)
+
+    with caplog.at_level("INFO", logger="ais.application"):
+        application._run_brief()
+
+    for ticker in ("AAPL", "RKLB"):
+        assert f"Asset: {ticker}" in caplog.text
 
 
 def test_the_application_schedules_both_things(

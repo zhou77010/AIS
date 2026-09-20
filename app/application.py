@@ -17,6 +17,8 @@ from datetime import UTC, datetime
 
 from analysis.analysis_result import AnalysisResult
 from analysis.analyzer import AssetAnalyzer
+from analysis.brief import DailyBrief, build_daily_brief
+from analysis.brief_report import render_daily_brief
 from analysis.mobile_report import render_mobile_report
 from analysis.report import generate_report
 from app.morning_brief import MorningBrief
@@ -126,7 +128,7 @@ class Application:
         )
 
     def _run_brief(self) -> CycleStatus:
-        """Produce and deliver the morning brief for every watched asset.
+        """Produce and deliver one brief over the whole watch universe.
 
         No market clock and no change detector is consulted. The hour was chosen by
         a reader and falls outside the United States session by definition, and a
@@ -134,19 +136,63 @@ class Application:
         at. Nothing is suppressed either: the brief is expected, and "nothing has
         changed" is what most days look like rather than a reason to say nothing.
 
-        Each asset is analysed as it is now — the state the brief describes is the
-        state at the hour it is about, so computing it earlier and delivering it
-        later would describe a moment the reader is not in.
+        Every asset is analysed and **one** message is sent. Those are two different
+        sets, and they are deliberately not the same size: AIS has to look at
+        everything to know what matters, and a reader who receives seven messages
+        has received a feed rather than a brief. What each asset's run produced is
+        still written to the log in full, so nothing is dropped by being left out of
+        the message.
+
+        Each asset is analysed as it is now, and the brief is built from those
+        results at the moment it is sent, so there is no earlier result delivered
+        late.
 
         Returns:
             The single status describing what the brief did.
         """
-        outcomes = [
-            self._run_asset(asset, always_notify=True)
-            for asset in self._universe.assets
-        ]
-        self._logger.info("brief outcome: %s", _describe_outcomes(outcomes))
-        return _summarise(outcomes)
+        moment = datetime.now(MORNING_BRIEF_MOMENT.timezone)
+        results: list[AnalysisResult] = []
+        without_data: list[str] = []
+        for asset in self._universe.assets:
+            result = self._analyse(asset)
+            if result is None:
+                without_data.append(asset.ticker)
+                continue
+            results.append(result)
+            # The brief has just told the reader about this asset, so the next cycle
+            # must not announce the same conclusion again as though it were news.
+            self._change_detector.observe(
+                RecommendationFingerprint.of(result.recommendation, asset.ticker)
+            )
+
+        if not results:
+            self._logger.error(
+                "no asset could be analysed, so no brief was produced or sent"
+            )
+            return CycleStatus.EVALUATION_FAILED
+
+        brief = build_daily_brief(
+            results,
+            moment=moment,
+            universe=self._universe,
+            without_data=without_data,
+        )
+        message = render_daily_brief(brief)
+        self._logger.info("brief: %s", _describe_brief(brief))
+        for line in message.splitlines():
+            self._logger.info("%s", line)
+
+        try:
+            self._deliver(_brief_title(brief), message)
+        except (
+            Exception
+        ) as error:  # noqa: BLE001 - the brief must not crash the runtime
+            self._logger.error("the brief was not delivered: %s", error)
+            return CycleStatus.EVALUATION_FAILED
+
+        if without_data:
+            return CycleStatus.EVALUATION_FAILED
+        return CycleStatus.NOTIFICATION_SENT
 
     def _run_cycle(self) -> CycleStatus:
         """Run one evaluation cycle over every watched asset.
@@ -167,33 +213,28 @@ class Application:
         self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
         return summary
 
-    def _run_asset(self, asset: Asset, *, always_notify: bool = False) -> CycleStatus:
-        """Evaluate one asset and notify.
+    def _run_asset(self, asset: Asset) -> CycleStatus:
+        """Evaluate one asset and, when its conclusion moved, notify.
+
+        The cycle reports change: it exists to tell a reader that something about an
+        asset is not what it was, so an asset whose recommendation stands says
+        nothing. The brief is the other shape and does not come through here.
 
         Args:
             asset: Asset to evaluate, carrying the identity the watch universe gave
                 it.
-            always_notify: Whether to send the report even when the recommendation
-                has not changed. The evaluation cycle says nothing when nothing
-                changed, because it exists to report change; the morning brief is
-                expected every day and says so whatever it finds.
 
         Returns:
             The outcome of this asset within the cycle.
         """
         ticker = asset.ticker
-        try:
-            result = self._analyzer.analyze_result(asset)
-        except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
-            self._logger.exception("Evaluation failed for %s: %s", ticker, error)
+        result = self._analyse(asset)
+        if result is None:
             return CycleStatus.EVALUATION_FAILED
-
-        for line in generate_report(result).splitlines():
-            self._logger.info("%s", line)
 
         fingerprint = RecommendationFingerprint.of(result.recommendation, ticker)
         changed = self._change_detector.observe(fingerprint)
-        if not changed and not always_notify:
+        if not changed:
             self._logger.info(
                 "Skipped notification for %s: recommendation unchanged (%s)",
                 ticker,
@@ -210,20 +251,47 @@ class Application:
         self._logger.info("Notification sent (%s)", fingerprint.describe())
         return CycleStatus.NOTIFICATION_SENT
 
-    def _notify(self, result: AnalysisResult) -> None:
-        """Send the report through every configured channel.
+    def _analyse(self, asset: Asset) -> AnalysisResult | None:
+        """Run one asset through the analysis flow and write its report to the log.
 
-        The report is rendered once, here, and every channel transports that
-        same text: a channel is a transport, not a report format. Channels are
-        additive, so configuring another channel never replaces an existing one.
-        A failing channel is logged and does not stop the others; the cycle only
-        fails when every configured channel failed.
+        The expanded report is rendered for every asset that is analysed, whether or
+        not anything about it reaches a reader. That is what makes dropping a line
+        from a phone safe: the fact moves here rather than disappearing, and a
+        question about what AIS knew at nine o'clock can still be answered.
+
+        Args:
+            asset: Asset to analyse.
+
+        Returns:
+            The analysis result, or None when the run failed. A failure is logged
+            and reported; it is not raised, because one asset must not stop the rest.
         """
-        symbol = result.asset.ticker
-        generated_at = datetime.now()
+        try:
+            result = self._analyzer.analyze_result(asset)
+        except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
+            self._logger.exception("Evaluation failed for %s: %s", asset.ticker, error)
+            return None
 
-        title = f"AIS Recommendation {symbol}"
-        message = render_mobile_report(result, generated_at=generated_at)
+        for line in generate_report(result).splitlines():
+            self._logger.info("%s", line)
+        return result
+
+    def _notify(self, result: AnalysisResult) -> None:
+        """Send the report for one asset through every configured channel."""
+        self._deliver(
+            f"AIS Recommendation {result.asset.ticker}",
+            render_mobile_report(result, generated_at=datetime.now()),
+        )
+
+    def _deliver(self, title: str, message: str) -> None:
+        """Send one rendered message through every configured channel.
+
+        The text is rendered before it arrives here, and a channel transports it: a
+        channel is a transport, not a report format. Channels are additive, so
+        configuring another channel never replaces an existing one. A failing
+        channel is logged and does not stop the others; the send only fails when
+        every configured channel failed.
+        """
         config = self._config
 
         channels: list[tuple[str, Callable[[], None]]] = []
@@ -274,8 +342,7 @@ class Application:
 
         if not channels:
             raise AISException(
-                "no notification channel is configured, so the recommendation "
-                "was not sent"
+                "no notification channel is configured, so nothing was sent"
             )
 
         failures: list[str] = []
@@ -293,6 +360,25 @@ class Application:
             raise AISException(
                 "every notification channel failed: " + "; ".join(failures)
             )
+
+
+def _brief_title(brief: DailyBrief) -> str:
+    """Return the title the brief is delivered under.
+
+    Channels differ in what they do with a title — one shows it above the message,
+    another ignores it — so it names the report and the day and carries nothing the
+    message does not already state.
+    """
+    return f"AIS 晨报 {brief.day.isoformat()}"
+
+
+def _describe_brief(brief: DailyBrief) -> str:
+    """Return one line saying what the brief covered and what it showed."""
+    return (
+        f"{len(brief.entries)} of {len(brief.analysed)} assets written out, "
+        f"{len(brief.external_events)} shared events, "
+        f"{len(brief.without_data)} without data"
+    )
 
 
 def _resolve_universe(config: Config) -> tuple[WatchUniverse, bool]:

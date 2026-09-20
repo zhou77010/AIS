@@ -24,10 +24,10 @@ from analysis.insight.builder import build_insights
 from analysis.mobile_report import (
     FIRST_SCREEN_LINES,
     LINE_BUDGET,
-    LINE_WIDTH,
     NOT_ASSESSED_PREFIX,
     render_mobile_report,
 )
+from analysis.projection import LINE_WIDTH
 from contracts.market_data_provider import (
     MarketDataPoint,
     MarketDataSnapshot,

@@ -36,6 +36,11 @@ from utils.daily_moment import DailyMoment
 _LOGGER_NAME = "runtime"
 
 
+def _utc_now() -> datetime:
+    """Return the current moment, which is what a running process reads."""
+    return datetime.now(UTC)
+
+
 class MorningBrief:
     """The daily brief, and whether today's has already been sent.
 
@@ -49,6 +54,7 @@ class MorningBrief:
         moment: DailyMoment,
         state: RuntimeState,
         work: Callable[[], CycleStatus],
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         """Create the brief.
 
@@ -56,10 +62,14 @@ class MorningBrief:
             moment: Hour of the day it is owed at.
             state: Where the day it was last sent is written down.
             work: Work that produces and delivers the brief.
+            clock: Where the current moment is read from. Defaults to the system
+                clock, which is what a running process uses; a test supplies one so
+                that what it asserts does not depend on the day it is run.
         """
         self._moment = moment
         self._state = state
         self._work = work
+        self._clock = clock if clock is not None else _utc_now
         self._sent: date | None = None
         self._logger = get_logger(_LOGGER_NAME)
 
@@ -114,7 +124,7 @@ class MorningBrief:
         Returns:
             The outcome of producing and delivering the brief.
         """
-        day = self._moment.local_day(datetime.now(UTC))
+        day = self._moment.local_day(self._clock())
         self._logger.info("morning brief for %s", day)
         status = self._work()
         self._sent = day

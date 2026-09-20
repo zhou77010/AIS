@@ -34,12 +34,15 @@ What is deliberately absent, and where it went:
 
 The order the categories appear in is defined once, for every renderer, in
 :mod:`models.category`. This renderer does not reorder them.
+
+What it does *not* decide for itself is how a line is measured, how a sentence is
+broken, or how small a movement is too small to mention. Those decisions are shared
+with every other phone projection and live in :mod:`analysis.projection`, so that
+the brief and this report cannot disagree about the same reading from the same run.
 """
 
 from __future__ import annotations
 
-import unicodedata
-from collections.abc import Sequence
 from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
@@ -48,6 +51,8 @@ from analysis.insight.builder import insight_for
 from analysis.insight.catalyst_insight import focus_events
 from analysis.insight.context import context_for
 from analysis.labels import (
+    DISCLAIMER,
+    NO_GRADE,
     catalyst_kind_label,
     catalyst_when,
     category_label,
@@ -57,6 +62,16 @@ from analysis.labels import (
     opportunity_condition_label,
 )
 from analysis.plain_language import opportunity_sentence
+from analysis.projection import (
+    INDENT,
+    MOMENTUM_FLOOR,
+    PROJECTION_SENTENCE_WIDTH,
+    SECTION_SEPARATOR,
+    display_width,
+    is_a_change,
+    named_block,
+    wrap,
+)
 from analysis.report import (
     LIVE_DATA_LABEL,
     NO_DATA_LABEL,
@@ -67,22 +82,13 @@ from models.catalyst_event import CatalystEvent
 from models.category import CATEGORY_ORDER, Category
 from models.category_rating import CategoryRating
 
-SECTION_SEPARATOR = "-" * 32
-
-NO_GRADE = "暂无评级"
 NOT_ASSESSED_PREFIX = "尚未评估"
 
-# The three budgets. They are asserted by tests/test_report_projection.py.
-LINE_WIDTH = 42
+# The two budgets this projection is held to. They are asserted by
+# tests/test_report_projection.py, and the width it shares with the brief is
+# asserted there too.
 LINE_BUDGET = 32
 FIRST_SCREEN_LINES = 20
-
-_INDENT = " "
-# Columns held back on every wrapped line, so that a closing mark which may not
-# begin a line can never push the line past the width.
-_WRAP_RESERVE = 2
-# What a sentence may occupy and still be shown as one line.
-PROJECTION_SENTENCE_WIDTH = LINE_WIDTH - len(_INDENT) - _WRAP_RESERVE
 
 _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 _TIMEZONE_NOTE = "北京时间"
@@ -91,9 +97,6 @@ _TIMEZONE_NOTE = "北京时间"
 MAX_CHANGES = 3
 MAX_FOCUS_EVENTS = 2
 
-# Below this, a movement rounds to nothing and is not worth a line.
-_MOMENTUM_FLOOR = 0.005
-
 # What is said when the calendar holds nothing that could change a view. It is
 # an answer to the question rather than a gap in it, so it is written as one.
 _NO_CATALYST_SENTENCE = "近期暂无明确催化。"
@@ -101,7 +104,6 @@ _NO_CATALYST_SENTENCE = "近期暂无明确催化。"
 # The closing line carries two constant facts and is written compactly: a
 # separator with spaces around it costs four columns, which is what the line
 # needs to stay inside the width.
-_DISCLAIMER = "不构成投资建议"
 _UNCHANGED_PROVENANCE = {
     LIVE_DATA_LABEL: "实时",
     PLACEHOLDER_DATA_LABEL: "占位数据",
@@ -157,7 +159,7 @@ def _opportunity_lines(result: AnalysisResult) -> list[str]:
         f"{category_label(Category.HPO)}  "
         f"{stars(opportunity.grade) if opportunity.grade else NO_GRADE}"
     )
-    lines = [heading, *_wrap(opportunity_sentence(opportunity))]
+    lines = [heading, *wrap(opportunity_sentence(opportunity))]
     unknown = list(opportunity.unknown)
     if unknown:
         # A condition nothing could be said about is named rather than left out:
@@ -166,7 +168,7 @@ def _opportunity_lines(result: AnalysisResult) -> list[str]:
         phrases = [
             opportunity_condition_label(entry.condition, False) for entry in unknown
         ]
-        lines.extend(_named_block("未评估  ", phrases))
+        lines.extend(named_block("未评估  ", phrases))
     return lines
 
 
@@ -191,14 +193,21 @@ def _change_lines(result: AnalysisResult, moment: datetime) -> list[str]:
     if not entries:
         return []
     lines = [f"变化  {entries[0]}"]
-    lines.extend(f"{_INDENT * 2}{entry}" for entry in entries[1:])
+    lines.extend(f"{INDENT * 2}{entry}" for entry in entries[1:])
     return lines
 
 
 def _changes(result: AnalysisResult, moment: datetime) -> list[str]:
-    """Return one phrase per category that moved, most significant first."""
+    """Return one phrase per category that moved, most significant first.
+
+    Whether a rating moved at all is decided by :func:`analysis.projection.
+    is_a_change`, so that this block and the brief's summary of the universe are
+    counting the same movements.
+    """
     moves: list[tuple[float, str]] = []
     for rating in result.ratings:
+        if not is_a_change(rating):
+            continue
         phrase = _change_phrase(rating, moment)
         if phrase is None:
             continue
@@ -220,7 +229,7 @@ def _change_phrase(rating: CategoryRating, moment: datetime) -> str | None:
         if rating.previous_grade is None:
             return None
         return f"{name} {'升级' if rating.grade > rating.previous_grade else '降级'}"
-    if abs(rating.momentum) < _MOMENTUM_FLOOR:
+    if abs(rating.momentum) < MOMENTUM_FLOOR:
         return None
     improving = is_improvement(rating.category, rating.momentum)
     days = max(1, (moment - rating.since).days)
@@ -247,7 +256,7 @@ def _focus_lines(result: AnalysisResult, moment: datetime) -> list[str]:
     if not events:
         return []
     lines = [f"关注  {_focus_phrase(events[0], moment)}"]
-    lines.extend(f"{_INDENT * 2}{_focus_phrase(event, moment)}" for event in events[1:])
+    lines.extend(f"{INDENT * 2}{_focus_phrase(event, moment)}" for event in events[1:])
     return lines
 
 
@@ -275,9 +284,9 @@ def _category_block(result: AnalysisResult, category: Category) -> list[str]:
         # An empty calendar is an answer, and a category nothing was judged for
         # is a gap the tail reports. Only the first of those is written here.
         if category is Category.CATALYST:
-            return [heading, *_wrap(_NO_CATALYST_SENTENCE)]
+            return [heading, *wrap(_NO_CATALYST_SENTENCE)]
         return []
-    return [heading, *_wrap(sentence)]
+    return [heading, *wrap(sentence)]
 
 
 def _category_sentence(result: AnalysisResult, category: Category) -> str | None:
@@ -323,28 +332,8 @@ def _tail(result: AnalysisResult) -> list[str]:
         and category not in _assessed_categories(result)
     ]
     if missing:
-        lines.extend(_named_block(f"{NOT_ASSESSED_PREFIX}  ", missing))
+        lines.extend(named_block(f"{NOT_ASSESSED_PREFIX}  ", missing))
     lines.append(_provenance_line(result))
-    return lines
-
-
-def _named_block(prefix: str, items: Sequence[str]) -> list[str]:
-    """Return a labelled list of names, wrapped without splitting one.
-
-    A category name broken across two lines reads as two categories, so the
-    wrapping happens between names rather than inside them.
-    """
-    lines: list[str] = []
-    current = prefix
-    for index, item in enumerate(items):
-        glue = "" if index == 0 else "、"
-        width = _display_width(current) + _display_width(glue) + _display_width(item)
-        if width > LINE_WIDTH:
-            lines.append(current)
-            current = _INDENT * 2 + item
-            continue
-        current += glue + item
-    lines.append(current)
     return lines
 
 
@@ -353,48 +342,8 @@ def _provenance_line(result: AnalysisResult) -> str:
     quality = _UNCHANGED_PROVENANCE.get(data_quality_label(result), "行情状态未知")
     snapshot = result.market_data
     if snapshot is None:
-        return f"{quality}·{_DISCLAIMER}"
-    return f"来源 {snapshot.source}·{quality}·{_DISCLAIMER}"
-
-
-def _wrap(text: str) -> list[str]:
-    """Break a sentence across lines, for text that has no items to keep whole.
-
-    A sentence is not a list: it can be broken wherever it runs out of room,
-    unlike a measurement or a name, which has to stay on one line to be read at
-    all. Two columns are held back so that a closing mark, which may not begin a
-    line, cannot push a line past the width.
-    """
-    budget = LINE_WIDTH - _display_width(_INDENT) - _WRAP_RESERVE
-    lines: list[str] = []
-    current = ""
-    for character in text:
-        if (
-            current
-            and character not in _NEVER_STARTS_A_LINE
-            and _display_width(current) + _display_width(character) > budget
-        ):
-            lines.append(_INDENT + current)
-            current = ""
-        current += character
-    if current:
-        lines.append(_INDENT + current)
-    return lines
-
-
-def _display_width(text: str) -> int:
-    """Return how many columns a string occupies, counting Chinese as two."""
-    return sum(2 if _is_wide(character) else 1 for character in text)
-
-
-def _is_wide(character: str) -> bool:
-    """Return whether a character is drawn full width."""
-    return unicodedata.east_asian_width(character) in {"W", "F"}
-
-
-# Punctuation that may not begin a line. Chinese punctuation hangs off what it
-# follows, so a break in front of it reads as a mistake.
-_NEVER_STARTS_A_LINE = "，。；：、？！）》”’%"
+        return f"{quality}·{DISCLAIMER}"
+    return f"来源 {snapshot.source}·{quality}·{DISCLAIMER}"
 
 
 def fits_one_line(text: str) -> bool:
@@ -406,4 +355,4 @@ def fits_one_line(text: str) -> bool:
     it has not budgeted for, and the budget is what keeps the report short enough
     to finish.
     """
-    return _display_width(text) <= PROJECTION_SENTENCE_WIDTH
+    return display_width(text) <= PROJECTION_SENTENCE_WIDTH

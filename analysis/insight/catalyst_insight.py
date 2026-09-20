@@ -61,13 +61,22 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
     return tuple(lines)
 
 
-def focus_events(context: InsightContext, limit: int) -> tuple[CatalystEvent, ...]:
+def focus_events(
+    context: InsightContext, limit: int | None = None
+) -> tuple[CatalystEvent, ...]:
     """Return the events worth showing a reader, most worth watching first.
 
     Chosen by how much of the investment case the kind of event could change, and
     only then by when it falls. This is the ordering the insight uses, exposed so
     that the report can show the events without writing a second rule for which
     ones matter.
+
+    Args:
+        context: The catalyst evidence, and the moment it is measured from.
+        limit: How many events to return, or None for every one of them. The brief
+            asks for all of them and then takes the ones that bear on the whole
+            universe, so that it orders what it shows by this rule rather than by a
+            copy of it.
     """
     upcoming = _upcoming(context)
     ordered: list[CatalystEvent] = []

@@ -72,6 +72,13 @@ UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
     ),
 }
 
+# What is shown where a grade would be when nothing was read. None is not a low
+# grade, so it must never be drawn as one.
+NO_GRADE = "暂无评级"
+
+# What every report closes with, in the same words on every channel.
+DISCLAIMER = "不构成投资建议"
+
 DECISION_LABELS: dict[DecisionState, str] = {
     DecisionState.WATCH: "观望",
     DecisionState.ACCUMULATE: "增持",
