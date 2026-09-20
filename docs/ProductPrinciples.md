@@ -74,6 +74,14 @@ That is a different question from how a report is laid out. A report that answer
 is everything I looked at", and producing the second and shortening its lines does
 not produce the first.
 
+**And the same thing is said once.** When several assets amount to the same
+conclusion, the report states it once and names the assets it covers, rather than
+repeating the sentence once per asset. Repetition is not emphasis: it spends the
+width that could have carried what is different about each asset, and it teaches the
+reader to skim exactly the lines that matter most. Where a conclusion is shared, what
+remains worth stating per asset is what is *not* shared — where it stands, why it is
+worth attention, what it has ahead — and that is what the report writes.
+
 ---
 
 ## 3. Decision Philosophy

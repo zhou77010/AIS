@@ -399,30 +399,46 @@ It does not consult the change detector, because it is expected: "nothing has
 changed" is what most days look like, not a reason to say nothing. And it is
 computed at the hour it is sent, so there is no earlier result delivered late.
 
-**What it remembers.** Which local day it was last sent, in `state/runtime.json`,
-written by replacement so a process killed mid-write leaves the previous state
-intact. The day is read at startup, so a restart neither sends a second copy nor
-loses a brief that was missed because the process was not running. `AIS_STATE_FILE`
-moves the file; the path is in the configuration like every other path.
+**What it remembers is a state, not a flag.** `state/runtime.json` holds, for one
+local day, **where that day's brief stands**: `owed`, `sent` or `abandoned`, how many
+times it has been attempted, and when the last attempt was. It is written by
+replacement, so a process killed mid-write leaves the previous state intact, and it is
+read at startup, so a restart neither repeats a brief nor loses one. `AIS_STATE_FILE`
+moves the file; the path is in the configuration like every other path. The day is a
+field of the record rather than a key of its own, so a record about yesterday says
+nothing about today. A file written by the previous format — one key naming the day
+the brief was sent — is still read, as a delivered brief.
 
-**A failure is not retried.** The day is recorded whatever the outcome, because a
-retry would send a second copy to whoever the first attempt reached and would repeat
-a full evaluation of the universe on every wake until the failure stopped. A failed
-brief is logged as an error and reported in the cycle status.
+**Why a state rather than a flag.** "A brief was sent at some point" cannot tell a
+brief that reached a reader from one that reached nobody, and that difference is the
+whole question. See the delivery policy below.
 
-**And the brief has not been delivered yet.** The log shows it running at 09:00 on
-three consecutive days and delivering nothing: the machine had no route to the
-network at that hour, both the market data source and the notification channel were
-refused, and every asset was reported as failed. Nothing about the trigger was wrong —
-it fired on time every day — and the reader has still never received a brief.
+**A delivery that reached nobody is not a delivery.** An attempt ends one of two ways.
+If at least one channel carried the message the day is **sent**, and nothing more is
+owed. If every channel failed — the message reached nobody at all — the day stays
+**owed**, and it is tried again.
 
-That qualifies the retry rule above rather than contradicting it. The rule was written
-for a *partial* failure, where a retry would send a second copy to whoever the first
-attempt reached. When every channel fails, nobody has been told anything, and
-recording the day as sent spends the whole report on an outage that lasted a minute.
-Whether a total failure should leave the day owed — with a cap, so that an outage
-which does not end cannot become a retry on every wake — is open, and it is the first
-thing a runtime round should settle.
+**A partial failure is not a failure.** A channel that fails while another delivers is
+a degraded delivery, not a missing one. Resending it would send a second copy to
+whoever the first attempt reached, which is the outcome the original rule existed to
+prevent, so only a delivery that reached nobody leaves anything owed.
+
+**A retry is spaced and capped.** It is spaced by 30 minutes, because the hour the
+brief was owed at is already behind and an attempt that failed would otherwise be
+immediately due again — a loop costing a full analysis of the universe each time round.
+It is capped at three attempts, because a report the reader opened the morning for
+stops being that report if it arrives at noon, and because an outage that does not end
+must not keep the runtime busy until midnight. An abandoned day is logged as an error;
+the reader is not told, because the channel that would tell them is the one that just
+failed.
+
+**This was decided from a real failure.** The log shows the brief firing at 09:00 on
+three consecutive days and delivering nothing: the machine had no route to the network
+at that hour, both the market data source and the notification channel were refused,
+and every asset was reported as failed. The trigger was right every day and the reader
+has still never received a brief. The rule that a failure is not retried was written for
+a partial failure; a total one had no rule at all, and recording the day as sent spent
+the whole report on an outage that lasted a minute.
 
 ### Only one of the two scheduled reports is active, and it is the morning one
 
@@ -645,6 +661,20 @@ condition does not hold is flagged. The asset that leads on standing is not:
 "opportunity" would be a claim its own judgement does not make — the sentence beside
 it reads that the opportunity is ordinary and not a priority.
 
+**The same conclusion is written once.** Assets that reached the same conclusion are
+written under one statement of it, labelled, with their own headings beneath it. Three
+assets reading alike are one thing to say, and writing it three times costs the reader
+the lines that could have differed. What is shared is the conclusion; each asset keeps
+its own standing, its own reason tag and its own event.
+
+Two assets reached the same conclusion when their opportunity judgements hold the same
+number of conditions, which is what the sentence is written from: equal counts are
+equal words. Grouping does not reorder the brief — a group sits where its most
+important member sat and its members keep their order — so an asset whose own standing
+is lower can appear above one that outranks it, which is the price of not repeating
+the sentence, and every heading still states its own standing. Conclusions that differ
+are never merged, however similar they read.
+
 **Whether a rating moved is decided in one place**
 (`analysis.projection.is_a_change`), so the brief and the per-asset change block
 count the same movements: a grade moving, a movement accumulating inside a grade,
@@ -665,12 +695,6 @@ index move carried per asset, which is not a statement about today.
 
 ### Still open
 
-- **The judgement line repeats when the universe reads alike.** The reading layer is
-  strict after the Reading Layer work: HPO reads 1 for six of the seven watched assets
-  and 3 for the seventh, so a brief can show three entries carrying the same sentence.
-  Loosening the bars is a Reading Layer decision and is not taken; stating a shared
-  conclusion once instead of once per entry is a projection decision and is not taken
-  either. It is a shape to decide, not a defect to tune away.
 - **Whether the brief should state a market state at all**, which is the same
   dependency as the 21:00 brief: Phase C, market-level evidence.
 - **The Weekly report** is unclassified. It was one of the three older items and
@@ -684,6 +708,19 @@ index move carried per asset, which is not a statement about today.
   needs the threshold that is deferred with the AIS Standard Score. The brief's own
   policy is built; an alert's does not exist.
 - **Where the baseline lives**, now that it has to outlive the process.
+- **What to do when a day is abandoned.** Three attempts that all reached nobody leave
+  the day given up on and the reader told nothing all day. Sending a message to say the
+  brief failed is close to useless — the channel that would carry it is the one that
+  failed — so the runtime logs it and stops there. Whether there is anything better is
+  open.
+
+**Settled in this round.** The judgement line repeating when the universe reads alike
+is answered in the projection: a conclusion several assets reached is written once,
+under a label, with their own headings beneath it. Loosening the reading bars to make
+HPO read differently was considered and **declined**: the Reading Layer is strict
+because it is internally consistent, and adjusting it to produce more variety in a
+report would put the contradictions back that the one-reading work removed. HPO reading
+1 for six assets is the reading, not a defect.
 
 **A single combined daily message is built, and it was a decision for the product
 review.** It was deferred here as a new report structure rather than a formatting

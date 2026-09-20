@@ -1316,4 +1316,114 @@ backlog records the market state as an open item with the same dependency as the
 
 ---
 
+### A message that reached nobody is not a message
+
+**Context.** The brief sent one digest at 09:00 and recorded the day as done whatever
+the attempt returned. The log then showed it firing on three consecutive mornings and
+delivering nothing: the machine had no route to the network at that hour, both the
+market data source and the notification channel were refused, and every asset was
+reported as failed. The trigger was right every day. The reader never received a brief,
+and the state file said the day had been sent.
+
+**Decision.** The runtime's memory of a day becomes a **state** rather than a flag:
+`owed`, `sent` or `abandoned`, with the attempt count and the moment of the last
+attempt. An attempt that reached at least one channel settles the day; an attempt that
+reached nobody leaves it owed and spaced for another try; the attempts are capped, and
+running out abandons the day rather than retrying until midnight.
+
+**Reason.** The old rule — a failure is not retried, and the day is recorded whatever
+happens — was written for a *partial* failure, where a retry would send a second copy
+to whoever the first attempt had already reached. That reasoning is sound and it is
+preserved: a channel failing while another delivers is a degraded delivery, not a
+missing one, and it settles the day. What the rule did not have was the other case.
+When every channel fails, nobody has been told anything, and "already handled" is
+false.
+
+**The difference had to be reported, not inferred.** The run's status could not carry
+it: an asset that cannot be analysed and a message that reaches nobody both surface as
+a failed run, and they mean opposite things for the day. So the brief asks the
+application for two facts — what the run did, and whether anybody was told — and the
+state machine is built on the second.
+
+**Spacing is not decoration.** The hour the brief is owed at is already behind once it
+has run, so a failed attempt would be due again the instant it failed. That is a loop
+that costs a full analysis of the universe every time round, and it is what makes the
+retry interval part of the state rather than a detail of the scheduler.
+
+**Impact.** The day survives an outage that lasts minutes, which is the failure that
+actually happens, and it stops after three attempts, which bounds what an outage that
+does not end can cost. A restart reads the attempts back, so a process that keeps
+coming back cannot restart the count. What is not solved is the reader who is told
+nothing all day: the channel that would tell them failed, and the runtime logs it
+instead.
+
+**Revisit.** When an alert has its own delivery state, which is the same question with
+a threshold in front of it.
+
+---
+
+### The same conclusion is written once
+
+**Context.** The brief had become one message, and it still said the same sentence
+three times: on a real run the watched universe read `★★☆☆☆` for six assets of seven,
+so the three assets a brief writes out carried an identical line each.
+
+**Decision.** Assets that reached the same conclusion are written under one statement
+of it, labelled, with their own headings beneath. Two assets reached the same
+conclusion when their opportunity judgements hold the same number of conditions.
+
+**Reason.** A brief that has already been reduced to one message and then repeats one
+sentence three times has spent its width on nothing. What the reader needs from the
+second and third asset is what is *different* about them — where each stands, why each
+is in the brief, what each has ahead — and every one of those is still on its own line.
+The conclusion is the part that was the same.
+
+**And the alternative was declined.** The other way to stop the repetition is to make
+the reading less uniform, so that the assets do not all read alike. That would mean
+loosening the Reading Layer, and the Reading Layer is strict because it is internally
+consistent: it says one thing about a measurement, and every sentence, grade and
+judgement reads the same decision. Adjusting it to produce variety in a report would
+put back the contradictions that work removed. HPO reading 1 for six assets is the
+reading; a report that finds it boring has a projection problem, not a reading problem.
+
+**Impact.** The grouping lives in the brief model, not in the renderer: which assets
+share a conclusion is a fact about the document. Grouping never reorders the brief — a
+group sits where its most important member sat — so an asset whose own standing is
+lower can appear above one that outranks it. That is the price, it is stated, and every
+heading still carries its own standing so nothing is hidden by it.
+
+**Revisit.** When the watch universe is large enough that three assets rarely share a
+conclusion, at which point the label is doing nothing and can go.
+
+---
+
+### A fixture dated from a constant expires
+
+**Context.** One test failed for a reason that had nothing to do with any change:
+`test_a_primary_event_outranks_a_nearer_secondary_one`. Its events were dated from a
+constant moment in the test file while the insight layer reads a result that carries no
+market data against the current moment — so on the day the constant left the catalyst
+window, the fixture's events stopped being upcoming and the assertion had nothing left
+to find.
+
+**Decision.** The fixture's moment follows the clock. `_MOMENT` is the moment the test
+module is imported, and the events are dated relative to it, so the fixture is
+self-consistent whenever it runs.
+
+**Reason.** A test that passes on the day it is written and fails a week later is worse
+than no test: it teaches whoever meets it to distrust the suite. The cause here was not
+the constant itself but the mismatch — the fixture's own moment was fixed while the
+code under test read the real clock, and an event that is two days ahead of a date in
+the past is not ahead at all.
+
+**Impact.** The same shape was found in the brief's own tests, which asserted a
+particular day against the system clock; they take the moment they run at from a
+supplied clock now, which is the pattern the scheduler already used. The rule that
+comes out of it: **a test that depends on now supplies now**, and a fixture with dates
+in it is dated from one moment rather than two.
+
+**Revisit.** No.
+
+---
+
 End of Document
