@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from models.asset import Asset
+from models.sector import Sector
 
 
 class WatchSet(StrEnum):
@@ -80,8 +81,8 @@ class WatchEntry:
     """One asset of the universe, and the sets it belongs to.
 
     Attributes:
-        asset: The asset itself, carrying its own name, exchange, currency and
-            profile so that nothing downstream has to invent them.
+        asset: The asset itself, carrying its own name, exchange, currency, profile
+            and sector so that nothing downstream has to invent them.
         sets: Sets the asset was declared to belong to. The theme set is not here:
             it is derived from the theme mapping, so that adding a theme to an asset
             cannot leave the two out of step.
@@ -142,6 +143,23 @@ class WatchUniverse:
             return frozenset()
         derived = {WatchSet.THEME} if self.themes_for(ticker) else set()
         return entry.sets | derived
+
+    @property
+    def sectors(self) -> tuple[Sector, ...]:
+        """Return every part of the market the universe is in, each once.
+
+        It is what the environment is asked to measure: a pass should cost what the
+        universe costs, and a sector nobody holds is not worth a request. The order
+        is the order the universe holds them, so the same watchlist produces the same
+        requests in the same order.
+        """
+        return tuple(
+            dict.fromkeys(
+                entry.asset.sector
+                for entry in self.entries
+                if entry.asset.sector is not None
+            )
+        )
 
     def by_set(self, watch_set: WatchSet) -> tuple[Asset, ...]:
         """Return every asset that belongs to one set, in universe order.

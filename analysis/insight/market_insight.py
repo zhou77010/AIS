@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from analysis.insight.context import InsightContext
+from analysis.labels import sector_label
 from contracts.market_data_provider import MarketMetric as M
 from contracts.market_environment import EnvironmentMetric as E
 from models.asset_profile import AssetProfile
@@ -200,17 +201,45 @@ def _style_clause(context: InsightContext) -> str | None:
 def _impacts(context: InsightContext) -> list[_Impact]:
     """Return every way the environment bears on this asset, most concrete first.
 
-    The order is the order they are worth reading: what the tape is doing to this
-    position, then what the cost of money does to what it costs, then whether the kind
-    of business it is happens to be in or out of favour, and last an exposure AIS can
+    The order is the order they are worth reading: what this asset's own part of the
+    market is doing, then what the tape is doing to a position of this sensitivity,
+    then what the cost of money does to what it costs, then whether the kind of
+    business it is happens to be in or out of favour, and last an exposure AIS can
     name and cannot yet judge the direction of.
     """
     impacts: list[_Impact] = []
-    for rule in (_movement, _cost_of_money, _kind, _sensitivity):
+    for rule in (_sector, _movement, _cost_of_money, _kind, _sensitivity):
         impact = rule(context)
         if impact is not None:
             impacts.append(impact)
     return impacts
+
+
+def _sector(context: InsightContext) -> _Impact | None:
+    """Return what the asset's own part of the market is doing.
+
+    This is the most specific thing the environment can say about a holding, and it is
+    the reason the sector is stated at all: the market being up says little about a
+    bank, and the financial sector being sold while the market is bought says a great
+    deal about one. The reading is the sector's move against the market over the same
+    session, so it is a comparison and not a level.
+
+    It says what was measured — the sector moved against the market — and not why.
+    A relative move is consistent with money leaving a sector and it is not a flow
+    figure, and a sentence claiming flows would be claiming something nobody measured.
+    """
+    if context.sector is None or not context.moved(E.SECTOR_RELATIVE_MOVE):
+        return None
+    score = context.score(E.SECTOR_RELATIVE_MOVE)
+    if score is None:
+        return None
+    name = sector_label(context.sector)
+    references = context.reference(E.SECTOR_RELATIVE_MOVE)
+    if score <= _WEAK:
+        return _Impact(f"所属板块（{name}）跑输大盘，本标的短期承压。", references)
+    if score >= _STRONG:
+        return _Impact(f"所属板块（{name}）跑赢大盘，本标的短期有支撑。", references)
+    return None
 
 
 def _movement(context: InsightContext) -> _Impact | None:

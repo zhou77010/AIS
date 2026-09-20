@@ -31,7 +31,7 @@ from app.scheduler import IntervalSchedule, Scheduler
 from config.config import Config
 from contracts.market_data_provider import MarketDataSnapshot
 from contracts.market_environment import (
-    EnvironmentMetric,
+    WIDE_METRICS,
     EnvironmentPoint,
     EnvironmentSnapshot,
 )
@@ -567,7 +567,7 @@ class _Environment:
             retrieved_at=_BEFORE,
             points=tuple(
                 EnvironmentPoint(metric=metric, value=None, reason="test reason")
-                for metric in EnvironmentMetric
+                for metric in WIDE_METRICS
             ),
         )
 

@@ -19,6 +19,7 @@ from models.catalyst_event import CatalystEvent, CatalystEventKind, CatalystEven
 from models.category import Category
 from models.decision_state import DecisionState
 from models.opportunity_assessment import OpportunityCondition
+from models.sector import Sector
 
 # Category names. HPO is deliberately left as HPO: the Constitution does not
 # specify what it means, so it cannot be translated without inventing a meaning
@@ -58,11 +59,12 @@ CATEGORY_DEFAULT_UNIT_NOUN = "项"
 # category that becomes complete stops printing it.
 UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
     Category.RISK: ("业务风险", "估值风险", "事件风险", "证据风险", "长期风险"),
-    # Volatility and rates were named here while nothing measured them. They are
-    # measured now, so what remains is what the environment question still does not
-    # reach: the industry an asset competes in, where money is moving, and what the
-    # currency it earns in is doing.
-    Category.MARKET: ("行业环境", "资金流向", "汇率环境"),
+    # Volatility and rates were named here while nothing measured them, and the
+    # sector's own relative move is read now too. What remains is what the
+    # environment question still does not reach: what is happening inside the
+    # industry rather than to its price, where money is actually moving, and what
+    # the currency an asset earns in is doing.
+    Category.MARKET: ("行业基本面", "资金流向", "汇率环境"),
     Category.TREND: ("价格路径",),
     # Named by layer, because that is how the catalyst question is read and how
     # the report groups what it did find.
@@ -170,6 +172,28 @@ SIGNED_METRICS = frozenset(
         MarketMetric.RISK_DRAWDOWN,
     }
 )
+
+
+# What each part of the market is called when a sentence names it. The names are the
+# ones an investor reads in the news rather than the taxonomy's own words.
+SECTOR_LABELS: dict[Sector, str] = {
+    Sector.TECHNOLOGY: "科技",
+    Sector.COMMUNICATION: "通信服务",
+    Sector.CONSUMER_CYCLICAL: "可选消费",
+    Sector.CONSUMER_DEFENSIVE: "必需消费",
+    Sector.ENERGY: "能源",
+    Sector.FINANCIAL: "金融",
+    Sector.HEALTHCARE: "医疗",
+    Sector.INDUSTRIALS: "工业",
+    Sector.MATERIALS: "材料",
+    Sector.REAL_ESTATE: "房地产",
+    Sector.UTILITIES: "公用事业",
+}
+
+
+def sector_label(sector: Sector) -> str:
+    """Return the name a part of the market is reported under."""
+    return SECTOR_LABELS[sector]
 
 
 def category_label(category: Category) -> str:

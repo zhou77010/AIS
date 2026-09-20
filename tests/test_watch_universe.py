@@ -19,6 +19,7 @@ import pytest
 
 from config.watchlist import load_watch_universe, universe_from_tickers
 from models.asset_profile import AssetProfile
+from models.sector import Sector
 from models.watch_universe import (
     DECLARABLE_SETS,
     DERIVED_SETS,
@@ -57,6 +58,67 @@ def test_a_universe_built_from_tickers_watches_the_core_list() -> None:
 
     assert universe.tickers == ("AAPL", "RKLB")
     assert universe.sets_of("AAPL") == frozenset({WatchSet.CORE})
+
+
+# --------------------------------------------------------------------------
+# The part of the market an asset is in
+# --------------------------------------------------------------------------
+
+
+def test_a_member_states_the_part_of_the_market_it_is_in(tmp_path: Path) -> None:
+    # It is stated, not inferred: which sector an asset is in decides what it is
+    # compared against, and therefore which sentence the report can write about it.
+    path = _write(
+        tmp_path,
+        {"members": [_member("AAPL", sector="technology")]},
+    )
+
+    universe = load_watch_universe(path)
+
+    assert universe is not None
+    assert universe.assets[0].sector is Sector.TECHNOLOGY
+    assert universe.sectors == (Sector.TECHNOLOGY,)
+
+
+def test_a_sector_nobody_stated_is_left_absent(tmp_path: Path) -> None:
+    path = _write(tmp_path, {"members": [_member("CGDV")]})
+
+    universe = load_watch_universe(path)
+
+    assert universe is not None
+    assert universe.assets[0].sector is None
+    assert universe.sectors == ()
+
+
+def test_a_sector_that_cannot_be_recognised_is_not_guessed_at(
+    tmp_path: Path,
+) -> None:
+    path = _write(tmp_path, {"members": [_member("AAPL", sector="semiconductors")]})
+
+    universe = load_watch_universe(path)
+
+    assert universe is not None
+    assert universe.assets[0].sector is None
+
+
+def test_the_universe_reports_each_sector_it_holds_once(tmp_path: Path) -> None:
+    # What the environment is asked to measure: a pass should cost what the universe
+    # costs, and a sector nobody holds is not worth a request.
+    path = _write(
+        tmp_path,
+        {
+            "members": [
+                _member("AAPL", sector="technology"),
+                _member("MSFT", sector="technology"),
+                _member("HSBC", sector="financial"),
+            ]
+        },
+    )
+
+    universe = load_watch_universe(path)
+
+    assert universe is not None
+    assert universe.sectors == (Sector.TECHNOLOGY, Sector.FINANCIAL)
 
 
 def test_a_ticker_with_no_watchlist_knows_nothing_about_itself() -> None:

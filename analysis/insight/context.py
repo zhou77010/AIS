@@ -20,7 +20,11 @@ from datetime import datetime
 from analysis.analysis_result import AnalysisResult
 from contracts.catalyst_event_provider import CATALYST_EVIDENCE_ID
 from contracts.market_data_provider import MARKET_EVIDENCE_ID
-from contracts.market_environment import ENVIRONMENT_EVIDENCE_ID, EnvironmentMetric
+from contracts.market_environment import (
+    ENVIRONMENT_EVIDENCE_ID,
+    ENVIRONMENT_SECTOR_EVIDENCE_ID,
+    EnvironmentMetric,
+)
 from evaluation.reading.bands import (
     Band,
     ReadableMetric,
@@ -33,6 +37,7 @@ from models.asset_profile import AssetProfile
 from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.category_rating import CategoryRating
+from models.sector import Sector
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,9 @@ class InsightContext:
         profile: What kind of instrument the asset was declared to be. What kind of
             thing an asset is decides which questions apply to it and which
             environments bear on it, so a sentence needs it beside the readings.
+        sector: The part of the market the asset was declared to be in, or None when
+            nobody has stated one. It decides which part of the market this asset is
+            compared with, and an asset with none is compared with nothing.
         values: Every measurement that was retrieved, keyed by metric. It holds the
             asset's own measurements and the environment's, because a category's
             question is answered by both and a builder should not have to know which
@@ -61,6 +69,7 @@ class InsightContext:
     category: Category
     ticker: str
     profile: AssetProfile
+    sector: Sector | None
     values: Mapping[ReadableMetric, float]
     reading: CategoryReading
     events: tuple[CatalystEvent, ...]
@@ -162,7 +171,7 @@ class InsightContext:
         the fact belongs to the market rather than to this asset.
         """
         return tuple(
-            _evidence_id(self.ticker, metric)
+            _evidence_id(self.ticker, metric, self.sector)
             for metric in metrics
             if metric in self.values
         )
@@ -174,8 +183,18 @@ class InsightContext:
         )
 
 
-def _evidence_id(ticker: str, metric: ReadableMetric) -> str:
-    """Return the evidence identifier of one measurement."""
+def _evidence_id(ticker: str, metric: ReadableMetric, sector: Sector | None) -> str:
+    """Return the evidence identifier of one measurement.
+
+    Which item an identifier points at depends on whose measurement it is, and there
+    are three answers: the asset's own evidence carries its ticker, the market's
+    carries none because the fact belongs to the market, and a sector's carries the
+    sector, because that is what makes it a different fact from the next sector's.
+    """
+    if metric is EnvironmentMetric.SECTOR_RELATIVE_MOVE:
+        if sector is None:
+            return ENVIRONMENT_EVIDENCE_ID.format(metric=metric.value)
+        return ENVIRONMENT_SECTOR_EVIDENCE_ID.format(sector=sector.value)
     if isinstance(metric, EnvironmentMetric):
         return ENVIRONMENT_EVIDENCE_ID.format(metric=metric.value)
     return MARKET_EVIDENCE_ID.format(ticker=ticker, metric=metric.value)
@@ -195,35 +214,45 @@ def context_for(result: AnalysisResult, category: Category) -> InsightContext:
     The environment's measurements are offered the same way, because they are part
     of the evidence for one category and nothing else: what the market is doing is
     read beside what the asset is doing, and the sentence that comes out is about
-    the asset.
+    the asset. The sector reading is offered as a value like any other, taken from the
+    reading rather than from a point, because the sector that matters is this asset's
+    own and the environment holds one reading per sector rather than one for the
+    market.
     """
     snapshot = result.market_data
     environment = result.environment
+    sector = result.asset.sector
+    reading = read_category(snapshot, category, environment=environment, sector=sector)
+    values: dict[ReadableMetric, float] = {
+        **(
+            {}
+            if snapshot is None
+            else {
+                point.metric: point.value
+                for point in snapshot.available_points
+                if point.value is not None
+            }
+        ),
+        **(
+            {}
+            if environment is None
+            else {
+                point.metric: point.value
+                for point in environment.available_points
+                if point.value is not None
+            }
+        ),
+    }
+    move = reading.read(EnvironmentMetric.SECTOR_RELATIVE_MOVE)
+    if move is not None:
+        values[move.metric] = move.value
     return InsightContext(
         category=category,
         ticker=result.asset.ticker,
         profile=result.asset.profile,
-        values={
-            **(
-                {}
-                if snapshot is None
-                else {
-                    point.metric: point.value
-                    for point in snapshot.available_points
-                    if point.value is not None
-                }
-            ),
-            **(
-                {}
-                if environment is None
-                else {
-                    point.metric: point.value
-                    for point in environment.available_points
-                    if point.value is not None
-                }
-            ),
-        },
-        reading=read_category(snapshot, category, environment=environment),
+        sector=sector,
+        values=values,
+        reading=reading,
         events=result.events,
         moment=_moment_for(result),
         rating=result.rating_for(category),

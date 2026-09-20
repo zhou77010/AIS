@@ -19,9 +19,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from contracts.market_data_provider import MarketDataSnapshot
-from contracts.market_environment import EnvironmentSnapshot
+from contracts.market_environment import EnvironmentMetric, EnvironmentSnapshot
 from evaluation.reading.bands import Band, ReadableMetric, band_for, score_for
 from models.category import Category
+from models.sector import Sector
 
 
 @dataclass(frozen=True)
@@ -108,21 +109,28 @@ def read_category(
     category: Category,
     *,
     environment: EnvironmentSnapshot | None = None,
+    sector: Sector | None = None,
 ) -> CategoryReading:
     """Read every measurement of one category that has a scale.
 
-    A category is read from two places, and they are different in kind. The snapshot
-    carries what the source reported about **this asset**. The environment carries
-    what the market itself is doing, which is the same for every asset in it and is
-    retrieved once. Both are read here, together, because a category's question is
-    answered by all of its measurements and not only by the ones that belong to the
-    asset.
+    A category is read from three places, and they are different in kind. The snapshot
+    carries what the source reported about **this asset**. The environment carries what
+    the market itself is doing, which is the same for every asset in it and is
+    retrieved once. The sector carries how this asset's own part of the market is doing
+    against the rest of it, which is the same for every asset in that sector and
+    nothing like the same for an asset in another.
+
+    All three are read here, together, because a category's question is answered by all
+    of its measurements and not only by the ones that belong to the asset.
 
     Args:
         snapshot: Market data of the run, or None when no source was consulted.
         category: Category to read.
         environment: The environment the run was judged in, or None when none was
             retrieved.
+        sector: The part of the market the asset is in, or None when nobody has stated
+            one. Without it there is no sector to compare and the asset is told nothing
+            about one.
 
     Returns:
         The reading, empty when no measurement of the category was retrieved.
@@ -130,6 +138,7 @@ def read_category(
     reads = [
         *_entity_reads(snapshot, category),
         *_environment_reads(environment, category),
+        *_sector_reads(environment, category, sector),
     ]
     return CategoryReading(category=category, reads=tuple(reads))
 
@@ -162,6 +171,25 @@ def _environment_reads(
             for point in environment.available_points
             if point.value is not None
         ),
+        category,
+    )
+
+
+def _sector_reads(
+    environment: EnvironmentSnapshot | None,
+    category: Category,
+    sector: Sector | None,
+) -> list[MetricRead]:
+    """Return the reading of the part of the market this asset is in.
+
+    One reading, because there is one sector: the sector an asset belongs to is the
+    comparison that matters to it, and the others are other people's comparisons.
+    """
+    move = None if environment is None else environment.sector_move(sector)
+    if move is None:
+        return []
+    return _reads(
+        ((EnvironmentMetric.SECTOR_RELATIVE_MOVE, move.value),),
         category,
     )
 

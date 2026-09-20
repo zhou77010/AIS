@@ -30,6 +30,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from models.category import Category
+from models.sector import Sector
 
 # Keys used in the metadata of the evidence items that carry an environment
 # measurement. They are the same keys the per-asset market data uses, because a
@@ -40,6 +41,12 @@ VALUE_METADATA_KEY = "market_value"
 # How the evidence for one environment measurement is identified. It carries no
 # ticker: the fact belongs to the market, not to an asset.
 ENVIRONMENT_EVIDENCE_ID = "environment.{metric}"
+
+# How the evidence for one sector's move is identified. It carries no ticker either,
+# and it does carry the sector, because that is what makes it a different fact from
+# the next sector's: two assets in the same sector share one of these, and an asset
+# in another sector shares none of it.
+ENVIRONMENT_SECTOR_EVIDENCE_ID = "environment.sector.{sector}"
 
 
 class EnvironmentMetric(StrEnum):
@@ -56,6 +63,12 @@ class EnvironmentMetric(StrEnum):
     VOLATILITY = "volatility"
     VOLATILITY_CHANGE = "volatility_change"
     TEN_YEAR_YIELD_CHANGE = "ten_year_yield_change"
+
+    # Not a measurement of the whole market: it is a measurement of one part of it,
+    # and which part an asset belongs to is stated rather than inferred. It is read
+    # as an environment measurement all the same, because that is where it is read
+    # from and because it is the same number for every asset in that sector.
+    SECTOR_RELATIVE_MOVE = "sector_relative_move"
 
     @property
     def label(self) -> str:
@@ -83,7 +96,20 @@ _LABELS: dict[EnvironmentMetric, str] = {
     EnvironmentMetric.VOLATILITY: "Volatility index level",
     EnvironmentMetric.VOLATILITY_CHANGE: "Volatility index change",
     EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: "Ten year yield change in basis points",
+    EnvironmentMetric.SECTOR_RELATIVE_MOVE: "Sector against the broad market",
 }
+
+# The measurements taken of the whole market, in the order a reader meets them. The
+# sector measurement is deliberately not one of them: the market has a volatility and
+# a cost of money, and it has no single sector. A snapshot holds one point per member
+# of this tuple, and one reading per sector beside it.
+WIDE_METRICS: tuple[EnvironmentMetric, ...] = (
+    EnvironmentMetric.OVERNIGHT_EQUITY,
+    EnvironmentMetric.OVERNIGHT_GROWTH,
+    EnvironmentMetric.VOLATILITY,
+    EnvironmentMetric.VOLATILITY_CHANGE,
+    EnvironmentMetric.TEN_YEAR_YIELD_CHANGE,
+)
 
 
 @dataclass(frozen=True)
@@ -106,21 +132,48 @@ class EnvironmentPoint:
 
 
 @dataclass(frozen=True)
+class SectorMove:
+    """One sector, measured against the market it belongs to.
+
+    A sector's own change is not the interesting number: the market moved too, and
+    what a reader holding the sector needs is the difference. So the value is the
+    sector's move less the broad market's over the same session, and it is reported
+    as one number rather than two so that nothing downstream can subtract them in the
+    wrong order or over different windows.
+
+    Attributes:
+        sector: The sector the measurement is about.
+        value: The sector's move less the market's, or None when it could not be
+            retrieved.
+        reason: What was measured and how it was derived, or why it is missing.
+    """
+
+    sector: Sector
+    value: float | None
+    reason: str
+
+
+@dataclass(frozen=True)
 class EnvironmentSnapshot:
     """Every environment measurement retrieved at one moment.
 
-    The snapshot always carries one point per :class:`EnvironmentMetric`, so a
-    measurement the source could not provide is still visible and explained.
+    The snapshot always carries one point per member of :data:`WIDE_METRICS`, so a
+    measurement the source could not provide is still visible and explained. The sector
+    measurements are held separately, because there is one of them per sector AIS
+    watches rather than one for the market: a snapshot cannot hold "the sector move"
+    without saying whose.
 
     Attributes:
         source: Name of the source the measurements came from.
         retrieved_at: Moment they were retrieved.
-        points: One point per measurement.
+        points: One point per measurement of the whole market.
+        sectors: One reading per sector that was measured, in a stable order.
     """
 
     source: str
     retrieved_at: datetime
     points: tuple[EnvironmentPoint, ...]
+    sectors: tuple[SectorMove, ...] = ()
 
     @property
     def available_points(self) -> tuple[EnvironmentPoint, ...]:
@@ -153,6 +206,20 @@ class EnvironmentSnapshot:
             if point.metric is metric:
                 return point
         raise KeyError(f"no environment point recorded for {metric.value}")
+
+    def sector_move(self, sector: Sector | None) -> SectorMove | None:
+        """Return the reading for one sector, or None when there is none.
+
+        An asset with no stated sector asks with None and gets None, which is how an
+        exchange-traded fund or an unclassified business is told nothing about its
+        sector rather than something plausible.
+        """
+        if sector is None:
+            return None
+        for move in self.sectors:
+            if move.sector is sector:
+                return move
+        return None
 
 
 class EnvironmentProvider(Protocol):

@@ -14,6 +14,7 @@ from app.scheduler import IntervalSchedule, Scheduler
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
 from config.config import Config
 from contracts.market_environment import (
+    WIDE_METRICS,
     EnvironmentMetric,
     EnvironmentPoint,
     EnvironmentSnapshot,
@@ -420,7 +421,7 @@ def _environment_snapshot(*, live: bool = True) -> EnvironmentSnapshot:
                 value=values[metric] if live else None,
                 reason="test reason",
             )
-            for metric in EnvironmentMetric
+            for metric in WIDE_METRICS
         ),
     )
 

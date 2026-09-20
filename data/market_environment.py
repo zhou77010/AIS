@@ -12,6 +12,12 @@ vendor also publishes a `chartPreviousClose`, and it is deliberately not used: i
 the close before the requested range began rather than the previous session, so
 reading it as "the previous close" would report a week's move as an overnight one.
 
+**Sectors are measured against the market, not on their own.** The provider is told
+which sectors the watch universe is in, reads only those, and reports each one as its
+own move less the broad market's over the same session. Reading all eleven sectors
+would be requests for sectors nobody holds; reading one sector's own move would say
+nothing, because the market moved too.
+
 Nothing here is a judgement. The provider states what the market did and how it
 derived it, and never whether that is good or bad for anything.
 
@@ -22,7 +28,7 @@ retrieved is returned as a point without a value that states why.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from urllib.parse import quote
 
@@ -32,8 +38,10 @@ from contracts.market_environment import (
     EnvironmentPoint,
     EnvironmentProvider,
     EnvironmentSnapshot,
+    SectorMove,
 )
 from data.http import HttpTransport, UrllibTransport
+from models.sector import Sector
 
 SOURCE_NAME = "Yahoo Finance"
 
@@ -64,6 +72,28 @@ _SYMBOL_NAMES: dict[str, str] = {
     "^TNX": "Ten year yield",
 }
 
+# What measures each sector. A sector is stated by a person and measured by an
+# instrument, and the instrument is a vendor's symbol, which is why the mapping lives
+# in the Data layer beside the other symbols rather than in the model.
+_SYMBOL_BY_SECTOR: dict[Sector, str] = {
+    Sector.TECHNOLOGY: "XLK",
+    Sector.COMMUNICATION: "XLC",
+    Sector.CONSUMER_CYCLICAL: "XLY",
+    Sector.CONSUMER_DEFENSIVE: "XLP",
+    Sector.ENERGY: "XLE",
+    Sector.FINANCIAL: "XLF",
+    Sector.HEALTHCARE: "XLV",
+    Sector.INDUSTRIALS: "XLI",
+    Sector.MATERIALS: "XLB",
+    Sector.REAL_ESTATE: "XLRE",
+    Sector.UTILITIES: "XLU",
+}
+
+# What a sector is measured against. The comparison is with the broad market over the
+# same session, which is the only way "this sector moved" says anything: everything
+# moved.
+_MARKET_SYMBOL = "SPY"
+
 # The ten year yield is quoted in percent; a basis point is a hundredth of one.
 _BASIS_POINTS = 100.0
 
@@ -71,13 +101,20 @@ _BASIS_POINTS = 100.0
 class YahooEnvironmentProvider:
     """Retrieves the environment the market is in, from Yahoo Finance."""
 
-    def __init__(self, transport: HttpTransport | None = None) -> None:
+    def __init__(
+        self,
+        sectors: Sequence[Sector] = (),
+        transport: HttpTransport | None = None,
+    ) -> None:
         """Create the provider.
 
         Args:
+            sectors: The sectors the watch universe is in, in a stable order. Only
+                these are measured, and each is measured against the market.
             transport: Transport to talk through. Defaults to the standard library
                 transport; tests supply a stand-in.
         """
+        self._sectors = tuple(dict.fromkeys(sectors))
         self._transport: HttpTransport = (
             transport if transport is not None else UrllibTransport()
         )
@@ -92,11 +129,11 @@ class YahooEnvironmentProvider:
         instead of all of it.
 
         Returns:
-            Snapshot holding one point per measurement.
+            Snapshot holding one point per measurement, and one reading per sector.
         """
         retrieved_at = datetime.now()
         series: dict[str, tuple[float, ...] | None] = {}
-        for symbol in dict.fromkeys(_SYMBOL_BY_METRIC.values()):
+        for symbol in self._symbols():
             series[symbol] = self._closes(symbol)
 
         points = tuple(
@@ -107,14 +144,41 @@ class YahooEnvironmentProvider:
             source=SOURCE_NAME,
             retrieved_at=retrieved_at,
             points=points,
+            sectors=self._sector_moves(series),
         )
         self._logger.info(
-            "environment: %d of %d measurements retrieved from %s",
+            "environment: %d of %d measurements and %d sector(s) retrieved from %s",
             len(snapshot.available_points),
             len(snapshot.points),
+            len(snapshot.sectors),
             SOURCE_NAME,
         )
         return snapshot
+
+    def _symbols(self) -> tuple[str, ...]:
+        """Return every symbol this pass reads, each of them once."""
+        symbols = list(_SYMBOL_BY_METRIC.values())
+        if self._sectors:
+            symbols.append(_MARKET_SYMBOL)
+            symbols.extend(
+                _SYMBOL_BY_SECTOR[sector]
+                for sector in self._sectors
+                if sector in _SYMBOL_BY_SECTOR
+            )
+        return tuple(dict.fromkeys(symbols))
+
+    def _sector_moves(
+        self, series: Mapping[str, tuple[float, ...] | None]
+    ) -> tuple[SectorMove, ...]:
+        """Return each sector's move against the market, in the order asked for."""
+        if not self._sectors:
+            return ()
+        market = _session_move(series.get(_MARKET_SYMBOL))
+        return tuple(
+            _sector_move(sector, series.get(_SYMBOL_BY_SECTOR[sector]), market)
+            for sector in self._sectors
+            if sector in _SYMBOL_BY_SECTOR
+        )
 
     def _closes(self, symbol: str) -> tuple[float, ...] | None:
         """Return the daily closes of one symbol, or None when it could not be read."""
@@ -136,6 +200,51 @@ class YahooEnvironmentProvider:
             )
             return None
         return closes
+
+
+def _session_move(closes: tuple[float, ...] | None) -> float | None:
+    """Return how far a series moved on its most recent session, or None.
+
+    The move is the last close against the one before it, which is the session that
+    has just happened: for the futures that is the session open right now, and for
+    everything else it is the one that last closed.
+    """
+    if closes is None or len(closes) < 2:
+        return None
+    previous, latest = closes[-2], closes[-1]
+    if not previous:
+        return None
+    return latest / previous - 1.0
+
+
+def _sector_move(
+    sector: Sector, closes: tuple[float, ...] | None, market: float | None
+) -> SectorMove:
+    """Return one sector's move against the market, and how it was derived."""
+    symbol = _SYMBOL_BY_SECTOR[sector]
+    move = _session_move(closes)
+    if move is None or market is None:
+        missing = (
+            f"the {sector.value} sector series" if closes is None else "the market"
+        )
+        return SectorMove(
+            sector=sector,
+            value=None,
+            reason=(
+                f"{SOURCE_NAME} could not provide {missing}, so the {sector.value} "
+                f"sector was not compared with the market."
+            ),
+        )
+    relative = move - market
+    return SectorMove(
+        sector=sector,
+        value=relative,
+        reason=(
+            f"{sector.value.capitalize()} ({symbol}) {relative:+.2%} against the "
+            f"broad market on the most recent session: {move:+.2%} for the sector "
+            f"against {market:+.2%} for {_MARKET_SYMBOL}."
+        ),
+    )
 
 
 def _point(
@@ -246,13 +355,20 @@ def _closes_from(payload: object) -> tuple[float, ...]:
     )
 
 
-def build_environment_provider() -> EnvironmentProvider:
+def build_environment_provider(
+    sectors: Sequence[Sector] = (),
+) -> EnvironmentProvider:
     """Return the environment provider AIS uses.
 
     The return type is the contract rather than the vendor implementation, so that a
     caller cannot depend on anything vendor specific.
 
+    Args:
+        sectors: The sectors the watch universe is in. Only these are measured
+            against the market, because a pass should cost what the universe costs
+            rather than what the whole market costs.
+
     Returns:
         The environment provider AIS reads the market's own measurements from.
     """
-    return YahooEnvironmentProvider()
+    return YahooEnvironmentProvider(sectors=sectors)

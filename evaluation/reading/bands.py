@@ -249,6 +249,20 @@ SCALES: dict[ReadableMetric, MetricScale] = {
         graded=False,
         flat="利率基本持平",
     ),
+    # A sector is measured against the market it is in, so this scale reads a
+    # difference rather than a level. It is graded: a sector being bought while the
+    # market is not is a favourable condition for holding something in it, which is
+    # the same kind of statement the direction scale makes about the whole market.
+    EnvironmentMetric.SECTOR_RELATIVE_MOVE: _higher(
+        (
+            (0.010, "板块明显走强"),
+            (0.003, "板块偏强"),
+            (-0.003, "板块基本持平"),
+            (-0.010, "板块偏弱"),
+        ),
+        "板块明显走弱",
+        flat="板块基本持平",
+    ),
     # --- What the price has actually been doing ------------------------------
     MarketMetric.TREND_MA20_GAP: _higher(
         ((0.05, "明显上方"), (0.0, "上方"), (-0.03, "小幅下方"), (-0.08, "下方")),

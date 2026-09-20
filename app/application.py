@@ -81,7 +81,7 @@ class Application:
         self._environment_provider = (
             environment_provider
             if environment_provider is not None
-            else build_environment_provider()
+            else build_environment_provider(self._universe.sectors)
         )
         self._analyzer = (
             analyzer

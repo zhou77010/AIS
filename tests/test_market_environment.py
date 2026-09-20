@@ -13,8 +13,9 @@ from urllib.parse import quote
 
 import pytest
 
-from contracts.market_environment import EnvironmentMetric
+from contracts.market_environment import WIDE_METRICS, EnvironmentMetric
 from data.market_environment import YahooEnvironmentProvider
+from models.sector import Sector
 
 
 class _Transport:
@@ -75,12 +76,15 @@ def _value(snapshot, metric: EnvironmentMetric) -> float | None:
     return snapshot.point(metric).value
 
 
-def test_a_snapshot_holds_one_point_per_measurement() -> None:
-    snapshot, _ = _fetch()
+def test_a_snapshot_holds_one_point_per_market_measurement() -> None:
+    # Every measurement of the whole market, and no reading for a sector nobody asked
+    # about: a pass that measures no sectors costs no sector requests.
+    snapshot, transport = _fetch()
 
-    assert len(snapshot.points) == len(EnvironmentMetric)
-    assert {point.metric for point in snapshot.points} == set(EnvironmentMetric)
+    assert {point.metric for point in snapshot.points} == set(WIDE_METRICS)
+    assert snapshot.sectors == ()
     assert snapshot.is_live is True
+    assert len(set(transport.urls)) == len(transport.urls), "each symbol once"
 
 
 def test_the_change_is_the_last_two_sessions_not_the_range_start() -> None:
@@ -166,3 +170,87 @@ def test_the_provider_never_raises() -> None:
     snapshot = YahooEnvironmentProvider(transport=_Broken()).fetch()
 
     assert snapshot.is_live is False
+
+
+# --------------------------------------------------------------------------
+# Sectors, measured against the market
+# --------------------------------------------------------------------------
+
+
+def _sectors(*sectors: Sector, transport: _Transport):
+    return YahooEnvironmentProvider(sectors=sectors, transport=transport).fetch()
+
+
+def test_a_sector_is_measured_against_the_market_not_on_its_own() -> None:
+    # "This sector moved" says nothing on its own: everything moved. What a reader
+    # holding it needs is the difference.
+    transport = _Transport(
+        {
+            **_series(),
+            "SPY": [100.0, 100.0],
+            "XLK": [200.0, 204.0],
+        }
+    )
+
+    snapshot = _sectors(Sector.TECHNOLOGY, transport=transport)
+    move = snapshot.sector_move(Sector.TECHNOLOGY)
+
+    assert move is not None
+    assert move.value == pytest.approx(0.02), "the sector's 2%, not its 2% less none"
+    assert "SPY" in move.reason
+
+
+def test_only_the_sectors_the_universe_is_in_are_measured() -> None:
+    # A pass costs what the universe costs. Reading all eleven sectors would be five
+    # requests for sectors nobody holds.
+    transport = _Transport(
+        {**_series(), "SPY": [100.0, 100.0], "XLF": [50.0, 51.0], "XLK": [200.0, 210.0]}
+    )
+
+    snapshot = _sectors(Sector.FINANCIAL, transport=transport)
+    asked = " ".join(transport.urls)
+
+    assert [move.sector for move in snapshot.sectors] == [Sector.FINANCIAL]
+    assert "/chart/XLF" in asked
+    assert "/chart/XLK" not in asked
+    assert "/chart/SPY" in asked
+
+
+def test_the_same_sector_is_asked_for_once() -> None:
+    transport = _Transport({**_series(), "SPY": [100.0, 100.0], "XLF": [50.0, 51.0]})
+
+    snapshot = _sectors(Sector.FINANCIAL, Sector.FINANCIAL, transport=transport)
+
+    assert len(snapshot.sectors) == 1
+    assert sum("/chart/XLF" in url for url in transport.urls) == 1
+
+
+def test_no_sectors_means_no_sector_requests() -> None:
+    transport = _Transport(_series())
+
+    snapshot = _sectors(transport=transport)
+
+    assert snapshot.sectors == ()
+    assert not any("/chart/SPY" in url for url in transport.urls)
+
+
+def test_a_sector_whose_series_is_missing_says_why() -> None:
+    transport = _Transport({**_series(), "SPY": [100.0, 100.0]})
+
+    snapshot = _sectors(Sector.FINANCIAL, transport=transport)
+    move = snapshot.sector_move(Sector.FINANCIAL)
+
+    assert move is not None
+    assert move.value is None
+    assert "financial" in move.reason
+
+
+def test_a_sector_that_cannot_be_compared_without_the_market_says_why() -> None:
+    transport = _Transport({**_series(), "XLF": [50.0, 51.0]})
+
+    snapshot = _sectors(Sector.FINANCIAL, transport=transport)
+    move = snapshot.sector_move(Sector.FINANCIAL)
+
+    assert move is not None
+    assert move.value is None
+    assert "market" in move.reason

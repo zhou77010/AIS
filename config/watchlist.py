@@ -25,6 +25,7 @@ The shape::
           "exchange": "NASDAQ",
           "currency": "USD",
           "profile": "mature_tech",
+          "sector": "technology",
           "sets": ["core"]
         }
       ],
@@ -34,7 +35,8 @@ The shape::
 ``symbol`` is the only required field. An entry that states no set belongs to the
 core watchlist. A profile that cannot be recognised is left as unknown rather than
 guessed at, because guessing a kind of asset would change what AIS is able to say
-about it.
+about it. A sector is left absent for the same reason, and an entry states one only
+where the sector is real: an exchange-traded fund holds a style rather than a sector.
 """
 
 from __future__ import annotations
@@ -48,6 +50,7 @@ from typing import Any
 from config.logging_config import get_logger
 from models.asset import Asset
 from models.asset_profile import AssetProfile
+from models.sector import Sector
 from models.watch_universe import (
     DECLARABLE_SETS,
     Theme,
@@ -175,11 +178,29 @@ def _entries(members: list[Any], logger: Logger) -> tuple[WatchEntry, ...] | Non
                     exchange=_text(member.get("exchange")) or _DEFAULT_EXCHANGE,
                     currency=_text(member.get("currency")) or _DEFAULT_CURRENCY,
                     profile=_profile(member.get("profile"), ticker, logger),
+                    sector=_sector(member.get("sector"), ticker, logger),
                 ),
                 sets=declared,
             )
         )
     return tuple(entries) if entries else None
+
+
+def _sector(raw: Any, ticker: str, logger: Logger) -> Sector | None:
+    """Return the sector one member declares, or None when it declares none.
+
+    A sector that cannot be recognised is left absent. Guessing which part of the
+    market an asset competes in would change which comparison AIS makes about it and
+    therefore which sentence it writes, and a sentence about the wrong sector reads
+    exactly like a sentence about the right one.
+    """
+    if raw is None:
+        return None
+    try:
+        return Sector(str(raw).lower())
+    except ValueError:
+        logger.warning("watchlist member %s names an unknown sector %r", ticker, raw)
+        return None
 
 
 def _sets(raw: Any, ticker: str, logger: Logger) -> frozenset[WatchSet] | None:

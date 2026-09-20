@@ -17,10 +17,12 @@ import unicodedata
 from dataclasses import replace
 from datetime import UTC, datetime
 
+import pytest
+
 from analysis.analysis_result import AnalysisResult
 from analysis.brief import build_daily_brief
 from analysis.brief_report import render_daily_brief
-from analysis.category_grade import grade_for_category
+from analysis.category_grade import grade_for_category, reading_for
 from analysis.insight.builder import build_insights, insight_for
 from analysis.insight.context import context_for
 from analysis.insight.market_insight import environment_line
@@ -32,9 +34,11 @@ from contracts.market_data_provider import (
     MarketMetric,
 )
 from contracts.market_environment import (
+    WIDE_METRICS,
     EnvironmentMetric,
     EnvironmentPoint,
     EnvironmentSnapshot,
+    SectorMove,
 )
 from evaluation.hpo.opportunity_assessor import OpportunityAssessor
 from evaluation.market.market_evaluator import MarketEvaluator
@@ -47,6 +51,7 @@ from models.coverage import Coverage
 from models.decision_state import DecisionState
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
+from models.sector import Sector
 from pipeline.evidence_builder import EvidenceBuilder
 
 # 09:00 Beijing, which is when the brief is owed and what the environment describes.
@@ -95,8 +100,10 @@ _CALM_TAPE: dict[EnvironmentMetric, float] = {
 }
 
 
-def _environment(**overrides: float) -> EnvironmentSnapshot:
-    """Return the environment, with the given measurements replaced."""
+def _environment(
+    *, sectors: tuple[SectorMove, ...] = (), **overrides: float
+) -> EnvironmentSnapshot:
+    """Return the environment, with the given measurements and sectors replaced."""
     values = {**_CALM_TAPE, **overrides}
     return EnvironmentSnapshot(
         source="Test environment",
@@ -107,13 +114,32 @@ def _environment(**overrides: float) -> EnvironmentSnapshot:
                 value=values.get(metric),
                 reason=f"Test environment: {metric.value}",
             )
-            for metric in EnvironmentMetric
+            for metric in WIDE_METRICS
         ),
+        sectors=sectors,
     )
 
 
+def _sector_move(sector: Sector, value: float | None) -> SectorMove:
+    """Return one sector's reading against the market."""
+    return SectorMove(
+        sector=sector,
+        value=value,
+        reason=f"Test environment: {sector.value} against the market",
+    )
+
+
+def _one_sector(
+    value: float | None, sector: Sector = Sector.TECHNOLOGY
+) -> EnvironmentSnapshot:
+    """Return the environment with one sector measured against the market."""
+    return _environment(sectors=(_sector_move(sector, value),))
+
+
 def _asset(
-    ticker: str = "APP", profile: AssetProfile = AssetProfile.HIGH_GROWTH
+    ticker: str = "APP",
+    profile: AssetProfile = AssetProfile.HIGH_GROWTH,
+    sector: Sector | None = Sector.TECHNOLOGY,
 ) -> Asset:
     return Asset(
         ticker=ticker,
@@ -121,6 +147,7 @@ def _asset(
         exchange="NASDAQ",
         currency="USD",
         profile=profile,
+        sector=sector,
     )
 
 
@@ -317,6 +344,134 @@ def test_a_missing_environment_measurement_is_recorded_with_its_reason() -> None
 # --------------------------------------------------------------------------
 # What the environment means for this asset
 # --------------------------------------------------------------------------
+
+
+# --------------------------------------------------------------------------
+# The part of the market this asset is in
+# --------------------------------------------------------------------------
+
+
+def test_the_sector_reading_is_this_assets_own_sector() -> None:
+    # One reading, and it is the sector the asset was declared to be in: another
+    # sector's move is somebody else's comparison.
+    environment = _environment(
+        sectors=(
+            _sector_move(Sector.TECHNOLOGY, 0.02),
+            _sector_move(Sector.FINANCIAL, -0.02),
+        )
+    )
+
+    reading = read_category(
+        _snapshot(**_VALUES),
+        Category.MARKET,
+        environment=environment,
+        sector=Sector.TECHNOLOGY,
+    )
+
+    sector_reads = [
+        read
+        for read in reading.reads
+        if read.metric is EnvironmentMetric.SECTOR_RELATIVE_MOVE
+    ]
+    assert len(sector_reads) == 1
+    assert sector_reads[0].value == pytest.approx(0.02)
+
+
+def test_an_asset_with_no_stated_sector_is_compared_with_nothing() -> None:
+    environment = _environment(sectors=(_sector_move(Sector.TECHNOLOGY, 0.02),))
+
+    reading = read_category(
+        _snapshot(**_VALUES),
+        Category.MARKET,
+        environment=environment,
+        sector=None,
+    )
+
+    assert not [
+        read
+        for read in reading.reads
+        if read.metric is EnvironmentMetric.SECTOR_RELATIVE_MOVE
+    ]
+
+
+def test_an_asset_is_not_told_about_a_sector_that_was_not_measured() -> None:
+    reading = read_category(
+        _snapshot(**_VALUES),
+        Category.MARKET,
+        environment=_environment(),
+        sector=Sector.TECHNOLOGY,
+    )
+
+    assert not [
+        read
+        for read in reading.reads
+        if read.metric is EnvironmentMetric.SECTOR_RELATIVE_MOVE
+    ]
+
+
+def test_a_sector_that_is_being_bought_reads_as_support() -> None:
+    lines = _market_lines(_result(environment=_one_sector(0.02)))
+
+    assert any("所属板块（科技）跑赢大盘" in line for line in lines), lines
+    assert any("有支撑" in line for line in lines), lines
+
+
+def test_a_sector_that_is_being_sold_reads_as_pressure() -> None:
+    lines = _market_lines(_result(environment=_one_sector(-0.02)))
+
+    assert any("所属板块（科技）跑输大盘" in line for line in lines), lines
+    assert any("承压" in line for line in lines), lines
+
+
+def test_a_sector_moving_with_the_market_says_nothing() -> None:
+    # A move smaller than the flat band is not a finding: the sector went where the
+    # market went.
+    lines = _market_lines(_result(environment=_one_sector(0.0)))
+
+    assert not any("所属板块" in line for line in lines), lines
+
+
+def test_the_sector_evidence_carries_the_sector_and_no_ticker() -> None:
+    # Two assets in the same sector share one fact, and the identifier says which
+    # fact it is: the sector, and no ticker.
+    evidence = _evidence(_result(environment=_one_sector(0.02)))
+    item = next(
+        item for item in evidence.items if item.id.startswith("environment.sector")
+    )
+
+    assert item.id == "environment.sector.technology"
+    assert item.metadata["market_metric"] == "sector_relative_move"
+
+
+def test_a_sector_only_reaches_the_category_it_answers_for() -> None:
+    valuation = read_category(
+        _snapshot(**_VALUES),
+        Category.VALUATION,
+        environment=_one_sector(0.02),
+        sector=Sector.TECHNOLOGY,
+    )
+
+    assert not [
+        read
+        for read in valuation.reads
+        if read.metric is EnvironmentMetric.SECTOR_RELATIVE_MOVE
+    ]
+
+
+def test_the_sector_is_graded_because_it_is_a_condition_of_the_environment() -> None:
+    # Where the asset's own part of the market is going is part of the environment it
+    # is judged in, so it is graded rather than described: two assets in different
+    # sectors are in different environments. The rounded grade can absorb a one band
+    # difference between two runs, so the reading is what says the sector counted.
+    growing = reading_for(_result(environment=_one_sector(0.02)), Category.MARKET)
+    shrinking = reading_for(_result(environment=_one_sector(-0.02)), Category.MARKET)
+
+    grown = growing.read(EnvironmentMetric.SECTOR_RELATIVE_MOVE)
+    shrunk = shrinking.read(EnvironmentMetric.SECTOR_RELATIVE_MOVE)
+
+    assert grown is not None and grown.score == 5
+    assert shrunk is not None and shrunk.score == 1
+    assert sum(growing.scored) == sum(shrinking.scored) + 4
 
 
 def test_the_first_sentence_is_about_this_asset_and_the_second_is_the_market() -> None:

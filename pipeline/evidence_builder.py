@@ -40,6 +40,8 @@ from contracts.market_data_provider import (
 )
 from contracts.market_environment import (
     ENVIRONMENT_EVIDENCE_ID,
+    ENVIRONMENT_SECTOR_EVIDENCE_ID,
+    EnvironmentMetric,
     EnvironmentSnapshot,
 )
 from evidence.evidence_collection import EvidenceCollection
@@ -102,7 +104,7 @@ class EvidenceBuilder:
         if market_data is not None:
             items.extend(self._market_data_items(asset, market_data))
         if environment is not None:
-            items.extend(self._environment_items(environment))
+            items.extend(self._environment_items(asset, environment))
         items.extend(self._event_items(asset, events))
         return EvidenceCollection(asset=asset, items=tuple(items))
 
@@ -155,17 +157,19 @@ class EvidenceBuilder:
         )
 
     def _environment_items(
-        self, environment: EnvironmentSnapshot
+        self, asset: Asset, environment: EnvironmentSnapshot
     ) -> tuple[EvidenceItem, ...]:
-        """Return one item per environment measurement, retrieved or not.
+        """Return the environment measurements that bear on this asset.
 
-        The item carries no ticker in its identifier, because the fact is not about
-        one: the same evidence is filed for every asset in the pass, which is what
-        it means for the market's measurements to be shared. The source is recorded
-        as market data, since that is what it is; what makes it different is whose
-        measurements they are.
+        All of them are filed when the environment was retrieved, plus the reading of
+        the sector this asset is in. Only this asset's own sector is filed: the id
+        carries the sector and no ticker, so two assets in the same sector file the
+        same fact, and an asset in another sector files nothing about this one. A
+        reader of the evidence therefore finds one sector reading and it is the right
+        one, which would not be true if every sector the pass measured were filed
+        here.
         """
-        return tuple(
+        items = [
             self._factory.create(
                 id=ENVIRONMENT_EVIDENCE_ID.format(metric=point.metric.value),
                 category=point.metric.primary_category,
@@ -186,7 +190,36 @@ class EvidenceBuilder:
                 },
             )
             for point in environment.points
-        )
+        ]
+        move = environment.sector_move(asset.sector)
+        if move is not None and asset.sector is not None:
+            items.append(
+                self._factory.create(
+                    id=ENVIRONMENT_SECTOR_EVIDENCE_ID.format(sector=asset.sector.value),
+                    category=Category.MARKET,
+                    title=(
+                        f"{environment.source}: {asset.sector.value} sector against "
+                        f"the market"
+                    ),
+                    description=move.reason,
+                    source=EvidenceSource.MARKET_DATA,
+                    timestamp=environment.retrieved_at,
+                    confidence=(
+                        _MARKET_DATA_CONFIDENCE
+                        if move.value is not None
+                        else _MISSING_MARKET_DATA_CONFIDENCE
+                    ),
+                    metadata={
+                        METRIC_METADATA_KEY: (
+                            EnvironmentMetric.SECTOR_RELATIVE_MOVE.value
+                        ),
+                        VALUE_METADATA_KEY: (
+                            "" if move.value is None else repr(move.value)
+                        ),
+                    },
+                )
+            )
+        return tuple(items)
 
     def _event_items(
         self, asset: Asset, events: Sequence[CatalystEvent]

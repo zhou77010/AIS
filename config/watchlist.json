@@ -6,6 +6,7 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "profile": "mature_tech",
+      "sector": "technology",
       "sets": ["core"]
     },
     {
@@ -22,6 +23,7 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "profile": "high_growth",
+      "sector": "communication",
       "sets": ["growth"]
     },
     {
@@ -29,6 +31,7 @@
       "name": "Alibaba Group Holding Limited",
       "exchange": "NYSE",
       "currency": "USD",
+      "sector": "consumer_cyclical",
       "sets": ["growth"]
     },
     {
@@ -37,6 +40,7 @@
       "exchange": "NYSE",
       "currency": "USD",
       "profile": "financial",
+      "sector": "financial",
       "sets": ["core"]
     },
     {
@@ -44,6 +48,7 @@
       "name": "Monster Beverage Corporation",
       "exchange": "NASDAQ",
       "currency": "USD",
+      "sector": "consumer_defensive",
       "sets": ["core"]
     },
     {
@@ -52,6 +57,7 @@
       "exchange": "NASDAQ",
       "currency": "USD",
       "profile": "high_growth",
+      "sector": "industrials",
       "sets": ["growth"]
     }
   ],
