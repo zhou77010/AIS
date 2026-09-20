@@ -120,6 +120,28 @@ a reader can tell a shared fact from one of the asset's own.
 | Volatility index level | `^VIX` | How turbulent the conditions are |
 | Volatility index change | `^VIX` | Whether they are settling or deteriorating |
 | Ten year yield change, in basis points | `^TNX` | Which way the cost of money is going |
+| The asset's own sector against the market | the sector instruments | Is the part of the market this asset is in being bought |
+
+**The sector is measured against the market and never on its own.** "Technology moved
+1%" says nothing when the market moved 0.9%; what a reader holding a technology
+company needs is the difference, so that is the number, computed over one session and
+reported as one value. Only the sectors the watch universe is actually in are read —
+six for the current seven assets, not eleven — because a pass should cost what the
+universe costs.
+
+**Which sector an asset is in is stated, not inferred.** It is declared in the
+watchlist beside the profile, for the same reason the profile is: it decides which
+comparison AIS makes and therefore which sentence it can write, and a guessed label
+changes what AIS is able to say without the change being visible in the output. The
+vendor does publish a sector for most symbols and it was used to fill the current
+entries in, but the file is where it lives, because a file that states a fact can be
+corrected by a person and a vendor's taxonomy cannot be argued with. An asset with no
+stated sector — an exchange-traded fund holds a style rather than a sector — is told
+nothing about one.
+
+**A relative move is not a flow.** Where a sector is trading against the market is
+consistent with money moving in or out of it, and it is not a flow figure: AIS states
+the comparison and never claims the flow.
 
 The aspects of the environment question did not change when the evidence arrived:
 **direction**, **risk appetite**, **volatility** and **rates** are the same four the
@@ -135,6 +157,7 @@ in the same sentence, with both named in its references.
 
 | Exposure | Read from | Sentence |
 | --- | --- | --- |
+| The asset's own sector | the sector's move against the market, and the stated sector | 所属板块（科技）跑输大盘，本标的短期承压。 |
 | A weak tape against a high beta | overnight tape, volatility change, beta | 盘前走弱、波动抬升，本标的贝塔偏高，波动可能放大。 |
 | A weak tape against a low beta | the same, on the other side of the beta scale | 盘前走弱，本标的贝塔很低，相对抗跌。 |
 | Rising rates against a dear valuation | yield change, P/E, EV/EBITDA, cash flow yield | 利率上行而估值很贵，分母端承压。 |
@@ -145,6 +168,11 @@ The environment itself is the **second** sentence, and the brief states it once 
 whole universe at the top, before any asset: 市场环境 盘前偏强、成长股领先、波动平静、
 利率上行，环境对风险资产偏友好。
 
+The sector sentence comes first, because it is the most specific thing the environment
+can say about a holding, and it is graded rather than described: where the asset's own
+part of the market is going is a condition of the environment it is judged in, so two
+assets in different sectors get different Market grades and that is correct.
+
 **Two of the five environment measurements are described and never graded.** Risk
 appetite and volatility are graded, because a tape being bought and a market that is
 calm are favourable conditions for owning risk and the direction scale already grades
@@ -154,19 +182,26 @@ company until an asset is named. Nothing else was invented to fill the gap.
 
 ### What is still not connected
 
+This round filled the gaps in the order they change a judgement, and stopped where the
+next one stops being worth what it costs. Priority one was the industry the asset is in
+and the style the market is paying for, and that is built. The other two are recorded
+with what was found about them.
+
 | Input | State |
 | --- | --- |
-| Macro backdrop — realised CPI, payrolls, growth readings | Not connected. Only the meeting calendar is, and that is Catalyst's. |
+| The asset's own sector | **Connected.** The sector's move against the market, once per sector the universe is in. |
+| Market style | **Partly connected.** Growth against the broad market, read from the two index futures. A value and growth pair of sector instruments would say it in the same asset class rather than across two, and is not connected. |
+| The shape of the yield curve | **Not connected, and it is the next one worth doing.** It is what the rate sentence about a bank needs: one yield is a level and a bank's margin moves with the curve. A source is verified — the United States Treasury publishes the whole daily curve as CSV with no key — and what it needs decided first is whether all rate readings move to that source together, because a report holding a ten year yield from the vendor and a curve from the Treasury could state two different numbers about the same thing. |
+| Realised macro releases — CPI, payrolls, growth readings | **Not connected, and there is no source AIS can read.** The vendor publishes no economic calendar, and the central bank provider publishes meeting dates that are still ahead: it was checked, and its next event is a month away with nothing behind it. So "what the important overnight release said" is not obtainable today, and the market's own response to it is what the futures, volatility and yields already record. |
 | Industry environment — policy, competition, cycle | Not connected. Named as a gap in the report. |
-| Flows — where money is moving | Not connected. Named as a gap in the report. |
-| Currency — what the dollar is doing to a company | **Declared out of reach for now.** The dollar's move is retrievable, but AIS does not know where any asset earns its revenue, so it cannot state an effect. Describing the move without an effect would be a fact with no consequence in a category that exists to state consequences. |
-| The shape of the yield curve | Not connected, and it is what a rate sentence about a bank needs. One yield is a level, not a curve. |
+| Flows — where money is actually moving | Not connected. The sector's relative move is a proxy and is stated as a comparison, never as a flow. |
+| Currency — what the dollar is doing to a company | **Declared out of reach.** The dollar's move is retrievable, but AIS does not know where any asset earns its revenue, so it cannot state an effect. Describing the move without an effect would be a fact with no consequence in a category that exists to state consequences. |
 
-**Market's question is still "what does the current environment mean for this stock"**,
-and the answers are still narrow: a sector is not connected, and style is read from two
-index futures rather than from holdings. What changed is that the category now answers
-about the asset rather than about the index, and says which part of the answer is
-missing.
+**Market's question is "what does the current environment mean for this stock"**, and
+it now answers about the asset in four ways: the part of the market it is in, the tape
+against its own beta, what the cost of money does to what it costs, and which kind of
+business is in or out of favour. What it still cannot do is say what is happening
+*inside* an industry rather than to its price, and it says so rather than guessing.
 
 **The boundary with Catalyst still holds.** Catalyst lists what is coming; Market
 explains what the environment means and what has already happened to it. A separate
@@ -758,6 +793,14 @@ sentence in that asset's own report, and it is not repeated here.
   named conditions and Market is not one of them, so a hostile environment does not by
   itself lower an asset's opportunity count. Changing that is a Constitution-level
   question about which categories HPO reads, and it is not decided.
+- **The style reading sits across two asset classes.** Growth against the broad market
+  is read from the Nasdaq and S&P futures, which mixes style with where technology sits
+  in the index. A value and growth pair of sector instruments would answer the style
+  question in one asset class, and the sector instruments are already being fetched.
+- **The sector a person states and the sector a vendor publishes can disagree.** The
+  file is the authority and the vendor is not consulted, which is the right way round
+  and leaves no way to notice a disagreement. Whether a watchlist should be checked
+  against a source is open.
 - **The industry environment, flows, and the currency exposure.** Named as gaps in the
   report and not connected. The currency one is a decision rather than a missing
   source: the dollar's move is retrievable, and AIS does not know where any asset earns

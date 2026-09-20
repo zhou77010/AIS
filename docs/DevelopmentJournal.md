@@ -1533,4 +1533,99 @@ session.
 
 ---
 
+### The part of the market an asset is in is stated, and measured against the market
+
+**Context.** Market could say what the whole market was doing and nothing about the
+part of it a holding actually sits in. "The market is up" says little about a bank, and
+"financials are being sold while the market is bought" says a great deal about one. The
+first evidence round left this as the largest remaining gap, and it is the one the
+product owner put first.
+
+**Decision.** Two halves. The **sector** is stated per asset in the watchlist, beside the
+profile. The **measurement** is that sector's move less the broad market's over the same
+session, read once per pass for the sectors the universe is actually in — six for seven
+assets, not eleven — and paired with the asset's own sector in a sentence.
+
+**Why the sector is stated rather than taken from the vendor.** The vendor publishes a
+sector for almost every symbol, and it was used to fill the current entries in. What it
+cannot be is the authority. Which sector an asset is in decides which comparison AIS
+makes and therefore which sentence it can write, and that is the same class of label as
+the profile: a guessed one changes what AIS is able to say, and the change is invisible
+in the output because a sentence about the wrong sector reads exactly like a sentence
+about the right one. A vendor's taxonomy also has no way to be argued with — half a dozen
+providers classify the same company differently — while a line in a file can be corrected
+by the person who reads the report. So the file states it and the vendor does not.
+
+**Why the measurement is relative.** A sector's own move answers nothing: the market
+moved too, and on a day when everything falls 2% and one sector falls 1%, the number
+that matters is the one point of difference. The relative move is computed once and
+stored as one value, so nothing downstream can subtract the two in the wrong order or
+over different windows.
+
+**Why it is graded, and where it sits.** Where the asset's own part of the market is
+going is a condition of the environment the asset is judged in, so it counts toward the
+Market grade like the direction of the market does. Two assets in different sectors
+therefore get different Market grades, which is the point: their environments differ. It
+is the first sentence of the category, because it is the most specific thing the
+environment can say about a holding.
+
+**What it does not claim.** A relative move is consistent with money leaving a sector
+and it is not a flow figure, so the sentence states the comparison — 所属板块（科技）
+跑输大盘 — and never claims the flows. An asset with no stated sector gets no sector
+sentence at all: an exchange-traded fund holds a style rather than a sector, and being
+told nothing is honest where being told something plausible is not.
+
+**Impact.** The sector is the first label AIS states about an asset that a vendor could
+have supplied, and the reversal is deliberate and recorded: the report is corrected by
+the person reading it, not by a taxonomy nobody in this project controls. A sector that
+cannot be recognised is left absent with a warning, so a typo costs a sentence rather
+than producing one about the wrong part of the market.
+
+**Revisit.** If the watchlist ever grows to the point where stating a sector per entry
+is a burden, which is the point at which a vendor may become the authority for the ones
+nobody has stated.
+
+---
+
+### Only the gaps that change a judgement, and in the order they change it
+
+**Context.** The environment layer left a list of things not connected: the industry, the
+style, flows, realised macro releases, the shape of the curve, the currency. The
+instruction was to fill the ones that change a judgement, in priority order, and not to
+complete for completeness.
+
+**Decision.** One round, one gap, chosen as the largest: the industry and the style. The
+other two were investigated, and each stops for a different reason.
+
+**The macro release result has no source.** The vendor publishes no economic calendar,
+and the central bank provider publishes meeting dates that are still ahead — checked
+directly, its next event is a month away and it holds nothing behind it. So "what the
+overnight release said" cannot be read today. What can be read is the market's own
+response to it, and that is what the futures, volatility and yields already record: the
+report can say the tape moved, and it cannot yet say what moved it. That is a gap with a
+reason, and it stays a gap.
+
+**The curve has a source and needs a decision first.** The United States Treasury
+publishes its whole daily curve as CSV with no key, which would close the one sentence
+in the report that currently admits it cannot judge a direction: a bank's margin moves
+with the shape of the curve, and one yield is not a curve. What has to be decided before
+it is built is smaller than it looks and is not technical: the ten year yield currently
+comes from the vendor, and adding a Treasury ten year beside it would let the report
+state two slightly different numbers about the same thing. Either all of the rate
+readings move to the Treasury together, or the curve arrives without its legs. Deciding
+that is a sentence about the product, not a line of code, so it waits.
+
+**Reason.** A round that fills three gaps at once is a round nobody can review, and the
+third gap's value is concentrated in one asset: the curve sentence is about banks, and
+there is one bank in the universe. The sector reading is about all seven.
+
+**Impact.** The watchlist gained a field, the environment gained a collection it did not
+have — one reading per sector rather than one for the market — and the reading layer
+learned to read a measurement whose subject is chosen per asset. Everything else was
+already in place, which is what the earlier rounds were for.
+
+**Revisit.** When the curve decision is taken, which is the next thing worth doing.
+
+---
+
 End of Document

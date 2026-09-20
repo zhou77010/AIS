@@ -294,6 +294,19 @@ a market, so they are retrieved once and read by every asset in the pass rather 
 fetched again for each. What is not shared is the sentence: a fact about the market
 has no meaning until an asset is named beside it, and the meaning is the pair.
 
+**And an asset is judged in the part of the market it is in, not in the average.** How
+the market did is one fact; how this holding's own corner of it did is another, and the
+second is what a reader acting on the first would get wrong. So the environment is
+never only the index: where the asset's sector stands against the market is part of the
+environment it is judged in, and it is what makes two assets in the same market different
+propositions on the same morning.
+
+Which part of the market an asset is in is **stated, not inferred** — the same rule the
+kind of an asset follows, and for the same reason. It decides which comparison is made
+and therefore which sentence can be written, so guessing it would change what AIS is
+able to say while leaving the output looking exactly the same. An asset nobody has
+classified gets no comparison rather than a plausible one.
+
 That is why a sentence about the environment names both halves — the condition and the
 exposure. "Growth is under pressure" is a market recap; "growth is under pressure and
 this is a growth company" is a judgement about something the reader owns. A clause
