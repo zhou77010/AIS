@@ -122,7 +122,7 @@ External Providers
 | Folder | Responsibility |
 | --- | --- |
 | `app/` | Application entry. |
-| `analysis/` | Asset analysis: orchestrates one analysis flow for a single asset. |
+| `analysis/` | Asset analysis: orchestrates one analysis flow for a single asset, and the reports projected from it. |
 | `config/` | Configuration management. |
 | `contracts/` | Engine contracts: the interfaces between engines. |
 | `core/` | AIS Core Engine. |
@@ -144,7 +144,7 @@ External Providers
 
 **`app/`** — Application entry. Starts the system and wires the layers together. Contains no business logic.
 
-**`analysis/`** — Asset analysis. Orchestrates one complete analysis flow for a single asset: evidence, category score, overall assessment and recommendation. Contains no business logic.
+**`analysis/`** — Asset analysis. Orchestrates one complete analysis flow for a single asset: evidence, category score, overall assessment and recommendation. Contains no business logic. It also holds the two report models and their projections: the per-asset report, and the brief that covers the whole watch universe in one message. A projection chooses what a reader sees and never reaches a judgement; what the projections decide the same way — width, wrapping, and how small a movement is too small to mention — lives in `analysis/projection.py`, so that two renderers cannot describe one reading two ways.
 
 **`config/`** — Configuration management. Holds all runtime configuration, including credentials and file paths. No secrets or paths are hardcoded elsewhere.
 
@@ -207,13 +207,13 @@ Each component answers one question, and no component may take over another's. T
 | Evaluators (`evaluation/`) | Business judgement. They turn evidence into category scores. | Retrieve data, deliver messages, or assemble a report. |
 | Pipeline (`pipeline/`) | Evidence transformation. It turns retrieved data into evidence. | Evaluate, score, or decide. |
 | Communication (`communication/`) | Delivery. It carries a message outward and reports whether it arrived. | Build or reinterpret report content. |
-| Renderer (`analysis/report.py`, `analysis/mobile_report.py`) | Presentation. They turn a result into text. | Send anything, or read a vendor. |
+| Renderer (`analysis/report.py`, `analysis/mobile_report.py`, `analysis/brief_report.py`) | Presentation. They turn a model into text. | Send anything, or read a vendor. |
 | Transport (`data/http.py`, the notifier internals) | The network. It moves bytes. | Know what a report is. |
 
 The rules these boundaries produce:
 
 - **Report Model → Renderer → Transport.** A report is rendered once, by a renderer, and every transport carries that same text. A notifier only ever receives rendered text; it cannot receive a recommendation, an assessment, or any other model.
-- **Two renderers, one model.** Every renderer renders the same report model. A channel that wants different content does not get a second model, it gets a projection of the one that exists.
+- **One model per document, and every renderer is a projection of it.** AIS renders two documents: a report about one asset, and a brief over the watch universe. Each has exactly one model, and a channel that wants different content gets a projection of that model rather than a second one of its own. A document is added by adding a model and saying so here; it is never added by a channel assembling its own content.
 - **One provider contract per kind of fact.** The Data Layer implements `MarketDataProvider` for measurements and `CatalystEventProvider` for dated events, and exposes a factory for each. Nothing outside the Data Layer names a vendor, and no vendor field crosses the boundary, so a new source plugs into an existing interface rather than into the components that read it.
 - **A provider returns facts; AIS classifies them.** A catalyst event provider states what kind of event it is and when it falls. Which layer of the investment case that bears on is read from one table in `models/catalyst_event.py`. A provider that decided it would be making a judgement, and this keeps a new source from changing how AIS reads the sources it already has.
 - **One runtime.** The scheduler owns the loop. Everything above it is called, and never waits.

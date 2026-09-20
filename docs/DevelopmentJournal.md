@@ -1175,4 +1175,145 @@ too.
 
 ---
 
+### A brief is a document, not a shorter pile of messages
+
+**Context.** The brief sent one message per watched asset. With seven assets that is
+seven notifications arriving within a few seconds of each other, each repeating the
+timestamp, the source line and the structure, and each carrying one asset's
+conclusion. The reader asked one question — what should I look at first today — and
+received seven answers to a different one.
+
+**Decision.** Add a second report model. `analysis/brief.py` holds the brief: a set of
+entries, each carrying an analysis result and the reason it earned a line, plus the
+coverage it was selected from. `analysis/brief_report.py` renders it as one message.
+The application sends that message once.
+
+**Reason.** The report model described one asset, and every renderer was a projection
+of it. That is why seven assets could only be seven reports: there was nowhere for a
+document about several assets to exist. The alternative was to keep the per-asset
+model and shorten its text, which produces a feed of small messages rather than a
+brief — and the difference is not length. A brief answers *what matters today* and a
+per-asset report answers *what AIS knows about this asset*; no amount of trimming
+turns the second into the first, because the second has no place to say that one
+asset matters more than another.
+
+So the digest is a model, and what the two models share is the projection layer:
+width, wrapping, and the threshold below which a movement is not worth a line. Those
+moved into `analysis/projection.py` for the same reason the reading layer exists —
+two places deciding what a number means is how a report came to disagree with itself,
+and two places deciding what fits on a line would do exactly the same thing.
+
+**Impact.** The message is one message whatever the size of the watchlist, and the
+watchlist can now grow. The per-asset report is still rendered for every asset and
+still written to the log, so the phone showing less costs the system nothing. The
+cycle is untouched: one asset changing is news about that asset and still gets its
+own message.
+
+**Revisit.** No.
+
+---
+
+### Coverage and projection stopped being the same number
+
+**Context.** With one message per asset, "what AIS looked at" and "what the reader was
+sent" were the same list by construction. Nobody had to decide what to leave out,
+because nothing was left out.
+
+**Decision.** Separate them. Every watched asset is analysed; at most three are
+written into the brief. The brief states both numbers and names the assets it did not
+write out.
+
+**Reason.** The two sets answer different questions. Coverage is bounded by how much
+AIS can look at, which is a cost AIS pays. Projection is bounded by how much a reader
+will read, which is attention the reader pays. Tying them together means the second
+grows whenever the first does, and a brief for thirty symbols would be thirty
+messages — the failure mode is not that the reader stops reading the brief, it is
+that the reader stops reading AIS.
+
+The harder half is what the reader is owed about the gap. A brief that shows three of
+seven assets and says nothing else can be read as a quiet universe when it is really
+a narrowed one — the same failure as reporting an unexamined dimension as a safe one.
+So the count and the names are in the message, and the full report of every asset is
+in the log.
+
+**Impact.** `MAX_FOCUS` is a number in one module, and the brief's budget no longer
+depends on the watchlist. What is left open is recorded in the backlog: the brief
+names what it left out, and it does not yet know which of the assets it left out
+would have mattered most.
+
+**Revisit.** When the watch universe is large enough that three is the wrong number,
+which is a decision about attention and belongs to the product owner.
+
+---
+
+### What earns a line is a reason, and a score would have been a new method
+
+**Context.** A brief has to decide which assets to write out. The obvious
+implementation — score each asset, sort, take the top three — is the one thing this
+project is not allowed to invent: a scoring method.
+
+**Decision.** An asset earns a line through the first named slot that applies to it,
+in a stated order: held and moved, held, moved, where it stands, and otherwise
+nothing. Inside the standing slot — which risk and opportunity share — the count of
+opportunity conditions that hold decides, and ties fall to how near the nearest event
+that could change a view is and then to the order the universe holds.
+
+**Reason.** Every part of that ordering is a judgement AIS has already reached and
+already shows the reader: the portfolio layer decides what is held, the rating
+tracker decides what moved, the opportunity assessor decides which conditions hold,
+and the calendar decides what is near. Combining them into a number would create a
+new scale with no meaning behind it, and the first question anybody asked about it
+would be why one asset scored 0.7 more than another — a question with no answer,
+because the weights would be ours. Ordering by named reasons answers the same
+question in words the reader can argue with.
+
+**Risk was ordered above opportunity first, and the live run reversed it.** The first
+version read the Constitution's "manage risk before return" as an ordering rule and
+put every asset whose risk condition fails ahead of every asset with a case. On a run
+of the seven watched assets the risk condition fails for six of them, so the brief
+led with three copies of the same warning and left HSBC — the one asset whose
+judgement read three conditions instead of one — inside the list of assets it did not
+write out. That is not a brief choosing the most important thing; it is a brief
+choosing the most common one. The rule about risk governs the decision, which the
+evaluators make and where risk is read first; it does not order the lines of a report.
+So the two reasons now compete in one slot and the count of held conditions separates
+them, which is a judgement AIS already reached.
+
+**Impact.** The whole policy is one table in `analysis/brief.py`, and both the
+ordering and the labels a reader sees come from it. Adding a slot later is a row in
+that table. The brief states the reason on the line where a judgement supports one,
+so a reader can see why an asset was shown and another was not — the same obligation
+the report has to its evidence.
+
+**Revisit.** When Priority becomes a runtime concept with a threshold, which is the
+first thing that could legitimately outrank a judgement.
+
+---
+
+### The brief does not say what the market is doing, because it cannot
+
+**Context.** The brief was specified with a market state at the top: today's
+conditions, the most important external change. AIS has no market-level evidence —
+that is Phase C — and what it does have is a market reading carried per asset, which
+is a twelve-month index move.
+
+**Decision.** The brief states the events that bear on every asset and says nothing
+about the state of the market. A macro event arrives in every asset's calendar on the
+same date, so it is reported once at the top and is not repeated beside each entry.
+
+**Reason.** A twelve-month index move is not a statement about today. Writing it
+under a heading that says "the market today" would be the report asserting something
+its evidence does not carry, and nothing about the output would look wrong — the
+worst kind of wrong, because it cannot be seen. The honest position is that the brief
+knows what is on the calendar and not what the market is doing, and says so; the line
+arrives with the evidence that supports it, in Phase C.
+
+**Impact.** The top of the brief carries coverage and the shared calendar. The
+backlog records the market state as an open item with the same dependency as the
+21:00 brief — one reason the two should be designed together rather than twice.
+
+**Revisit.** In Phase C, when there is market-level evidence to report.
+
+---
+
 End of Document

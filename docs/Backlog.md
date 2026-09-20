@@ -387,6 +387,11 @@ yet, so it is recorded here rather than written into
 earliest answer. Two are wired: the evaluation cycle on its interval, and the brief
 at an hour of the day. Adding 21:00 later is another schedule and nothing else.
 
+**It arrives as one message.** The brief covers the whole watch universe and is
+delivered as a single digest; see "The brief is one message" below. The evaluation
+cycle is unchanged and still sends one message per asset whose conclusion moved,
+because that message is news about one asset rather than a report over all of them.
+
 **What the brief does not consult.** It does not consult the market clock, because
 the hour it is owed at falls outside the United States session by definition and a
 report that waits for a market to open never arrives at the hour it was asked for.
@@ -547,7 +552,7 @@ still open.
 | --- | --- | --- | --- |
 | A | The cadence stops being an interval and becomes **moment-anchored**. The phase used to come from when the process started, which has nothing to do with a clock. | `app/scheduler.py` | **Done** — schedules answer when they are next owed |
 | C | The **market-open gate moves off the cycle** and onto the triggers that need it. It used to guard every cycle, which is why nothing could ever fire at 09:00 ET. | `app/application.py` | **Done** for the brief; the cycle still keeps its own gate, which is what an alert should do |
-| D | **Notification policy becomes an owned concept.** There used to be one policy, hardwired into the per-asset cycle. The brief is the second, and it lives with the brief. | `app/morning_brief.py` | **Partly** — the brief owns its policy; an alert's does not exist |
+| D | **Notification policy becomes an owned concept.** There used to be one policy, hardwired into the per-asset cycle. The brief is the second, and it lives with the brief. | `app/morning_brief.py`, `analysis/brief.py` | **Done** — the brief owns both when it speaks and what it shows |
 | F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | `app/runtime_state.py` | **Partly** — what is *owed* survives a restart; what AIS *concluded* still does not |
 | B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. | `utils/market_clock.py` | Open — needed by the close-anchored part of F |
 | E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. | `contracts/`, `pipeline/` | Open — Phase C |
@@ -563,26 +568,113 @@ process cannot tell a reader what changed since — `RatingTracker` and
 "first rating" everywhere. That is a smaller problem now than it was, because the
 brief's own content does not depend on it, but it is not fixed.
 
-**The three that are easy to underestimate.** D is a responsibility
-with no owner, and by the architecture rules it cannot simply be dropped into an
-existing component. E is the same work the Market Layer needs, which is why the
-Brief and the Market Layer should be designed together rather than twice.
+**The two that are easy to underestimate.** D turned out to be answerable, and it was
+answered with the brief: the brief owns both when it speaks and what it shows, which
+is the projection rule recorded below. What still has no owner is an *alert's*
+policy — a threshold, a rate limit and a record of what the reader has already been
+told — and that is a different question, listed under Still open. E is the same work
+the Market Layer needs, which is why the Brief and the Market Layer should be designed
+together rather than twice.
+
+### The brief is one message, and it is a projection of the whole universe
+
+**Built.** The 09:00 brief used to be one message per asset. It is now one message
+over the whole watch universe: `analysis/brief.py` holds the brief model and the rule
+that decides which assets earn a line, `analysis/brief_report.py` renders it for a
+phone, and `app/application.py` sends it once.
+
+**Why this is a report model and not a format.** The report model described one
+asset, which is why seven assets could only ever be seven reports. A digest is a
+different document: it answers *what should I look at first today*, where the
+per-asset report answers *what does AIS know about this asset*. Producing the second
+and shortening its lines does not produce the first, so a second model was added
+rather than a format changed. What the two do share is the projection rules — how
+wide a line may be, how a sentence is broken, and how small a movement is too small
+to mention — and those now live in `analysis/projection.py` so that the brief and the
+report cannot describe the same reading two ways.
+
+**Analysis coverage and notification projection are different sets.** Everything in
+the watch universe is analysed, because AIS cannot know what matters without looking
+at all of it. At most three assets are written into the message. The brief states
+both numbers and names the assets it left out, so a short message can never be read
+as a narrow one, and the watchlist can grow without the message growing.
+
+**What earns a line is a named reason, not a score.** The first slot that applies:
+
+| Slot | Reads as | Applies when |
+| --- | --- | --- |
+| held, and something moved | 持仓变化 | in the portfolio, and a category grade or its measurement moved |
+| held | 持仓 | in the portfolio |
+| something moved | 变化 | a category grade or its measurement moved |
+| standing | 风险, or no tag | a risk condition does not hold, or an opportunity was judged |
+| seen | no tag | it was analysed and nothing above is true of it |
+
+The slots are an editorial ordering, stated once, in the same sense as the attention
+an event kind is worth: a reader can disagree with it and can see what was decided.
+Within the standing slot the number of opportunity conditions that hold decides,
+because that is a judgement AIS has already reached; ties then fall to how near the
+nearest event that could change a view is, and then to the order the universe holds.
+Nothing is combined into a new number, because a weighted sum of those judgements
+would be a new scoring method.
+
+**Risk and opportunity share one slot, and that was learned from real data.** They
+answer the same question — where does this asset stand — and ranking risk strictly
+above opportunity was tried first, on the reading that AIS manages risk before
+return. On a run of the watched universe the risk condition does not hold for six
+assets of seven, so the brief filled with the same warning three times and left the
+asset whose judgement read best among the ones it did not write out. Risk is still
+managed before return; that rule governs the decision, which the evaluators make, and
+it does not order the lines of a brief.
+
+**A tag is stated only where a judgement supports it.** The asset whose risk
+condition does not hold is flagged. The asset that leads on standing is not:
+"opportunity" would be a claim its own judgement does not make — the sentence beside
+it reads that the opportunity is ordinary and not a priority.
+
+**Whether a rating moved is decided in one place**
+(`analysis.projection.is_a_change`), so the brief and the per-asset change block
+count the same movements: a grade moving, a movement accumulating inside a grade,
+and neither a first rating nor a movement too small to read.
+
+**What the brief leaves out, and where it went.** The per-asset report, the
+opportunity conditions, the measurements, the category grades and the coverage gaps
+are all rendered in full and written to the log for every asset the brief covers.
+The brief names the asset; the log holds the run. Nothing is dropped by being left
+out of a phone message.
+
+**What it can say about the market, and what it cannot.** The events that bear on
+every asset — a central bank meets on the same date whichever symbol is asked about —
+are reported once at the top, deduplicated by kind and date, and are not repeated
+beside each entry. **A market state is not reported, because AIS cannot read one
+yet**: that evidence is Phase C, and the closest thing available is a twelve-month
+index move carried per asset, which is not a statement about today.
 
 ### Still open
 
+- **The judgement line repeats when the universe reads alike.** The reading layer is
+  strict after the Reading Layer work: HPO reads 1 for six of the seven watched assets
+  and 3 for the seventh, so a brief can show three entries carrying the same sentence.
+  Loosening the bars is a Reading Layer decision and is not taken; stating a shared
+  conclusion once instead of once per entry is a projection decision and is not taken
+  either. It is a shape to decide, not a defect to tune away.
+- **Whether the brief should state a market state at all**, which is the same
+  dependency as the 21:00 brief: Phase C, market-level evidence.
 - **The Weekly report** is unclassified. It was one of the three older items and
   none of the three triggers covers it: it is neither event-driven, nor a
   pre-market offset, nor a morning report.
 - **The scope of each trigger** — portfolio, watch universe, or both. This decides
-  what each report is actually about, and it is not yet decided.
-- **Who owns notification policy**, and what counts as material, which needs the
-  threshold that is deferred with the AIS Standard Score.
+  what each report is actually about, and it is not yet decided. The brief's ordering
+  already puts a held asset first, so the portfolio half of this is answered as soon
+  as the Portfolio Layer exists to fill the set.
+- **Who owns notification policy** for an alert, and what counts as material, which
+  needs the threshold that is deferred with the AIS Standard Score. The brief's own
+  policy is built; an alert's does not exist.
 - **Where the baseline lives**, now that it has to outlive the process.
 
-A single combined daily message would be a new report structure. The report model
-currently describes one asset, and adding a digest is a decision for that review.
-This matters more as the watch universe grows: one message per asset is one
-message per asset.
+**A single combined daily message is built, and it was a decision for the product
+review.** It was deferred here as a new report structure rather than a formatting
+choice, because the report model described one asset. That review has now been held
+and the decision is recorded above.
 
 ---
 

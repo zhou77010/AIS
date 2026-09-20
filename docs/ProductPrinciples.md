@@ -62,6 +62,18 @@ Every optimisation from here on is judged first by what it does to those first
 fifteen seconds. A change that improves paragraph nine and costs the opening is
 a regression, however much better paragraph nine is.
 
+**A report is a selection, not a transcript.** AIS analyses everything it watches.
+A report is not the list of what it analysed: the two sets are different sizes on
+purpose, and a report that grows whenever the watchlist grows has stopped choosing.
+What a report leaves out is not dropped — it is named, counted, or kept in the
+record the reader can open — so that a short report can never be mistaken for a
+narrow one.
+
+That is a different question from how a report is laid out. A report that answers
+"what should I look at first" is a different document from one that answers "here
+is everything I looked at", and producing the second and shortening its lines does
+not produce the first.
+
 ---
 
 ## 3. Decision Philosophy
@@ -333,6 +345,13 @@ it arrives on the days something happened and silently does not on the days noth
 did, and its absence stops meaning anything. **A report that describes the present
 is not a repetition of one that described yesterday**, even when it reaches the same
 conclusion — the change rule governs interruptions, not repetition.
+
+**And an expected report arrives as one thing.** A reader who opens a slot in the
+morning has agreed to read a brief, not to receive a stream. Several messages
+arriving together are a feed, and a conclusion spread across them has to be
+reassembled before it can be used. One asset changing is worth a message of its own,
+because that message is news; a whole universe being looked at is worth one message,
+because the reader asked one question.
 
 **And a report is computed when it is sent.** It describes the world as it is at
 the moment the reader receives it, not as it was at the moment AIS last looked. A
