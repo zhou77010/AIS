@@ -99,35 +99,84 @@ replaced. None of them is Constitution semantics today.
 
 ## Market must describe the asset's own environment
 
-**Confirmed direction.** Market currently reports the broad market's change over a
-year, and every asset therefore reports the same thing. NVDA, HSBC and RKLB sit
-in different environments — semiconductors, banks, space — and a report that says
-the same sentence about all three is not telling an investor anything about the
-asset.
+**Partly built.** Market used to report the broad market's change over a year, and
+every asset therefore reported the same thing. The first market-level evidence is now
+connected, and the category answers a question about the asset: what the environment
+means for this one.
 
-Market's question is not "how did the market do" but **"what does the current
-environment mean for this stock"**. The broad index is one input, never the
-answer. What Market must eventually combine:
+### What is connected, and where it goes
+
+The environment is a separate input from the asset's own market data, because it is
+not about an asset: the equity futures, the volatility index and the ten year yield
+are the same facts for every asset in the market. It is retrieved **once per pass** and
+shared, filed as evidence under the **Market** category like everything else, and read
+through the same reading layer. Its evidence identifiers carry no ticker, which is how
+a reader can tell a shared fact from one of the asset's own.
+
+| Measurement | Source | What it answers |
+| --- | --- | --- |
+| S&P 500 futures since the last close | `ES=F` | Is risk being taken right now |
+| Nasdaq 100 futures since the last close | `NQ=F` | Which end of the market it is being taken in |
+| Volatility index level | `^VIX` | How turbulent the conditions are |
+| Volatility index change | `^VIX` | Whether they are settling or deteriorating |
+| Ten year yield change, in basis points | `^TNX` | Which way the cost of money is going |
+
+The aspects of the environment question did not change when the evidence arrived:
+**direction**, **risk appetite**, **volatility** and **rates** are the same four the
+category already declared, two of which were listed as unmeasured so that the gap was
+visible in the report. Coverage now reads 4 of 4 on a live run, and a placeholder —
+which is what a run with no source produces — no longer counts as an examined aspect.
+
+### How the sentence is built
+
+Market's first sentence is about **this asset**, because that is the sentence a phone
+shows. It is read from a pair: an environment measurement and one of the asset's own,
+in the same sentence, with both named in its references.
+
+| Exposure | Read from | Sentence |
+| --- | --- | --- |
+| A weak tape against a high beta | overnight tape, volatility change, beta | 盘前走弱、波动抬升，本标的贝塔偏高，波动可能放大。 |
+| A weak tape against a low beta | the same, on the other side of the beta scale | 盘前走弱，本标的贝塔很低，相对抗跌。 |
+| Rising rates against a dear valuation | yield change, P/E, EV/EBITDA, cash flow yield | 利率上行而估值很贵，分母端承压。 |
+| Growth lagging for a growth company | the two futures, the declared profile | 成长风格弱于大盘，本标的属成长型，短期相对承压。 |
+| Rates moving, for a financial | yield change, the declared profile | 利率上行，本标的属金融机构，息差与资产质量直接受利率影响，方向还需要收益率曲线的形状，目前判断不了。 |
+
+The environment itself is the **second** sentence, and the brief states it once for the
+whole universe at the top, before any asset: 市场环境 盘前偏强、成长股领先、波动平静、
+利率上行，环境对风险资产偏友好。
+
+**Two of the five environment measurements are described and never graded.** Risk
+appetite and volatility are graded, because a tape being bought and a market that is
+calm are favourable conditions for owning risk and the direction scale already grades
+exactly that. Rates and the change in volatility are not: a rise in the cost of money
+is not better or worse in itself, and it is not worse for a bank than for a software
+company until an asset is named. Nothing else was invented to fill the gap.
+
+### What is still not connected
 
 | Input | State |
 | --- | --- |
-| Macro backdrop — Fed, CPI, payrolls, rates | Only the meeting calendar is connected, and that is Catalyst's. Realised readings are not. |
-| Industry environment — policy, competition, cycle | Nothing connected. |
-| Market style — growth, dividend, AI, space | Nothing connected. |
-| Risk appetite | Nothing connected beyond the index's yearly change. |
-| Flows — where money is moving | Nothing connected. |
+| Macro backdrop — realised CPI, payrolls, growth readings | Not connected. Only the meeting calendar is, and that is Catalyst's. |
+| Industry environment — policy, competition, cycle | Not connected. Named as a gap in the report. |
+| Flows — where money is moving | Not connected. Named as a gap in the report. |
+| Currency — what the dollar is doing to a company | **Declared out of reach for now.** The dollar's move is retrievable, but AIS does not know where any asset earns its revenue, so it cannot state an effect. Describing the move without an effect would be a fact with no consequence in a category that exists to state consequences. |
+| The shape of the yield curve | Not connected, and it is what a rate sentence about a bank needs. One yield is a level, not a curve. |
 
-The output is natural language about what the environment means, not a list of
-index numbers.
+**Market's question is still "what does the current environment mean for this stock"**,
+and the answers are still narrow: a sector is not connected, and style is read from two
+index futures rather than from holdings. What changed is that the category now answers
+about the asset rather than about the index, and says which part of the answer is
+missing.
 
-Not built today because the evidence is not connected. Naming an industry by
-inference from a ticker would be guessing, and stating an environment AIS cannot
-see would be worse than saying nothing.
+**The boundary with Catalyst still holds.** Catalyst lists what is coming; Market
+explains what the environment means and what has already happened to it. A separate
+market brief section was not created, and the environment's one user-visible line is a
+line of the brief rather than a section of it.
 
-**The boundary with Catalyst must hold while this is built.** Catalyst lists what
-is coming; Market explains what the environment means, including the effect of
-what has already happened. A separate market brief section is not to be created:
-it would split one question across two places.
+**The environment does not reach the opportunity judgement.** HPO reads five named
+conditions and Market is not one of them, so a hostile environment does not by itself
+lower an asset's opportunity count. Whether it should is a Constitution-level question
+about which categories HPO reads, and it is not decided here.
 
 ---
 
@@ -459,20 +508,24 @@ that tick as though it were news.
 
 **What makes 21:00 a report of its own is Phase C.** A pre-market brief answers what
 changed overnight: pre-market prices, futures, volatility, yields, the dollar, the
-morning's macro releases, overnight news. None of it exists yet, and without it the
-brief has no content of its own. The same evidence gap is why 09:00 is described as
-a *live* brief rather than a recap — there is nothing between the two hours to make
-a recap out of.
+morning's macro releases, overnight news. **Futures, volatility and yields are now
+connected** — they are what the Market category reads and what the 09:00 brief leads
+with — and the rest is not: there are no pre-market prices per asset, no realised macro
+releases and no overnight news. So the 21:00 brief would still be the 09:00 brief sent
+twelve hours earlier with the same evidence behind it, and it stays off.
 
-So the order holds: **Phase C first, then 21:00 becomes its own report.** Until
-then, one scheduled report, at the hour when the data is freshest — five hours after
-the session it describes, with the after-hours results already in.
+**E is done, and it did not make 21:00 its own report by itself.** The evidence the
+Market Layer needed turned out to be a smaller set than the pre-market brief needs:
+what the environment is doing is not the same as what the next session is being priced
+at, and the second half is still missing.
 
-**What this does not mean.** It does not mean the trigger exists. Nothing fires at
-09:00 today: the scheduler is an interval whose phase comes from when the process
-started, and the market-open gate skips every cycle outside the US session, which
-09:00 Beijing is. Building the trigger is items A, C and D below, and it is a
-runtime change, not a universe one.
+So the order holds: **the rest of Phase C first, then 21:00 becomes its own report.**
+Until then, one scheduled report, at the hour when the data is freshest — five hours
+after the session it describes, with the after-hours results already in.
+
+**What this does not mean.** It does not mean a second trigger was built. Nothing fires
+at 21:00: the brief is owed once a day at 09:00, and adding 21:00 is another schedule
+and nothing else — which is the point of it being a schedule rather than a special case.
 
 **A report has two times, and they are chosen for different reasons.** The
 **evaluation anchor** is set by the data: an analysis is worth computing once the
@@ -585,11 +638,12 @@ still open.
 | D | **Notification policy becomes an owned concept.** There used to be one policy, hardwired into the per-asset cycle. The brief is the second, and it lives with the brief. | `app/morning_brief.py`, `analysis/brief.py` | **Done** — the brief owns both when it speaks and what it shows |
 | F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | `app/runtime_state.py` | **Partly** — what is *owed* survives a restart; what AIS *concluded* still does not |
 | B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. | `utils/market_clock.py` | Open — needed by the close-anchored part of F |
-| E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. | `contracts/`, `pipeline/` | Open — Phase C |
+| E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. | `contracts/`, `pipeline/` | **Done** — futures, volatility and yields are retrieved once per pass and read beside each asset |
 
-**E is the one that blocks the most.** It is the same work the Market Layer needs,
-which is why the pre-market brief and the Market Layer should be designed together
-rather than twice.
+**E is done.** The market's own measurements are retrieved once per pass and shared,
+and the Market category reads them beside each asset's own. What the pre-market brief
+still needs is the other half: pre-market prices per asset, realised macro releases,
+and overnight news.
 
 **F is half done and the other half matters.** The runtime now remembers the day the
 brief was sent. It still does not remember what the brief *said*, so a restarted
@@ -689,14 +743,25 @@ out of a phone message.
 **What it can say about the market, and what it cannot.** The events that bear on
 every asset — a central bank meets on the same date whichever symbol is asked about —
 are reported once at the top, deduplicated by kind and date, and are not repeated
-beside each entry. **A market state is not reported, because AIS cannot read one
-yet**: that evidence is Phase C, and the closest thing available is a twelve-month
-index move carried per asset, which is not a statement about today.
+beside each entry.
+
+**The market state is reported now.** It is one line at the top of the brief, before
+anything about an individual asset, read from the environment the whole universe is
+judged in: what the futures have done since the last close, how turbulent the market is
+and whether that is settling, and which way the cost of money moved. It says what the
+market is doing and what it amounts to for risk; what it means for one asset is a
+sentence in that asset's own report, and it is not repeated here.
 
 ### Still open
 
-- **Whether the brief should state a market state at all**, which is the same
-  dependency as the 21:00 brief: Phase C, market-level evidence.
+- **Whether the environment should reach the opportunity judgement.** HPO reads five
+  named conditions and Market is not one of them, so a hostile environment does not by
+  itself lower an asset's opportunity count. Changing that is a Constitution-level
+  question about which categories HPO reads, and it is not decided.
+- **The industry environment, flows, and the currency exposure.** Named as gaps in the
+  report and not connected. The currency one is a decision rather than a missing
+  source: the dollar's move is retrievable, and AIS does not know where any asset earns
+  its revenue, so it cannot state an effect.
 - **The Weekly report** is unclassified. It was one of the three older items and
   none of the three triggers covers it: it is neither event-driven, nor a
   pre-market offset, nor a morning report.

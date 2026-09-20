@@ -1426,4 +1426,111 @@ in it is dated from one moment rather than two.
 
 ---
 
+### The environment is evidence, and it belongs to no asset
+
+**Context.** Market reported the broad market's change over a year, which the vendor
+hands over with every asset's own figures. That was the only market-level fact AIS had,
+and it meant every asset was judged in an environment described identically, which is
+the failure the category was created to fix.
+
+**Decision.** The market's own measurements — the equity futures since the last close,
+the volatility index, the ten year yield — become a **separate input**, retrieved once
+per pass and shared by every asset in it. They arrive through the same evidence stream
+as everything else, are filed under the Market category, and are read through the same
+reading layer. Only their identifiers differ, because they carry no ticker.
+
+**Reason.** Three things pushed the same way. Fetching them per asset would fetch one
+fact once per asset and let the copies disagree about the same morning, so the retrieval
+belongs where a pass is known. Putting them in the per-asset snapshot was not available:
+a snapshot carries one point per metric, and six market measurements would appear in
+every asset's provenance as missing, which is a lie about where the numbers come from.
+And filing them under Market rather than inventing a Market Data category keeps the
+one question the category asks — what is the environment this asset is judged in —
+while widening what it can answer.
+
+**Impact.** Coverage of the market question went from one aspect of four to four of
+four on a live run. The aspects themselves did not change: volatility and rates were
+declared and listed as unmeasured long before anything measured them, which is what the
+aspect set was for, and the evidence that closed the gap did not move the question. The
+evidence is written out once in the expanded report and its one user-visible line is a
+line of the brief, not a section of it.
+
+**A defect the change exposed.** With the new rules in place, a run with no source at
+all reported **four of four** aspects assessed, because each rule returns a placeholder
+and a placeholder was counted as an examined aspect. That is the same failure the aspect
+set exists to prevent, only with better numbers. An aspect now counts when a rule
+actually read something, and the placeholder stays what it was for: keeping the pipeline
+deterministic.
+
+**Revisit.** When the industry, flow or currency evidence is connected, which would add
+aspects rather than change these.
+
+---
+
+### A fact about the market is not a judgement about an asset
+
+**Context.** The first version of the sentences was going to say what the environment
+was doing, which is what a market recap says. That is the thing the category is not.
+
+**Decision.** Every Market sentence names **both halves**: an environment measurement
+and one of the asset's own, in the same sentence, with both in its references. A rising
+yield beside a valuation that reads expensive is a finding; a rising yield is not. A
+weak tape beside a high beta is a finding; a weak tape is not.
+
+**Reason.** The category's question is what the environment means for this stock, and a
+sentence that answers it has to say which stock. It also has to be checkable: a reader
+who disagrees with "利率上行而估值很贵，分母端承压" can see both halves and argue with
+either, which is not true of a sentence that reports the market and lets the reader
+supply the consequence.
+
+**The environment itself is stated once, and separately.** It is the same for every
+asset in the market, so the brief leads with it before any asset and the per-asset
+reports carry it as the second sentence behind the sentence about the asset. The first
+sentence of a category is what a phone shows, so the first sentence of Market had to be
+the one about the holding.
+
+**And two of the five measurements are never graded.** Risk appetite and volatility are
+graded, because a tape being bought and a calm market are favourable conditions for
+owning risk and the direction scale already grades exactly that. Rates and the change in
+volatility are described and not scored: a rise in the cost of money is not better or
+worse in itself, and it is not worse for a bank than for a software company until an
+asset is named. Scoring it would have made the category's grade express a preference
+the reading layer does not hold.
+
+**Impact.** The sentence table is five rows, each a pair. Where a mechanism needs
+evidence AIS does not have — a bank's margin needs the shape of the curve, and AIS has
+one yield — the sentence names the exposure and says the direction is not judged. The
+dollar is left out entirely for the same reason: its move is retrievable, and without
+knowing where an asset earns its revenue there is no effect to state.
+
+**Revisit.** When a sector or industry environment is connected, which would add rows to
+the table rather than change the rule.
+
+---
+
+### A vendor's "previous close" is not the previous close
+
+**Context.** The environment's measurements are changes, and the vendor's chart endpoint
+offers two candidate baselines: a `chartPreviousClose` and the closes in the series.
+
+**Decision.** The change is read as the last two closes of the series, and
+`chartPreviousClose` is deliberately not used. A live probe made the reason concrete:
+for the S&P futures it returned 7,589.25 while the previous session had closed at
+7,640.00, so reading it as "the previous close" would have reported four sessions of
+movement as one overnight move — a number that looks entirely plausible in a report.
+
+**Reason.** The field is the close before the range that was requested, which is a fact
+about the request and not about the market. Nothing in its name says so, and the
+mistake it invites is invisible in the output: the change is still a change, the
+sentence still reads correctly, and only the window is wrong.
+
+**Impact.** The derivation is carried in each point's own reason, so a reader of the
+expanded report can see which two sessions a move was measured between. Sessions with no
+close are dropped rather than carried forward, which would turn a gap into a flat
+session.
+
+**Revisit.** No.
+
+---
+
 End of Document

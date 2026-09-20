@@ -148,7 +148,7 @@ External Providers
 
 **`config/`** — Configuration management. Holds all runtime configuration, including credentials and file paths. No secrets or paths are hardcoded elsewhere.
 
-**`contracts/`** — Engine contracts. The stable interfaces between engines, defined as typing protocols with no implementation.
+**`contracts/`** — Engine contracts. The stable interfaces between engines, defined as typing protocols with no implementation. A contract also owns the value objects exchanged across its boundary, because that is the only place both sides may depend on. `market_data_provider.py` carries one asset's measurements, `market_environment.py` carries the market's own, and `catalyst_event_provider.py` carries dated events: the environment is separate because its measurements belong to no asset, and a fact shared by every asset in a pass must not be fetched once per asset.
 
 **`core/`** — AIS Core Engine. Investment reasoning and decision generation. The Core Engine is the only layer that owns business logic; its framework subsystems live in sibling packages (see `evaluation/`).
 
@@ -214,7 +214,7 @@ The rules these boundaries produce:
 
 - **Report Model → Renderer → Transport.** A report is rendered once, by a renderer, and every transport carries that same text. A notifier only ever receives rendered text; it cannot receive a recommendation, an assessment, or any other model.
 - **One model per document, and every renderer is a projection of it.** AIS renders two documents: a report about one asset, and a brief over the watch universe. Each has exactly one model, and a channel that wants different content gets a projection of that model rather than a second one of its own. A document is added by adding a model and saying so here; it is never added by a channel assembling its own content.
-- **One provider contract per kind of fact.** The Data Layer implements `MarketDataProvider` for measurements and `CatalystEventProvider` for dated events, and exposes a factory for each. Nothing outside the Data Layer names a vendor, and no vendor field crosses the boundary, so a new source plugs into an existing interface rather than into the components that read it.
+- **One provider contract per kind of fact.** The Data Layer implements `MarketDataProvider` for measurements of an asset, `CatalystEventProvider` for dated events and `EnvironmentProvider` for the market's own measurements, and exposes a factory for each. Nothing outside the Data Layer names a vendor, and no vendor field crosses the boundary, so a new source plugs into an existing interface rather than into the components that read it.
 - **A provider returns facts; AIS classifies them.** A catalyst event provider states what kind of event it is and when it falls. Which layer of the investment case that bears on is read from one table in `models/catalyst_event.py`. A provider that decided it would be making a judgement, and this keeps a new source from changing how AIS reads the sources it already has.
 - **One runtime.** The scheduler owns the loop. Everything above it is called, and never waits.
 

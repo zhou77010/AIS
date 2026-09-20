@@ -288,6 +288,26 @@ particular:
   Market would split one question across two places, and the reader would have to
   join them up.
 
+**Market's evidence is shared; its judgement never is.** How the futures are trading,
+how turbulent the market is and what money costs are the same facts for every asset in
+a market, so they are retrieved once and read by every asset in the pass rather than
+fetched again for each. What is not shared is the sentence: a fact about the market
+has no meaning until an asset is named beside it, and the meaning is the pair.
+
+That is why a sentence about the environment names both halves — the condition and the
+exposure. "Growth is under pressure" is a market recap; "growth is under pressure and
+this is a growth company" is a judgement about something the reader owns. A clause
+that cannot name both halves does not belong in the category.
+
+**And a mechanism whose evidence is missing is named, not guessed.** A rate move
+reaches a bank's margin through the shape of the curve, not through one yield; where
+AIS has one yield and not the curve, it says the exposure exists and that the
+direction is not judged. Naming an exposure and admitting the direction is unknown is
+worth more than a confident sentence built on half the mechanism, and the reader can
+act on the difference. An exposure that cannot be stated at all — what a currency is
+doing to a company that does not publish where it earns — is listed as a gap rather
+than described as though it were not one.
+
 ---
 
 ## 11. Reading Before Building
