@@ -58,7 +58,11 @@ CATEGORY_DEFAULT_UNIT_NOUN = "项"
 # category that becomes complete stops printing it.
 UNASSESSED_ITEMS: dict[Category, tuple[str, ...]] = {
     Category.RISK: ("业务风险", "估值风险", "事件风险", "证据风险", "长期风险"),
-    Category.MARKET: ("市场波动性", "利率环境"),
+    # Volatility and rates were named here while nothing measured them. They are
+    # measured now, so what remains is what the environment question still does not
+    # reach: the industry an asset competes in, where money is moving, and what the
+    # currency it earns in is doing.
+    Category.MARKET: ("行业环境", "资金流向", "汇率环境"),
     Category.TREND: ("价格路径",),
     # Named by layer, because that is how the catalyst question is read and how
     # the report groups what it did find.

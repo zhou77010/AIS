@@ -10,15 +10,19 @@ while having examined almost nothing, and that is the failure mode this set
 exists to prevent. The aspects are this implementation's reading of the
 Constitution's question, and they are open to ratification.
 
-Reading the question as three aspects:
+Reading the question as four aspects:
 
 * **Direction** — where the market the asset trades in has been going.
-* **Volatility** — how turbulent that market has been.
+* **Risk appetite** — what the market is doing about risk right now: whether the
+  tape is being bought or sold overnight, and whether the price of protection is
+  rising.
+* **Volatility** — how turbulent that market is.
 * **Rates** — the cost of money the environment sets, which prices every asset
   in it.
 
-Only direction is measured today. The other two are listed so that the gap is
-visible in the report rather than hidden by a fraction that reads as complete.
+All four are measured now. Volatility and rates used to be listed here while being
+unmeasured, which is why they appeared in the report as gaps; the aspects did not
+change when the evidence arrived, and neither did the question.
 """
 
 from __future__ import annotations
@@ -30,5 +34,6 @@ class MarketAspect(StrEnum):
     """An aspect of the environment an asset is judged in."""
 
     DIRECTION = "direction"
+    RISK_APPETITE = "risk_appetite"
     VOLATILITY = "volatility"
     RATES = "rates"

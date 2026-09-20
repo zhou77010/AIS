@@ -28,6 +28,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from contracts.market_data_provider import MarketMetric
+from contracts.market_environment import EnvironmentMetric
+
+# The measurements AIS reads against a scale. An asset's own measurements and the
+# market's are read here together: a scale is a decision about what a number means,
+# and that decision does not depend on who the number belongs to.
+ReadableMetric = MarketMetric | EnvironmentMetric
 
 MIN_SCORE = 1
 MAX_SCORE = 5
@@ -50,10 +56,16 @@ class Band:
             better, and at or above it where higher is.
         word: How a reading in this band is described. It is what a sentence says
             and it is the only place the wording is decided.
+        is_flat: Whether this band is the one that means nothing moved. A sentence
+            that says something changed asks this rather than comparing numbers, so
+            what counts as unchanged is decided here and nowhere else. A measurement
+            whose scale marks no band as flat never reads as unchanged, which is
+            right: a level that is always there has not "moved" by being read.
     """
 
     threshold: float
     word: str
+    is_flat: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,11 +105,12 @@ def _lower(
     graded: bool = True,
     negative_means_absent: bool = False,
     read_absolute: bool = False,
+    flat: str | None = None,
 ) -> MetricScale:
     """Return a scale on which a smaller reading is a better one."""
     return MetricScale(
         direction=Direction.LOWER_IS_BETTER,
-        bands=tuple(Band(threshold, word) for threshold, word in bands),
+        bands=tuple(Band(threshold, word, word == flat) for threshold, word in bands),
         below_word=below_word,
         graded=graded,
         negative_means_absent=negative_means_absent,
@@ -110,11 +123,12 @@ def _higher(
     below_word: str,
     *,
     graded: bool = True,
+    flat: str | None = None,
 ) -> MetricScale:
     """Return a scale on which a larger reading is a better one."""
     return MetricScale(
         direction=Direction.HIGHER_IS_BETTER,
-        bands=tuple(Band(threshold, word) for threshold, word in bands),
+        bands=tuple(Band(threshold, word, word == flat) for threshold, word in bands),
         below_word=below_word,
         graded=graded,
     )
@@ -123,7 +137,7 @@ def _higher(
 # Every scale AIS reads a number against. The words are what the report says; the
 # position of a band is the score it carries. Adding a measurement means adding a
 # row here, and any component that reads it picks the row up without being told.
-SCALES: dict[MarketMetric, MetricScale] = {
+SCALES: dict[ReadableMetric, MetricScale] = {
     # --- What is being paid, relative to what the business delivers ----------
     MarketMetric.PE: _lower(
         ((12.0, "很便宜"), (18.0, "便宜"), (25.0, "合理"), (35.0, "偏贵")),
@@ -171,6 +185,69 @@ SCALES: dict[MarketMetric, MetricScale] = {
     MarketMetric.MARKET_DIRECTION: _higher(
         ((0.20, "明显上行"), (0.10, "上行"), (0.03, "基本持平"), (-0.03, "走弱")),
         "明显走弱",
+    ),
+    # The environment's own measurements, which belong to the market rather than to
+    # an asset. They are read here, in the same table, because a fact does not stop
+    # needing a scale when it is shared: what a VIX level means is one decision
+    # wherever it is read.
+    #
+    # Risk appetite and volatility are graded, because a tape that is rising and a
+    # market that is calm are favourable conditions for owning risk, and the
+    # direction scale above already grades exactly that. Rates and the change in
+    # volatility are described and never graded: a rise in the cost of money is not
+    # better or worse in itself, and it is not worse for a bank than for a software
+    # company until an asset is named. What it means for an asset is read beside
+    # that asset's own measurements, in analysis.insight.market_insight.
+    EnvironmentMetric.OVERNIGHT_EQUITY: _higher(
+        (
+            (0.010, "盘前明显走强"),
+            (0.003, "盘前偏强"),
+            (-0.003, "盘前基本持平"),
+            (-0.010, "盘前偏弱"),
+        ),
+        "盘前明显走弱",
+        flat="盘前基本持平",
+    ),
+    EnvironmentMetric.OVERNIGHT_GROWTH: _higher(
+        (
+            (0.010, "成长股盘前明显走强"),
+            (0.003, "成长股盘前偏强"),
+            (-0.003, "成长股盘前基本持平"),
+            (-0.010, "成长股盘前偏弱"),
+        ),
+        "成长股盘前明显走弱",
+        flat="成长股盘前基本持平",
+    ),
+    EnvironmentMetric.VOLATILITY: _lower(
+        (
+            (15.0, "波动平静"),
+            (20.0, "波动正常"),
+            (28.0, "波动偏高"),
+            (38.0, "波动紧张"),
+        ),
+        "波动恐慌",
+    ),
+    EnvironmentMetric.VOLATILITY_CHANGE: _lower(
+        (
+            (-2.0, "波动回落"),
+            (2.0, "波动基本持平"),
+            (5.0, "波动抬升"),
+            (10.0, "波动明显抬升"),
+        ),
+        "波动急升",
+        graded=False,
+        flat="波动基本持平",
+    ),
+    EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: _lower(
+        (
+            (-10.0, "利率明显回落"),
+            (-3.0, "利率小幅回落"),
+            (3.0, "利率基本持平"),
+            (10.0, "利率上行"),
+        ),
+        "利率大幅上行",
+        graded=False,
+        flat="利率基本持平",
     ),
     # --- What the price has actually been doing ------------------------------
     MarketMetric.TREND_MA20_GAP: _higher(
@@ -253,7 +330,7 @@ SCALES: dict[MarketMetric, MetricScale] = {
 }
 
 
-def scale_for(metric: MarketMetric) -> MetricScale | None:
+def scale_for(metric: ReadableMetric) -> MetricScale | None:
     """Return the scale a measurement is read against, or None when it has none.
 
     A measurement with no scale is not read at all: it is carried as a fact and
@@ -262,7 +339,7 @@ def scale_for(metric: MarketMetric) -> MetricScale | None:
     return SCALES.get(metric)
 
 
-def band_for(metric: MarketMetric, value: float) -> Band | None:
+def band_for(metric: ReadableMetric, value: float) -> Band | None:
     """Return the band a reading falls in, or None when the measurement has no scale.
 
     Args:
@@ -289,7 +366,7 @@ def band_for(metric: MarketMetric, value: float) -> Band | None:
     return Band(threshold=value, word=scale.below_word)
 
 
-def score_for(metric: MarketMetric, value: float) -> int | None:
+def score_for(metric: ReadableMetric, value: float) -> int | None:
     """Return how one reading scores, or None when it is not scored.
 
     The score is the position of the band and not a judgement of its own: the best

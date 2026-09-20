@@ -44,7 +44,7 @@ def grade_for_category(result: AnalysisResult, category: Category) -> int | None
     if category is Category.CATALYST:
         days = catalyst_days(result)
         return None if days is None else catalyst_score(days)
-    return read_category(result.market_data, category).mean_score
+    return reading_for(result, category).mean_score
 
 
 def catalyst_days(result: AnalysisResult) -> int | None:
@@ -83,8 +83,15 @@ def moment_for(result: AnalysisResult) -> datetime:
 
 
 def reading_for(result: AnalysisResult, category: Category) -> CategoryReading:
-    """Return the category's reading, for callers that need more than the grade."""
-    return read_category(result.market_data, category)
+    """Return the category's reading, for callers that need more than the grade.
+
+    The environment the run was judged in is read here beside the asset's own
+    measurements, so that every consumer of a reading sees the same thing: the
+    grade, the sentence under it and the opportunity conditions are all views of
+    this one reading, and a reading that left the environment out would have the
+    Market grade and the Market sentence describing two different runs.
+    """
+    return read_category(result.market_data, category, environment=result.environment)
 
 
 def stars(grade: int) -> str:

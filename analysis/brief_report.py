@@ -54,7 +54,12 @@ from analysis.labels import (
     opportunity_headline,
 )
 from analysis.plain_language import opportunity_sentence
-from analysis.projection import SECTION_SEPARATOR, named_block, wrap
+from analysis.projection import (
+    SECTION_SEPARATOR,
+    named_block,
+    wrap,
+    wrap_at_clauses,
+)
 from analysis.report import (
     LIVE_DATA_LABEL,
     NO_DATA_LABEL,
@@ -71,6 +76,7 @@ BRIEF_LINE_BUDGET = 24
 _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 _TIMEZONE_NOTE = "北京时间"
 _TITLE = "AIS 晨报"
+_ENVIRONMENT_LABEL = "市场环境  "
 _EXTERNAL_LABEL = "外部事件  "
 _NO_EXTERNAL_EVENT = "外部事件  暂无"
 _SHARED_LABEL = "共同结论  "
@@ -96,7 +102,12 @@ def render_daily_brief(brief: DailyBrief) -> str:
         Plain text, ready to be sent through a push channel.
     """
     parts = [
-        [_header(brief), _coverage(brief), *_external_lines(brief)],
+        [
+            _header(brief),
+            _coverage(brief),
+            *_environment_lines(brief),
+            *_external_lines(brief),
+        ],
         _body(brief),
         _tail(brief),
     ]
@@ -131,6 +142,21 @@ def _coverage(brief: DailyBrief) -> str:
     only what is shown cannot tell a quiet universe from a narrow one.
     """
     return f"分析 {len(brief.analysed)} 个标的 · 今日优先 {len(brief.entries)} 个"
+
+
+def _environment_lines(brief: DailyBrief) -> list[str]:
+    """Return what the market is doing, before anything about an individual asset.
+
+    This is the line that makes the brief a pre-market brief rather than a review: it
+    is the environment the reader is about to trade into, and every asset below it was
+    judged in it. It is absent when no environment measurement was retrieved, which is
+    the honest thing to show rather than a claim about a market nobody looked at.
+    """
+    if brief.environment is None or brief.environment.is_empty:
+        return []
+    return wrap_at_clauses(
+        brief.environment.lines[0].text, first_prefix=_ENVIRONMENT_LABEL
+    )
 
 
 def _external_lines(brief: DailyBrief) -> list[str]:

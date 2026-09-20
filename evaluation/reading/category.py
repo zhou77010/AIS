@@ -15,10 +15,12 @@ why the opportunity judgement asks about both.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
-from contracts.market_data_provider import MarketDataSnapshot, MarketMetric
-from evaluation.reading.bands import Band, band_for, score_for
+from contracts.market_data_provider import MarketDataSnapshot
+from contracts.market_environment import EnvironmentSnapshot
+from evaluation.reading.bands import Band, ReadableMetric, band_for, score_for
 from models.category import Category
 
 
@@ -33,7 +35,7 @@ class MetricRead:
         score: How it scored, or None when this measurement is only described.
     """
 
-    metric: MarketMetric
+    metric: ReadableMetric
     value: float
     band: Band
     score: int | None
@@ -88,46 +90,99 @@ class CategoryReading:
             return None
         return min(scored, key=lambda read: read.score or 0)
 
-    def read(self, metric: MarketMetric) -> MetricRead | None:
+    def read(self, metric: ReadableMetric) -> MetricRead | None:
         """Return the reading of one measurement, or None when it was not read."""
         for read in self.reads:
             if read.metric is metric:
                 return read
         return None
 
-    def word(self, metric: MarketMetric) -> str | None:
+    def word(self, metric: ReadableMetric) -> str | None:
         """Return how one measurement of this category is described."""
         read = self.read(metric)
         return None if read is None else read.band.word
 
 
 def read_category(
-    snapshot: MarketDataSnapshot | None, category: Category
+    snapshot: MarketDataSnapshot | None,
+    category: Category,
+    *,
+    environment: EnvironmentSnapshot | None = None,
 ) -> CategoryReading:
     """Read every measurement of one category that has a scale.
+
+    A category is read from two places, and they are different in kind. The snapshot
+    carries what the source reported about **this asset**. The environment carries
+    what the market itself is doing, which is the same for every asset in it and is
+    retrieved once. Both are read here, together, because a category's question is
+    answered by all of its measurements and not only by the ones that belong to the
+    asset.
 
     Args:
         snapshot: Market data of the run, or None when no source was consulted.
         category: Category to read.
+        environment: The environment the run was judged in, or None when none was
+            retrieved.
 
     Returns:
         The reading, empty when no measurement of the category was retrieved.
     """
+    reads = [
+        *_entity_reads(snapshot, category),
+        *_environment_reads(environment, category),
+    ]
+    return CategoryReading(category=category, reads=tuple(reads))
+
+
+def _entity_reads(
+    snapshot: MarketDataSnapshot | None, category: Category
+) -> list[MetricRead]:
+    """Return the readings of the asset's own measurements for one category."""
     if snapshot is None:
-        return CategoryReading(category=category, reads=())
+        return []
+    return _reads(
+        (
+            (point.metric, point.value)
+            for point in snapshot.available_points
+            if point.value is not None
+        ),
+        category,
+    )
+
+
+def _environment_reads(
+    environment: EnvironmentSnapshot | None, category: Category
+) -> list[MetricRead]:
+    """Return the readings of the environment's measurements for one category."""
+    if environment is None:
+        return []
+    return _reads(
+        (
+            (point.metric, point.value)
+            for point in environment.available_points
+            if point.value is not None
+        ),
+        category,
+    )
+
+
+def _reads(
+    measurements: Iterable[tuple[ReadableMetric, float | None]], category: Category
+) -> list[MetricRead]:
+    """Return one reading per measurement that has a scale and serves the category."""
     reads: list[MetricRead] = []
-    for point in snapshot.available_points:
-        if category not in point.metric.categories or point.value is None:
+    for metric, value in measurements:
+        if value is None or category not in metric.categories:
             continue
-        band = band_for(point.metric, point.value)
+        band = band_for(metric, value)
         if band is None:
             continue
         reads.append(
             MetricRead(
-                metric=point.metric,
-                value=point.value,
+                metric=metric,
+                value=value,
                 band=band,
-                score=score_for(point.metric, point.value),
+                score=score_for(metric, value),
             )
         )
-    return CategoryReading(category=category, reads=tuple(reads))
+    return reads

@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from contracts.market_data_provider import MarketDataSnapshot
+from contracts.market_environment import EnvironmentSnapshot
 from models.asset import Asset
 from models.catalyst_event import CatalystEvent
 from models.category import Category
@@ -52,6 +53,12 @@ class AnalysisResult:
             category that had something to say. They are built here rather than
             by a renderer, because interpreting evidence is analysis and showing
             it is presentation.
+        environment: The environment the run was judged in, or None when no
+            environment source was consulted. It is not about this asset — it is
+            the same object for every asset analysed in the same pass — and it sits
+            here because the Market judgement is made from it beside the asset's
+            own measurements. It is the input the run started from, like the market
+            data, and the report writes it out once rather than once per asset.
     """
 
     asset: Asset
@@ -62,6 +69,7 @@ class AnalysisResult:
     opportunity: OpportunityAssessment | None = None
     events: tuple[CatalystEvent, ...] = ()
     insights: tuple[Insight, ...] = ()
+    environment: EnvironmentSnapshot | None = None
 
     def rating_for(self, category: Category) -> CategoryRating | None:
         """Return the rating recorded for one category, or None."""

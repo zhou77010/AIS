@@ -4,13 +4,17 @@ Builds an EvidenceCollection for an asset. The pipeline is deterministic and
 performs no evaluation, scoring, or I/O: market data is handed in already
 retrieved, and this module only turns it into evidence.
 
-Two kinds of evidence are produced:
+Three kinds of evidence are produced:
 
 * one placeholder item per category, kept so that a collection built without a
   market data source stays complete and deterministic;
 * one item per market metric when a snapshot is supplied, whether the metric was
   retrieved or not, so that a metric a source could not provide is recorded with
-  the reason it is missing instead of silently disappearing.
+  the reason it is missing instead of silently disappearing;
+* one item per environment measurement when one is supplied. The environment is not
+  about this asset — it is the same for every asset in the pass — and it is filed
+  under the same category and read through the same reading layer as everything
+  else. Only its identifier differs, because it belongs to no ticker.
 """
 
 from __future__ import annotations
@@ -33,6 +37,10 @@ from contracts.market_data_provider import (
     METRIC_METADATA_KEY,
     VALUE_METADATA_KEY,
     MarketDataSnapshot,
+)
+from contracts.market_environment import (
+    ENVIRONMENT_EVIDENCE_ID,
+    EnvironmentSnapshot,
 )
 from evidence.evidence_collection import EvidenceCollection
 from evidence.evidence_item import EvidenceItem
@@ -72,6 +80,7 @@ class EvidenceBuilder:
         asset: Asset,
         market_data: MarketDataSnapshot | None = None,
         events: Sequence[CatalystEvent] = (),
+        environment: EnvironmentSnapshot | None = None,
     ) -> EvidenceCollection:
         """Build evidence for the asset.
 
@@ -81,15 +90,19 @@ class EvidenceBuilder:
                 market data source was consulted.
             events: Dated catalyst events retrieved for the asset, in the order
                 they should be recorded.
+            environment: The environment the asset is being judged in, or None when
+                none was retrieved. It is the same object for every asset in a pass.
 
         Returns:
-            EvidenceCollection holding one placeholder item per category, plus
-            one item per market metric when a snapshot was supplied, plus one
-            item per catalyst event.
+            EvidenceCollection holding one placeholder item per category, plus one
+            item per market metric when a snapshot was supplied, plus one item per
+            catalyst event, plus one item per environment measurement.
         """
         items = [*self._placeholder_items(asset)]
         if market_data is not None:
             items.extend(self._market_data_items(asset, market_data))
+        if environment is not None:
+            items.extend(self._environment_items(environment))
         items.extend(self._event_items(asset, events))
         return EvidenceCollection(asset=asset, items=tuple(items))
 
@@ -139,6 +152,40 @@ class EvidenceBuilder:
                 },
             )
             for point in market_data.points
+        )
+
+    def _environment_items(
+        self, environment: EnvironmentSnapshot
+    ) -> tuple[EvidenceItem, ...]:
+        """Return one item per environment measurement, retrieved or not.
+
+        The item carries no ticker in its identifier, because the fact is not about
+        one: the same evidence is filed for every asset in the pass, which is what
+        it means for the market's measurements to be shared. The source is recorded
+        as market data, since that is what it is; what makes it different is whose
+        measurements they are.
+        """
+        return tuple(
+            self._factory.create(
+                id=ENVIRONMENT_EVIDENCE_ID.format(metric=point.metric.value),
+                category=point.metric.primary_category,
+                title=f"{environment.source}: {point.metric.label}",
+                description=point.reason,
+                source=EvidenceSource.MARKET_DATA,
+                timestamp=environment.retrieved_at,
+                confidence=(
+                    _MARKET_DATA_CONFIDENCE
+                    if point.value is not None
+                    else _MISSING_MARKET_DATA_CONFIDENCE
+                ),
+                metadata={
+                    METRIC_METADATA_KEY: point.metric.value,
+                    VALUE_METADATA_KEY: (
+                        "" if point.value is None else repr(point.value)
+                    ),
+                },
+            )
+            for point in environment.points
         )
 
     def _event_items(

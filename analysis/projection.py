@@ -50,6 +50,11 @@ MOMENTUM_FLOOR = 0.005
 # follows, so a break in front of it reads as a mistake.
 NEVER_STARTS_A_LINE = "，。；：、？！）》”’%"
 
+# Where a sentence may be broken between its clauses. This is where a reader pauses:
+# a full stop, a comma, a semicolon, or the list comma that separates one condition
+# from the next.
+CLAUSE_ENDS = "，。；、！？"
+
 
 def display_width(text: str) -> int:
     """Return how many columns a string occupies, counting Chinese as two."""
@@ -92,6 +97,64 @@ def wrap(text: str, *, first_prefix: str = INDENT) -> list[str]:
     if current:
         lines.append((first_prefix if not lines else INDENT) + current)
     return lines
+
+
+def wrap_at_clauses(text: str, *, first_prefix: str = INDENT) -> list[str]:
+    """Break a sentence between its clauses rather than inside one.
+
+    A sentence that is a list of clauses — the tape is up, volatility is calm, rates
+    are rising — reads as clauses, and a break in the middle of one makes the reader
+    reassemble a phrase they had already understood before they can move on. So the
+    break goes where a reader would pause.
+
+    A single clause that cannot fit a line on its own falls back to being broken
+    inside: a line that does not fit has to break somewhere, and by then there is no
+    better place left.
+
+    Args:
+        text: Sentence to break.
+        first_prefix: Columns the sentence begins with, for a sentence introduced by
+            a label.
+    """
+    lines: list[str] = []
+    current = ""
+    for clause in _clauses(text):
+        lead = first_prefix if not lines else INDENT
+        # A clause boundary needs no reserve: the columns held back elsewhere are for
+        # a closing mark that may not begin a line, and every line here already ends
+        # where the reader pauses.
+        if (
+            current
+            and display_width(lead) + display_width(current) + display_width(clause)
+            > LINE_WIDTH
+        ):
+            lines.append(lead + current)
+            current = ""
+        if not current and display_width(lead) + display_width(clause) > LINE_WIDTH:
+            lines.extend(wrap(clause, first_prefix=lead))
+            continue
+        current += clause
+    if current:
+        lines.append((first_prefix if not lines else INDENT) + current)
+    return lines
+
+
+def _clauses(text: str) -> list[str]:
+    """Return a sentence split after each of its separators, separators kept.
+
+    The separator stays with what it follows, because that is where the reader pauses
+    and because a line may not begin with one of them.
+    """
+    clauses: list[str] = []
+    current = ""
+    for character in text:
+        current += character
+        if character in CLAUSE_ENDS:
+            clauses.append(current)
+            current = ""
+    if current:
+        clauses.append(current)
+    return clauses
 
 
 def named_block(prefix: str, items: Sequence[str]) -> list[str]:

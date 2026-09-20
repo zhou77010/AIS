@@ -30,6 +30,11 @@ from app.runtime_state import BriefDelivery, BriefRecord, RuntimeState
 from app.scheduler import IntervalSchedule, Scheduler
 from config.config import Config
 from contracts.market_data_provider import MarketDataSnapshot
+from contracts.market_environment import (
+    EnvironmentMetric,
+    EnvironmentPoint,
+    EnvironmentSnapshot,
+)
 from models.asset import Asset
 from models.category import Category
 from models.category_score import CategoryScore
@@ -531,13 +536,40 @@ class _Analyzer:
 
     def __init__(self, failing: tuple[str, ...] = ()) -> None:
         self.seen: list[str] = []
+        self.environments: list[object] = []
         self._failing = failing
 
-    def analyze_result(self, asset: Asset) -> AnalysisResult:
+    def analyze_result(
+        self, asset: Asset, *, environment: object = None
+    ) -> AnalysisResult:
         self.seen.append(asset.ticker)
+        self.environments.append(environment)
         if asset.ticker in self._failing:
             raise RuntimeError(f"{asset.ticker} could not be analysed")
         return _result(asset)
+
+
+class _Environment:
+    """Environment stand-in, counting how often the runtime asks for it.
+
+    The real one reaches the network, and a source that could not be reached is a
+    different test from one that could. It answers with no values, which is what the
+    brief does without an environment: it says nothing about the market.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch(self) -> EnvironmentSnapshot:
+        self.calls += 1
+        return EnvironmentSnapshot(
+            source="Test environment",
+            retrieved_at=_BEFORE,
+            points=tuple(
+                EnvironmentPoint(metric=metric, value=None, reason="test reason")
+                for metric in EnvironmentMetric
+            ),
+        )
 
 
 def _result(asset: Asset) -> AnalysisResult:
@@ -583,7 +615,10 @@ def _snapshot() -> MarketDataSnapshot:
 
 
 def _application(
-    tmp_path: Path, analyzer: _Analyzer, market_clock: object | None = None
+    tmp_path: Path,
+    analyzer: _Analyzer,
+    market_clock: object | None = None,
+    environment: object | None = None,
 ) -> Application:
     return Application(
         config=Config(
@@ -597,6 +632,9 @@ def _application(
         ),
         market_clock=market_clock or _ClosedMarket(),  # type: ignore[arg-type]
         analyzer=analyzer,  # type: ignore[arg-type]
+        environment_provider=(  # type: ignore[arg-type]
+            environment if environment is not None else _Environment()
+        ),
     )
 
 

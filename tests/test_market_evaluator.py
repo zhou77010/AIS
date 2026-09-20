@@ -100,25 +100,36 @@ def test_evaluator_produces_a_market_category_score() -> None:
 
 
 def test_evaluator_reports_how_little_of_the_environment_it_covers() -> None:
-    # One aspect of three. Reporting one of one would claim the environment had
-    # been examined when almost none of it had.
+    # One aspect of four. Reporting one of one would claim the environment had been
+    # examined when almost none of it had.
     score = MarketEvaluator().evaluate(_evidence(market_direction=0.14))
 
-    assert score.coverage.describe() == "1/3"
+    assert score.coverage.describe() == "1/4"
     assert score.coverage.is_complete is False
 
 
 def test_evaluator_reports_no_coverage_when_nothing_could_be_measured() -> None:
     score = MarketEvaluator().evaluate(_evidence(pe=26.8))
 
-    assert score.coverage.describe() == "0/3"
+    assert score.coverage.describe() == "0/4"
+    assert score.evidence_references == ()
+
+
+def test_a_placeholder_is_not_an_assessed_aspect() -> None:
+    # A run with no source at all produces a placeholder per rule so that the
+    # pipeline stays deterministic. Nothing was read, so nothing is covered: a
+    # placeholder counted as coverage would report the environment as examined when
+    # not one measurement of it exists.
+    score = MarketEvaluator().evaluate(_no_source_evidence())
+
+    assert score.coverage.describe() == "0/4"
     assert score.evidence_references == ()
 
 
 def test_evaluator_reads_no_other_category_measurement() -> None:
     score = MarketEvaluator().evaluate(_evidence(beta=1.2, profit_margin=0.27))
 
-    assert score.coverage.describe() == "0/3"
+    assert score.coverage.describe() == "0/4"
 
 
 def test_evaluator_is_deterministic() -> None:

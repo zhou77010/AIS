@@ -19,6 +19,7 @@ from config.logging_config import get_logger
 from contracts.catalyst_event_provider import CatalystEventProvider
 from contracts.category_evaluator import CategoryEvaluator
 from contracts.market_data_provider import MarketDataProvider, MarketDataSnapshot
+from contracts.market_environment import EnvironmentSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
 from evaluation.catalyst.catalyst_evaluator import CatalystEvaluator
@@ -96,7 +97,9 @@ class AssetAnalyzer:
         """
         return self.analyze_result(asset).recommendation
 
-    def analyze_result(self, asset: Asset) -> AnalysisResult:
+    def analyze_result(
+        self, asset: Asset, *, environment: EnvironmentSnapshot | None = None
+    ) -> AnalysisResult:
         """Run the complete flow and return every stage it produced.
 
         This is the single orchestration path: every stage is executed exactly
@@ -104,6 +107,11 @@ class AssetAnalyzer:
 
         Args:
             asset: Asset to analyse.
+            environment: The environment the asset is being judged in, or None when
+                none was retrieved. It is retrieved once per pass and shared by
+                every asset in it, so it is handed in rather than fetched here:
+                fetching it per asset would fetch one fact once per asset and could
+                have the copies disagree.
 
         Returns:
             AnalysisResult holding the asset, its assessment, its recommendation
@@ -111,7 +119,7 @@ class AssetAnalyzer:
         """
         market_data = self._collect_market_data(asset)
         events = self._collect_events(asset)
-        evidence = self._evidence_builder.build(asset, market_data, events)
+        evidence = self._evidence_builder.build(asset, market_data, events, environment)
         category_scores = tuple(
             evaluator.evaluate(evidence) for evaluator in self._category_evaluators
         )
@@ -123,6 +131,7 @@ class AssetAnalyzer:
             recommendation=recommendation,
             events=events,
             market_data=market_data,
+            environment=environment,
         )
         result = replace(result, ratings=self._rate(asset, result))
         result = replace(result, opportunity=self._assess_opportunity(result))

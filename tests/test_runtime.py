@@ -13,6 +13,11 @@ from app.application import Application
 from app.scheduler import IntervalSchedule, Scheduler
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
 from config.config import Config
+from contracts.market_environment import (
+    EnvironmentMetric,
+    EnvironmentPoint,
+    EnvironmentSnapshot,
+)
 from models.asset import Asset
 from models.asset_profile import AssetProfile
 from models.category import Category
@@ -284,11 +289,15 @@ class _Analyzer:
         self, result: AnalysisResult | None = None, error: Exception | None = None
     ) -> None:
         self.calls = 0
+        self.environments: list[object] = []
         self._result = result
         self._error = error
 
-    def analyze_result(self, asset: Asset) -> AnalysisResult:
+    def analyze_result(
+        self, asset: Asset, *, environment: object = None
+    ) -> AnalysisResult:
         self.calls += 1
+        self.environments.append(environment)
         if self._error is not None:
             raise self._error
         if self._result is None:
@@ -353,10 +362,14 @@ class _PerTickerAnalyzer:
 
     def __init__(self, error: Exception | None = None) -> None:
         self.seen: list[str] = []
+        self.environments: list[object] = []
         self._error = error
 
-    def analyze_result(self, asset: Asset) -> AnalysisResult:
+    def analyze_result(
+        self, asset: Asset, *, environment: object = None
+    ) -> AnalysisResult:
         self.seen.append(asset.ticker)
+        self.environments.append(environment)
         if self._error is not None:
             raise self._error
         return _analysis_result(asset.ticker)
@@ -369,11 +382,47 @@ class _FailingAnalyzer:
         self._failing = failing
         self.seen: list[str] = []
 
-    def analyze_result(self, asset: Asset) -> AnalysisResult:
+    def analyze_result(
+        self, asset: Asset, *, environment: object = None
+    ) -> AnalysisResult:
         self.seen.append(asset.ticker)
         if asset.ticker == self._failing:
             raise RuntimeError("market data exploded")
         return _analysis_result(asset.ticker)
+
+
+class _Environment:
+    """Environment stand-in that answers with a fixed snapshot, counting the calls."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch(self) -> EnvironmentSnapshot:
+        self.calls += 1
+        return _environment_snapshot()
+
+
+def _environment_snapshot(*, live: bool = True) -> EnvironmentSnapshot:
+    """Return an environment with a value for every measurement, or for none."""
+    values = {
+        EnvironmentMetric.OVERNIGHT_EQUITY: 0.004,
+        EnvironmentMetric.OVERNIGHT_GROWTH: 0.002,
+        EnvironmentMetric.VOLATILITY: 16.5,
+        EnvironmentMetric.VOLATILITY_CHANGE: -1.2,
+        EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: 4.0,
+    }
+    return EnvironmentSnapshot(
+        source="Test environment",
+        retrieved_at=datetime(2026, 9, 18, 1, 0, tzinfo=UTC),
+        points=tuple(
+            EnvironmentPoint(
+                metric=metric,
+                value=values[metric] if live else None,
+                reason="test reason",
+            )
+            for metric in EnvironmentMetric
+        ),
+    )
 
 
 def _application(
@@ -381,12 +430,20 @@ def _application(
     analyzer: object,
     monkeypatch: pytest.MonkeyPatch,
     config: Config | None = None,
+    environment: object | None = None,
 ) -> Application:
-    """Return an application wired to stand-ins, with notification faked out."""
+    """Return an application wired to stand-ins, with notification faked out.
+
+    The environment is a stand-in too: the real one reaches the network, and a test
+    that reaches the network is a test that depends on what the market is doing.
+    """
     application = Application(
         config=config if config is not None else _config(),
         market_clock=clock,  # type: ignore[arg-type]
         analyzer=analyzer,  # type: ignore[arg-type]
+        environment_provider=(  # type: ignore[arg-type]
+            environment if environment is not None else _Environment()
+        ),
     )
     monkeypatch.setattr(application, "_notify", lambda result: None)
     return application
@@ -412,6 +469,41 @@ def test_cycle_reports_notification_sent_for_a_new_recommendation(
 
     assert application._run_cycle() is CycleStatus.NOTIFICATION_SENT
     assert len(sent) == 1
+
+
+def test_the_environment_is_retrieved_once_for_a_whole_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The market is one market: fetching it per asset would fetch one fact once per
+    # asset, and the copies could disagree about the same morning.
+    environment = _Environment()
+    analyzer = _FailingAnalyzer(failing="none")
+    application = _application(
+        _Clock(is_open=True),
+        analyzer,
+        monkeypatch,
+        config=_config(tickers=("AAPL", "MSFT", "NVDA")),
+        environment=environment,
+    )
+    monkeypatch.setattr(application, "_notify", lambda result: None)
+
+    application._run_cycle()
+
+    assert len(analyzer.seen) == 3
+    assert environment.calls == 1
+
+
+def test_every_asset_in_a_pass_is_judged_in_the_same_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyzer = _PerTickerAnalyzer()
+    application = _application(_Clock(is_open=True), analyzer, monkeypatch)
+    monkeypatch.setattr(application, "_notify", lambda result: None)
+
+    application._run_cycle()
+
+    assert len(set(map(id, analyzer.environments))) == 1
+    assert all(entry is not None for entry in analyzer.environments)
 
 
 def test_cycle_reports_unchanged_without_notifying(

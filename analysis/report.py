@@ -100,6 +100,7 @@ def generate_report(result: AnalysisResult) -> str:
     lines.extend(_insight_lines(result))
     lines.extend(_opportunity_lines(result))
     lines.extend(_event_lines(result))
+    lines.extend(_environment_lines(result))
     lines.extend(_gap_lines(result))
     lines.append(
         "  Evidence references: " + ", ".join(recommendation.evidence_references)
@@ -150,6 +151,24 @@ def _event_lines(result: AnalysisResult) -> list[str]:
             f"{event.priority.value}, {confirmation}) {event.description} "
             f"[{event.source}]"
         )
+    return lines
+
+
+def _environment_lines(result: AnalysisResult) -> list[str]:
+    """Return every measurement of the environment the run was judged in.
+
+    The environment is the one part of a run that is not about the asset, so it is
+    written out once, in the document that keeps everything: what the market was
+    doing, and for each measurement either its value or the reason it is missing. A
+    reader asking why a sentence about rates was written can find the rate here.
+    """
+    environment = result.environment
+    if environment is None:
+        return []
+    lines = [f"  Environment ({environment.source}):"]
+    lines.extend(
+        f"    - {point.metric.value}: {point.reason}" for point in environment.points
+    )
     return lines
 
 

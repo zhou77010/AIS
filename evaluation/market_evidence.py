@@ -15,7 +15,13 @@ from contracts.market_data_provider import (
     VALUE_METADATA_KEY,
     MarketMetric,
 )
+from contracts.market_environment import EnvironmentMetric
 from evidence.evidence_collection import EvidenceCollection
+
+# A rule reads a measurement, and which kind of measurement it is does not change how
+# it is read. The environment's facts arrive through the same evidence stream and
+# carry the same metadata keys, so one lookup answers for both.
+ReadableMetric = MarketMetric | EnvironmentMetric
 
 
 @dataclass(frozen=True)
@@ -34,13 +40,13 @@ class MetricReading:
 
 
 def read_metric(
-    evidence: EvidenceCollection, metric: MarketMetric
+    evidence: EvidenceCollection, metric: ReadableMetric
 ) -> MetricReading | None:
     """Return the reading the evidence holds for one market metric.
 
     Args:
         evidence: Evidence collected for the asset.
-        metric: Metric to look up.
+        metric: Metric to look up, whether it belongs to the asset or to the market.
 
     Returns:
         The recorded reading, or None when the collection carries no market data

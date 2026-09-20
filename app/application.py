@@ -34,8 +34,10 @@ from communication.wecom_app import WeComAppNotifier
 from config.config import Config
 from config.logging_config import configure_logging, get_logger
 from config.watchlist import load_watch_universe, universe_from_tickers
+from contracts.market_environment import EnvironmentProvider, EnvironmentSnapshot
 from data.catalyst_events import build_catalyst_event_provider
 from data.market_data import build_market_data_provider
+from data.market_environment import build_environment_provider
 from models.asset import Asset
 from models.watch_universe import WatchUniverse
 from utils.constants import APP_NAME, APP_VERSION, CycleStatus, LoggerName
@@ -58,6 +60,7 @@ class Application:
         config: Config | None = None,
         market_clock: MarketClock | None = None,
         analyzer: AssetAnalyzer | None = None,
+        environment_provider: EnvironmentProvider | None = None,
     ) -> None:
         """Wire the runtime together.
 
@@ -67,10 +70,19 @@ class Application:
                 the United States market clock.
             analyzer: Analysis flow to run. Defaults to the live flow, which
                 retrieves market data over the network.
+            environment_provider: Source of the environment every asset in a pass is
+                judged in. Defaults to the live source. It is held here rather than by
+                the analyzer because the runtime is what knows where a pass begins and
+                ends, and the environment is retrieved once for a pass.
         """
         self._config = config if config is not None else Config.from_environment()
         self._universe, self._universe_loaded = _resolve_universe(self._config)
         self._market_clock = market_clock if market_clock is not None else MarketClock()
+        self._environment_provider = (
+            environment_provider
+            if environment_provider is not None
+            else build_environment_provider()
+        )
         self._analyzer = (
             analyzer
             if analyzer is not None
@@ -119,6 +131,23 @@ class Application:
             self._logger.info("shutdown requested")
         self._logger.info("%s stopped", APP_NAME)
 
+    def _environment(self) -> EnvironmentSnapshot | None:
+        """Return the environment this pass is judged in.
+
+        Retrieved once per pass and shared by every asset in it. The market is the
+        same market for all of them: fetching it per asset would fetch one fact once
+        per asset, and the copies could disagree with each other about the same
+        morning.
+
+        Returns:
+            The environment as the source reports it. A source that could not be
+            reached answers with a snapshot whose points have no values, which
+            degrades the Market judgement rather than stopping the run.
+        """
+        if self._environment_provider is None:
+            return None
+        return self._environment_provider.fetch()
+
     def _morning_brief(self) -> MorningBrief:
         """Return the daily brief, reading and writing what it has already done."""
         return MorningBrief(
@@ -157,10 +186,11 @@ class Application:
             What the brief did, and whether it reached anybody.
         """
         moment = datetime.now(MORNING_BRIEF_MOMENT.timezone)
+        environment = self._environment()
         results: list[AnalysisResult] = []
         without_data: list[str] = []
         for asset in self._universe.assets:
-            result = self._analyse(asset)
+            result = self._analyse(asset, environment)
             if result is None:
                 without_data.append(asset.ticker)
                 continue
@@ -210,6 +240,9 @@ class Application:
         Each asset is evaluated and decided on its own, and reports its own
         outcome. The status returned is the one outcome of the cycle as a whole.
 
+        The environment is retrieved once for the whole cycle, because every asset in
+        it is judged in the same market.
+
         Returns:
             The single status describing what this cycle did.
         """
@@ -218,12 +251,17 @@ class Application:
             self._logger.info("Skipped evaluation: %s", status.reason)
             return CycleStatus.MARKET_CLOSED
 
-        outcomes = [self._run_asset(asset) for asset in self._universe.assets]
+        environment = self._environment()
+        outcomes = [
+            self._run_asset(asset, environment) for asset in self._universe.assets
+        ]
         summary = _summarise(outcomes)
         self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
         return summary
 
-    def _run_asset(self, asset: Asset) -> CycleStatus:
+    def _run_asset(
+        self, asset: Asset, environment: EnvironmentSnapshot | None
+    ) -> CycleStatus:
         """Evaluate one asset and, when its conclusion moved, notify.
 
         The cycle reports change: it exists to tell a reader that something about an
@@ -233,12 +271,13 @@ class Application:
         Args:
             asset: Asset to evaluate, carrying the identity the watch universe gave
                 it.
+            environment: The environment this pass is judged in.
 
         Returns:
             The outcome of this asset within the cycle.
         """
         ticker = asset.ticker
-        result = self._analyse(asset)
+        result = self._analyse(asset, environment)
         if result is None:
             return CycleStatus.EVALUATION_FAILED
 
@@ -261,7 +300,9 @@ class Application:
         self._logger.info("Notification sent (%s)", fingerprint.describe())
         return CycleStatus.NOTIFICATION_SENT
 
-    def _analyse(self, asset: Asset) -> AnalysisResult | None:
+    def _analyse(
+        self, asset: Asset, environment: EnvironmentSnapshot | None
+    ) -> AnalysisResult | None:
         """Run one asset through the analysis flow and write its report to the log.
 
         The expanded report is rendered for every asset that is analysed, whether or
@@ -271,13 +312,15 @@ class Application:
 
         Args:
             asset: Asset to analyse.
+            environment: The environment this pass is judged in, or None when no
+                environment source was consulted.
 
         Returns:
             The analysis result, or None when the run failed. A failure is logged
             and reported; it is not raised, because one asset must not stop the rest.
         """
         try:
-            result = self._analyzer.analyze_result(asset)
+            result = self._analyzer.analyze_result(asset, environment=environment)
         except Exception as error:  # noqa: BLE001 - one asset must not stop the rest
             self._logger.exception("Evaluation failed for %s: %s", asset.ticker, error)
             return None

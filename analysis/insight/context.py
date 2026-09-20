@@ -19,9 +19,17 @@ from datetime import datetime
 
 from analysis.analysis_result import AnalysisResult
 from contracts.catalyst_event_provider import CATALYST_EVIDENCE_ID
-from contracts.market_data_provider import MARKET_EVIDENCE_ID, MarketMetric
-from evaluation.reading.bands import Band, band_for, scale_for, score_for
+from contracts.market_data_provider import MARKET_EVIDENCE_ID
+from contracts.market_environment import ENVIRONMENT_EVIDENCE_ID, EnvironmentMetric
+from evaluation.reading.bands import (
+    Band,
+    ReadableMetric,
+    band_for,
+    scale_for,
+    score_for,
+)
 from evaluation.reading.category import CategoryReading, read_category
+from models.asset_profile import AssetProfile
 from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.category_rating import CategoryRating
@@ -34,9 +42,15 @@ class InsightContext:
     Attributes:
         category: Category being interpreted.
         ticker: Symbol the evidence belongs to.
-        values: Every measurement that was retrieved, keyed by metric. A metric
-            that is absent was not retrieved, and a builder must behave as though
-            the clause it would have written does not exist.
+        profile: What kind of instrument the asset was declared to be. What kind of
+            thing an asset is decides which questions apply to it and which
+            environments bear on it, so a sentence needs it beside the readings.
+        values: Every measurement that was retrieved, keyed by metric. It holds the
+            asset's own measurements and the environment's, because a category's
+            question is answered by both and a builder should not have to know which
+            of the two it is asking about. A metric that is absent was not
+            retrieved, and a builder must behave as though the clause it would have
+            written does not exist.
         reading: What this category's own measurements read as.
         events: The forthcoming events, for the category that reads a calendar.
         moment: Moment the reading is taken against.
@@ -46,25 +60,26 @@ class InsightContext:
 
     category: Category
     ticker: str
-    values: Mapping[MarketMetric, float]
+    profile: AssetProfile
+    values: Mapping[ReadableMetric, float]
     reading: CategoryReading
     events: tuple[CatalystEvent, ...]
     moment: datetime
     rating: CategoryRating | None
 
-    def has(self, *metrics: MarketMetric) -> bool:
+    def has(self, *metrics: ReadableMetric) -> bool:
         """Return whether every one of these measurements was retrieved."""
         return all(metric in self.values for metric in metrics)
 
-    def has_any(self, *metrics: MarketMetric) -> bool:
+    def has_any(self, *metrics: ReadableMetric) -> bool:
         """Return whether any one of these measurements was retrieved."""
         return any(metric in self.values for metric in metrics)
 
-    def value(self, metric: MarketMetric) -> float | None:
+    def value(self, metric: ReadableMetric) -> float | None:
         """Return one measurement, or None when it was not retrieved."""
         return self.values.get(metric)
 
-    def band(self, metric: MarketMetric) -> Band | None:
+    def band(self, metric: ReadableMetric) -> Band | None:
         """Return the band a measurement reads in, or None when it was not read.
 
         A builder compares bands rather than raw numbers, so the thresholds stay in
@@ -73,17 +88,17 @@ class InsightContext:
         value = self.values.get(metric)
         return None if value is None else band_for(metric, value)
 
-    def word(self, metric: MarketMetric) -> str | None:
+    def word(self, metric: ReadableMetric) -> str | None:
         """Return how a measurement is described, or None when it was not read."""
         band = self.band(metric)
         return None if band is None else band.word
 
-    def score(self, metric: MarketMetric) -> int | None:
+    def score(self, metric: ReadableMetric) -> int | None:
         """Return how a measurement scores, or None when it is not scored."""
         value = self.values.get(metric)
         return None if value is None else score_for(metric, value)
 
-    def is_absent(self, metric: MarketMetric) -> bool:
+    def is_absent(self, metric: ReadableMetric) -> bool:
         """Return whether a negative reading means the quantity measured against
         is not there rather than that the reading is low.
 
@@ -97,7 +112,7 @@ class InsightContext:
             return False
         return value < 0
 
-    def is_at_least(self, metric: MarketMetric, score: int) -> bool:
+    def is_at_least(self, metric: ReadableMetric, score: int) -> bool:
         """Return whether a measurement reads at or above a score.
 
         The score is the position of a band, so asking this way keeps the
@@ -106,19 +121,48 @@ class InsightContext:
         value = self.score(metric)
         return value is not None and value >= score
 
-    def is_at_most(self, metric: MarketMetric, score: int) -> bool:
+    def is_at_most(self, metric: ReadableMetric, score: int) -> bool:
         """Return whether a measurement reads at or below a score."""
         value = self.score(metric)
         return value is not None and value <= score
 
-    def reference(self, *metrics: MarketMetric) -> tuple[str, ...]:
+    def moved(self, metric: ReadableMetric) -> bool:
+        """Return whether a measurement was read and has changed.
+
+        What counts as unchanged is the band the reading layer marks as flat, so a
+        sentence that says something moved and the reading beside it cannot disagree
+        about it. A measurement that was not read has not moved: a sentence must not
+        claim a change nobody measured.
+        """
+        band = self.band(metric)
+        return band is not None and not band.is_flat
+
+    def rose(self, metric: ReadableMetric) -> bool:
+        """Return whether a measurement moved, and moved upwards.
+
+        The band says whether it moved at all and the value says which way, so a
+        scale whose flat band is marked answers "did this change" without a second
+        threshold being invented for it.
+        """
+        value = self.values.get(metric)
+        return self.moved(metric) and value is not None and value > 0
+
+    def fell(self, metric: ReadableMetric) -> bool:
+        """Return whether a measurement moved, and moved downwards."""
+        value = self.values.get(metric)
+        return self.moved(metric) and value is not None and value < 0
+
+    def reference(self, *metrics: ReadableMetric) -> tuple[str, ...]:
         """Return the evidence identifiers behind these measurements.
 
         A builder calls this with exactly the measurements its sentence was read
-        from, so that the sentence carries the reason it can be said at all.
+        from, so that the sentence carries the reason it can be said at all. Which
+        item an identifier points at depends on whose measurement it is: the asset's
+        own evidence carries its ticker, and the environment's carries none, because
+        the fact belongs to the market rather than to this asset.
         """
         return tuple(
-            MARKET_EVIDENCE_ID.format(ticker=self.ticker, metric=metric.value)
+            _evidence_id(self.ticker, metric)
             for metric in metrics
             if metric in self.values
         )
@@ -128,6 +172,13 @@ class InsightContext:
         return CATALYST_EVIDENCE_ID.format(
             ticker=self.ticker, kind=event.kind.value, date=event.occurs_on
         )
+
+
+def _evidence_id(ticker: str, metric: ReadableMetric) -> str:
+    """Return the evidence identifier of one measurement."""
+    if isinstance(metric, EnvironmentMetric):
+        return ENVIRONMENT_EVIDENCE_ID.format(metric=metric.value)
+    return MARKET_EVIDENCE_ID.format(ticker=ticker, metric=metric.value)
 
 
 def context_for(result: AnalysisResult, category: Category) -> InsightContext:
@@ -140,21 +191,39 @@ def context_for(result: AnalysisResult, category: Category) -> InsightContext:
     thing beside a growing business and another beside a shrinking one. Every
     sentence still names the measurements it was read from, so the wider reach costs
     no traceability.
+
+    The environment's measurements are offered the same way, because they are part
+    of the evidence for one category and nothing else: what the market is doing is
+    read beside what the asset is doing, and the sentence that comes out is about
+    the asset.
     """
     snapshot = result.market_data
+    environment = result.environment
     return InsightContext(
         category=category,
         ticker=result.asset.ticker,
-        values=(
-            {}
-            if snapshot is None
-            else {
-                point.metric: point.value
-                for point in snapshot.available_points
-                if point.value is not None
-            }
-        ),
-        reading=read_category(snapshot, category),
+        profile=result.asset.profile,
+        values={
+            **(
+                {}
+                if snapshot is None
+                else {
+                    point.metric: point.value
+                    for point in snapshot.available_points
+                    if point.value is not None
+                }
+            ),
+            **(
+                {}
+                if environment is None
+                else {
+                    point.metric: point.value
+                    for point in environment.available_points
+                    if point.value is not None
+                }
+            ),
+        },
+        reading=read_category(snapshot, category, environment=environment),
         events=result.events,
         moment=_moment_for(result),
         rating=result.rating_for(category),

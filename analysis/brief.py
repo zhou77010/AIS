@@ -77,9 +77,11 @@ from analysis.analysis_result import AnalysisResult
 from analysis.category_grade import catalyst_days
 from analysis.insight.catalyst_insight import focus_events
 from analysis.insight.context import context_for
+from analysis.insight.market_insight import environment_line
 from analysis.projection import is_a_change
 from models.catalyst_event import CatalystEvent, CatalystEventKind, CatalystEventScope
 from models.category import Category
+from models.insight import Insight
 from models.opportunity_assessment import OpportunityCondition
 from models.watch_universe import WatchSet, WatchUniverse
 
@@ -215,6 +217,12 @@ class DailyBrief:
         without_data: Symbols that could not be analysed at all. A run that failed
             is named rather than absent: a reader who is not told cannot tell a
             quiet asset from one AIS never managed to look at.
+        environment: What the market is doing, as one sentence, or None when no
+            environment measurement was retrieved. It is stored as an
+            interpretation rather than as the measurements, because composing a
+            sentence is analysis and a renderer only ever shows one. Every asset in
+            the brief was judged in this same environment, so it belongs to the
+            brief rather than to an entry.
     """
 
     moment: datetime
@@ -222,6 +230,7 @@ class DailyBrief:
     analysed: tuple[AnalysisResult, ...] = ()
     external_events: tuple[CatalystEvent, ...] = ()
     without_data: tuple[str, ...] = ()
+    environment: Insight | None = None
 
     @property
     def day(self) -> date:
@@ -306,7 +315,23 @@ def build_daily_brief(
         analysed=tuple(results),
         external_events=_external_events(results, external_limit),
         without_data=tuple(without_data),
+        environment=_environment(results),
     )
+
+
+def _environment(results: Sequence[AnalysisResult]) -> Insight | None:
+    """Return what the market is doing, as one sentence, or None.
+
+    Every asset in a pass is judged in the same environment, so the brief states it
+    once for all of them rather than once per entry. It is taken from the first result
+    that carries one: the results share the environment, and a result analysed without
+    one has nothing to say about it.
+    """
+    for result in results:
+        line = environment_line(context_for(result, Category.MARKET))
+        if line is not None:
+            return Insight(category=Category.MARKET, lines=(line,))
+    return None
 
 
 def _reason_for(result: AnalysisResult, *, held: bool) -> BriefReason:
