@@ -535,6 +535,141 @@ def test_two_assets_nothing_distinguishes_keep_the_universe_order() -> None:
 
 
 # --------------------------------------------------------------------------
+# The same conclusion is said once
+# --------------------------------------------------------------------------
+
+
+def _alike(*tickers: str, grade: int = 1) -> list[AnalysisResult]:
+    """Return assets that reached the same conclusion, each with an event ahead."""
+    return [_with_grade(_rich(ticker), grade) for ticker in tickers]
+
+
+def test_a_conclusion_several_assets_share_is_written_once() -> None:
+    # Three assets reading alike are one thing to say. Writing it three times costs
+    # the reader the lines that could have differed, and tells them nothing the first
+    # one did not.
+    lines = _render(_alike("AAPL", "CGDV", "APP"))
+
+    assert sum("目前不是优先配置的时点" in line for line in lines) == 1, lines
+    assert any(line.startswith("共同结论") for line in lines), lines
+
+
+def test_the_assets_a_shared_conclusion_covers_are_named_under_it() -> None:
+    report = render_daily_brief(_brief(_alike("AAPL", "CGDV", "APP")))
+    shared = report.index("共同结论")
+
+    assert report.index("AAPL") > shared
+    assert report.index("AAPL") < report.index("CGDV") < report.index("APP")
+
+
+def test_an_asset_with_its_own_conclusion_keeps_its_own_line() -> None:
+    results = [_with_grade(_rich("HSBC"), 4), *_alike("AAPL", "CGDV")]
+
+    lines = _render(results)
+    own = next(index for index, line in enumerate(lines) if line.startswith("HSBC"))
+
+    assert "值得优先配置" in lines[own + 1], lines
+    assert sum("目前不是优先配置的时点" in line for line in lines) == 1, lines
+
+
+def test_assets_that_reached_different_conclusions_are_not_grouped() -> None:
+    lines = _render([_with_grade(_rich("AAPL"), 4), _with_grade(_rich("CGDV"), 1)])
+
+    assert not any(line.startswith("共同结论") for line in lines), lines
+
+
+def test_a_shared_conclusion_keeps_each_assets_own_standing_and_reason() -> None:
+    # What is shared is the conclusion. What is not shared is where each asset
+    # stands, and why it is in the brief at all.
+    warned = _with_grade(_with_risk(_rich("AAPL"), satisfied=False), 1)
+    calm = _with_grade(_with_risk(_rich("CGDV"), satisfied=True), 1)
+    moved = _with_grade(_rich("APP", ratings=(_moved_rating(),)), 1)
+
+    lines = _render([warned, calm, moved])
+
+    assert sum("目前不是优先配置的时点" in line for line in lines) == 1, lines
+    assert any(line.startswith("AAPL") and "风险" in line for line in lines), lines
+    assert any(line.startswith("APP") and "变化" in line for line in lines), lines
+    assert any(line.startswith("CGDV") and "·" not in line for line in lines), lines
+
+
+def test_each_asset_keeps_its_own_event_under_a_shared_conclusion() -> None:
+    results = [
+        _with_grade(
+            _rich(
+                "AAPL", events=(_event(CatalystEventKind.EARNINGS, 5, symbol="AAPL"),)
+            ),
+            1,
+        ),
+        _with_grade(
+            _rich(
+                "CGDV",
+                events=(_event(CatalystEventKind.INVESTOR_DAY, 9, symbol="CGDV"),),
+            ),
+            1,
+        ),
+    ]
+
+    lines = _render(results)
+
+    assert sum(line.strip().startswith("关注") for line in lines) == 2, lines
+    assert any("5 天后" in line for line in lines), lines
+    assert any("9 天后" in line for line in lines), lines
+
+
+def test_a_shared_conclusion_that_does_not_fit_is_broken_not_overflowed() -> None:
+    # The label costs columns, so the sentence has to be broken earlier than it would
+    # be on its own. Nothing here reads aloud as one sentence, so an overflow would
+    # only be visible as a line running off the screen.
+    lines = _render([_thin("AAPL"), _thin("CGDV")])
+    shared = next(line for line in lines if line.startswith("共同结论"))
+
+    assert "尚无可用的类别判断" in shared, lines
+    for line in lines:
+        assert _width(line) <= LINE_WIDTH, line
+
+
+def test_the_brief_groups_the_assets_that_share_a_conclusion() -> None:
+    # The groups come in the order their assets reached the brief, so the asset that
+    # stands best leads whether or not it shares its conclusion with anybody.
+    brief = _brief(
+        [
+            _with_grade(_rich("AAPL"), 1),
+            _with_grade(_rich("CGDV"), 1),
+            _with_grade(_rich("APP"), 4),
+        ]
+    )
+
+    assert [[entry.ticker for entry in group.entries] for group in brief.groups] == [
+        ["APP"],
+        ["AAPL", "CGDV"],
+    ]
+    assert brief.groups[0].is_shared is False
+    assert brief.groups[1].is_shared is True
+    assert brief.groups[1].concluded_grade == 1
+
+
+def test_a_group_sits_where_its_most_important_member_sat() -> None:
+    # Two assets sharing a conclusion are written together, at the place the more
+    # important of them reached. An asset whose own standing is lower can therefore
+    # appear above one that outranks it: saying the conclusion once is worth more than
+    # a one-place gap, and every heading still states its own standing.
+    moved = _with_grade(_rich("AAPL", ratings=(_moved_rating(),)), 1)
+    best = _with_grade(_rich("HSBC"), 4)
+    alike = _with_grade(_rich("CGDV"), 1)
+
+    brief = _brief([moved, best, alike])
+    report = render_daily_brief(brief)
+
+    assert [entry.ticker for entry in brief.entries] == ["AAPL", "HSBC", "CGDV"]
+    assert [[entry.ticker for entry in group.entries] for group in brief.groups] == [
+        ["AAPL", "CGDV"],
+        ["HSBC"],
+    ]
+    assert report.index("AAPL") < report.index("CGDV") < report.index("HSBC")
+
+
+# --------------------------------------------------------------------------
 # What bears on everything
 # --------------------------------------------------------------------------
 

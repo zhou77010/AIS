@@ -21,7 +21,7 @@ from analysis.brief import DailyBrief, build_daily_brief
 from analysis.brief_report import render_daily_brief
 from analysis.mobile_report import render_mobile_report
 from analysis.report import generate_report
-from app.morning_brief import MorningBrief
+from app.morning_brief import BriefOutcome, MorningBrief
 from app.rating_tracker import RatingTracker
 from app.runtime_state import RuntimeState
 from app.scheduler import IntervalSchedule, Scheduler
@@ -127,7 +127,7 @@ class Application:
             self._run_brief,
         )
 
-    def _run_brief(self) -> CycleStatus:
+    def _run_brief(self) -> BriefOutcome:
         """Produce and deliver one brief over the whole watch universe.
 
         No market clock and no change detector is consulted. The hour was chosen by
@@ -147,8 +147,14 @@ class Application:
         results at the moment it is sent, so there is no earlier result delivered
         late.
 
+        **Delivery is reported rather than inferred from the status.** A run can fail
+        for two reasons that look alike from the outside and are not alike at all: an
+        asset that could not be analysed, and a message that reached nobody. Only the
+        second leaves the day owed, and telling them apart is why the outcome carries
+        both.
+
         Returns:
-            The single status describing what the brief did.
+            What the brief did, and whether it reached anybody.
         """
         moment = datetime.now(MORNING_BRIEF_MOMENT.timezone)
         results: list[AnalysisResult] = []
@@ -169,7 +175,7 @@ class Application:
             self._logger.error(
                 "no asset could be analysed, so no brief was produced or sent"
             )
-            return CycleStatus.EVALUATION_FAILED
+            return BriefOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
 
         brief = build_daily_brief(
             results,
@@ -182,17 +188,21 @@ class Application:
         for line in message.splitlines():
             self._logger.info("%s", line)
 
+        delivered = True
         try:
             self._deliver(_brief_title(brief), message)
         except (
             Exception
         ) as error:  # noqa: BLE001 - the brief must not crash the runtime
+            delivered = False
             self._logger.error("the brief was not delivered: %s", error)
-            return CycleStatus.EVALUATION_FAILED
 
-        if without_data:
-            return CycleStatus.EVALUATION_FAILED
-        return CycleStatus.NOTIFICATION_SENT
+        status = (
+            CycleStatus.NOTIFICATION_SENT
+            if delivered and not without_data
+            else CycleStatus.EVALUATION_FAILED
+        )
+        return BriefOutcome(status=status, delivered=delivered)
 
     def _run_cycle(self) -> CycleStatus:
         """Run one evaluation cycle over every watched asset.

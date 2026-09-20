@@ -35,7 +35,12 @@ from models.insight import InsightLine
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
-_MOMENT = datetime(2026, 9, 16, 3, 20, 0, tzinfo=UTC)
+# The moment the fixtures are dated from, and the moment the calendar fixtures fall
+# relative to. It follows the real clock rather than a constant, because a result
+# that carries no market data is read against the current moment: dated from a fixed
+# day, these fixtures passed on the day they were written and started failing once
+# that day left the catalyst window.
+_MOMENT = datetime.now(UTC)
 
 
 def _asset() -> Asset:

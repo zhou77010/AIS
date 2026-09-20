@@ -61,28 +61,36 @@ def is_wide(character: str) -> bool:
     return unicodedata.east_asian_width(character) in {"W", "F"}
 
 
-def wrap(text: str) -> list[str]:
+def wrap(text: str, *, first_prefix: str = INDENT) -> list[str]:
     """Break a sentence across lines, for text that has no items to keep whole.
 
-    A sentence is not a list: it can be broken wherever it runs out of room,
-    unlike a measurement or a name, which has to stay on one line to be read at
-    all. Two columns are held back so that a closing mark, which may not begin a
+    A sentence is not a list: it can be broken wherever it runs out of room, unlike
+    a measurement or a name, which has to stay on one line to be read at all. Two
+    columns are held back on every line so that a closing mark, which may not begin a
     line, cannot push a line past the width.
+
+    Args:
+        text: Sentence to break.
+        first_prefix: Columns the sentence begins with. A sentence introduced by a
+            label begins with the label, and its first line then holds fewer columns
+            than the rest — which is what keeps a labelled sentence inside the width
+            rather than overflowing the moment the label is added to it.
     """
-    budget = PROJECTION_SENTENCE_WIDTH
     lines: list[str] = []
     current = ""
     for character in text:
+        lead = first_prefix if not lines else INDENT
         if (
             current
             and character not in NEVER_STARTS_A_LINE
-            and display_width(current) + display_width(character) > budget
+            and display_width(lead) + display_width(current) + display_width(character)
+            > LINE_WIDTH - WRAP_RESERVE
         ):
-            lines.append(INDENT + current)
+            lines.append(lead + current)
             current = ""
         current += character
     if current:
-        lines.append(INDENT + current)
+        lines.append((first_prefix if not lines else INDENT) + current)
     return lines
 
 

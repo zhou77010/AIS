@@ -1,9 +1,10 @@
 """Tests for the daily morning brief and the runtime that owes it.
 
 The brief is the one piece of work AIS does at a stated hour rather than on an
-interval. These tests describe the five things it has to be: sent once a day, not
-gated by the market, not gated by whether anything changed, computed when it is
-sent, and not repeated after a restart.
+interval. These tests describe the six things it has to be: sent once a day, not
+gated by the market, not gated by whether anything changed, computed when it is sent,
+not repeated after a restart, and — when it reaches nobody — still owed rather than
+recorded as done.
 
 The clock is supplied to the scheduler and to the moment in every test that cares
 about an hour, because a test that waits for 09:00 is a test nobody runs.
@@ -19,8 +20,13 @@ import pytest
 
 from analysis.analysis_result import AnalysisResult
 from app.application import MORNING_BRIEF_MOMENT, Application
-from app.morning_brief import MorningBrief
-from app.runtime_state import RuntimeState
+from app.morning_brief import (
+    BRIEF_RETRY_INTERVAL,
+    MAX_BRIEF_ATTEMPTS,
+    BriefOutcome,
+    MorningBrief,
+)
+from app.runtime_state import BriefDelivery, BriefRecord, RuntimeState
 from app.scheduler import IntervalSchedule, Scheduler
 from config.config import Config
 from contracts.market_data_provider import MarketDataSnapshot
@@ -104,23 +110,88 @@ def test_an_hour_already_behind_is_owed_now_rather_than_skipped() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_nothing_has_been_sent_when_nothing_is_written(tmp_path: Path) -> None:
-    assert RuntimeState(path=tmp_path / "runtime.json").brief_sent_on() is None
+def test_nothing_is_recorded_when_nothing_is_written(tmp_path: Path) -> None:
+    assert RuntimeState(path=tmp_path / "runtime.json").brief_record() is None
 
 
-def test_the_day_is_remembered_across_a_restart(tmp_path: Path) -> None:
+def test_the_state_of_the_day_survives_a_restart(tmp_path: Path) -> None:
     path = tmp_path / "runtime.json"
-    RuntimeState(path=path).record_brief_sent(date(2026, 9, 18))
+    record = BriefRecord(
+        day=date(2026, 9, 18),
+        delivery=BriefDelivery.OWED,
+        attempts=2,
+        attempted_at=_NINE_BEIJING_UTC,
+    )
+    RuntimeState(path=path).record_brief(record)
 
     # A different object reading the same file is what a restart looks like.
-    assert RuntimeState(path=path).brief_sent_on() == date(2026, 9, 18)
+    assert RuntimeState(path=path).brief_record() == record
+
+
+def test_the_state_file_holds_the_day_the_state_and_the_attempts(
+    tmp_path: Path,
+) -> None:
+    # Not a flag: a day that reached nobody is owed, and "a brief was sent at some
+    # point" cannot say that.
+    path = tmp_path / "runtime.json"
+    RuntimeState(path=path).record_brief(
+        BriefRecord(
+            day=date(2026, 9, 18),
+            delivery=BriefDelivery.SENT,
+            attempts=1,
+            attempted_at=_NINE_BEIJING_UTC,
+        )
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "morning_brief": {
+            "day": "2026-09-18",
+            "delivery": "sent",
+            "attempts": 1,
+            "attempted_at": _NINE_BEIJING_UTC.isoformat(),
+        }
+    }
+
+
+def test_a_state_file_from_the_older_format_is_still_read(tmp_path: Path) -> None:
+    # The day the older format recorded is a fact the runtime wrote down. Forgetting
+    # it would make a day that was already reported look owed, and the reader would
+    # get a second copy the moment the process restarted.
+    path = tmp_path / "runtime.json"
+    path.write_text('{"morning_brief_sent_on": "2026-09-18"}', encoding="utf-8")
+
+    record = RuntimeState(path=path).brief_record()
+
+    assert record is not None
+    assert record.day == date(2026, 9, 18)
+    assert record.delivery is BriefDelivery.SENT
+
+
+def test_a_record_that_cannot_be_read_is_treated_as_no_record(tmp_path: Path) -> None:
+    # Half a record would be a claim about a day that the runtime did not make.
+    path = tmp_path / "runtime.json"
+    path.write_text(
+        '{"morning_brief": {"day": "not a day", "delivery": "sent"}}', encoding="utf-8"
+    )
+
+    assert RuntimeState(path=path).brief_record() is None
+
+
+def test_an_unknown_state_is_treated_as_no_record(tmp_path: Path) -> None:
+    path = tmp_path / "runtime.json"
+    path.write_text(
+        '{"morning_brief": {"day": "2026-09-18", "delivery": "probably"}}',
+        encoding="utf-8",
+    )
+
+    assert RuntimeState(path=path).brief_record() is None
 
 
 def test_an_unreadable_state_file_is_treated_as_an_empty_one(tmp_path: Path) -> None:
     path = tmp_path / "runtime.json"
     path.write_text("{not json", encoding="utf-8")
 
-    assert RuntimeState(path=path).brief_sent_on() is None
+    assert RuntimeState(path=path).brief_record() is None
 
 
 def test_a_state_file_that_cannot_be_written_does_not_raise(tmp_path: Path) -> None:
@@ -129,16 +200,9 @@ def test_a_state_file_that_cannot_be_written_does_not_raise(tmp_path: Path) -> N
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory", encoding="utf-8")
 
-    RuntimeState(path=blocker / "runtime.json").record_brief_sent(date(2026, 9, 18))
-
-
-def test_the_state_file_holds_the_day_and_nothing_else(tmp_path: Path) -> None:
-    path = tmp_path / "runtime.json"
-    RuntimeState(path=path).record_brief_sent(date(2026, 9, 18))
-
-    assert json.loads(path.read_text(encoding="utf-8")) == {
-        "morning_brief_sent_on": "2026-09-18"
-    }
+    RuntimeState(path=blocker / "runtime.json").record_brief(
+        BriefRecord(day=date(2026, 9, 18))
+    )
 
 
 # --------------------------------------------------------------------------
@@ -146,27 +210,35 @@ def test_the_state_file_holds_the_day_and_nothing_else(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------
 
 
-def _counting_work(status: CycleStatus = CycleStatus.NOTIFICATION_SENT):
+def _delivered(status: CycleStatus = CycleStatus.NOTIFICATION_SENT) -> BriefOutcome:
+    """Return an outcome where the message reached at least one reader."""
+    return BriefOutcome(status=status, delivered=True)
+
+
+def _undelivered() -> BriefOutcome:
+    """Return an outcome where the message reached nobody."""
+    return BriefOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
+
+
+def _counting_work(delivered: bool = True):
     calls: list[int] = []
 
-    def work() -> CycleStatus:
+    def work() -> BriefOutcome:
         calls.append(1)
-        return status
+        return _delivered() if delivered else _undelivered()
 
     return work, calls
 
 
 def test_the_brief_is_owed_at_the_hour_it_is_stated(tmp_path: Path) -> None:
-    brief = _brief(
-        lambda: CycleStatus.NOTIFICATION_SENT, RuntimeState(tmp_path / "s.json")
-    )
+    brief = _brief(lambda: _delivered(), RuntimeState(tmp_path / "s.json"))
 
     assert brief.next_due(_BEFORE) == _NINE_BEIJING_UTC
 
 
-def test_the_brief_is_not_owed_again_once_today_is_done(tmp_path: Path) -> None:
+def test_the_brief_is_not_owed_again_once_today_is_delivered(tmp_path: Path) -> None:
     state = RuntimeState(path=tmp_path / "s.json")
-    brief = _brief(lambda: CycleStatus.NOTIFICATION_SENT, state)
+    brief = _brief(lambda: _delivered(), state)
     brief.work()
 
     assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC + timedelta(days=1)
@@ -190,44 +262,163 @@ def test_a_restarted_brief_does_not_send_a_second_copy(tmp_path: Path) -> None:
 def test_a_brief_that_was_missed_is_still_owed(tmp_path: Path) -> None:
     # Yesterday's brief says nothing about today's.
     path = tmp_path / "s.json"
-    RuntimeState(path=path).record_brief_sent(date(2026, 9, 17))
+    RuntimeState(path=path).record_brief(
+        BriefRecord(day=date(2026, 9, 17), delivery=BriefDelivery.SENT, attempts=1)
+    )
 
-    brief = _brief(lambda: CycleStatus.NOTIFICATION_SENT, RuntimeState(path=path))
+    brief = _brief(lambda: _delivered(), RuntimeState(path=path))
 
     assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC
 
 
-def test_the_brief_records_the_day_it_ran(tmp_path: Path) -> None:
+def test_a_delivered_brief_settles_the_day(tmp_path: Path) -> None:
     state = RuntimeState(path=tmp_path / "s.json")
 
-    _brief(lambda: CycleStatus.NOTIFICATION_SENT, state).work()
+    _brief(lambda: _delivered(), state).work()
 
-    assert state.brief_sent_on() == date(2026, 9, 18)
+    record = state.brief_record()
+    assert record is not None
+    assert record.day == date(2026, 9, 18)
+    assert record.delivery is BriefDelivery.SENT
+    assert record.attempts == 1
 
 
-def test_a_failed_brief_is_not_retried_all_day(tmp_path: Path) -> None:
-    # A failure is reported as a failure. Retrying would send a second copy to
-    # whoever the first attempt reached, and would repeat the whole evaluation on
-    # every wake until the failure stopped.
+def test_a_partial_failure_still_counts_as_delivered(tmp_path: Path) -> None:
+    # An asset that could not be analysed is a run that failed; a message that one of
+    # several channels carried is a message that arrived. Only the second is about
+    # delivery, and resending on the first would send a second copy to whoever the
+    # first attempt reached.
     state = RuntimeState(path=tmp_path / "s.json")
-    brief = _brief(lambda: CycleStatus.EVALUATION_FAILED, state)
 
-    assert brief.work() is CycleStatus.EVALUATION_FAILED
-    assert state.brief_sent_on() == date(2026, 9, 18)
+    _brief(lambda: _delivered(CycleStatus.EVALUATION_FAILED), state).work()
+
+    record = state.brief_record()
+    assert record is not None
+    assert record.delivery is BriefDelivery.SENT
 
 
-def test_a_state_file_that_cannot_be_written_does_not_turn_the_brief_into_a_loop(
+# --------------------------------------------------------------------------
+# A brief that reached nobody is still owed
+# --------------------------------------------------------------------------
+
+
+def test_a_brief_that_reached_nobody_is_not_recorded_as_sent(tmp_path: Path) -> None:
+    state = RuntimeState(path=tmp_path / "s.json")
+
+    status = _brief(lambda: _undelivered(), state).work()
+
+    record = state.brief_record()
+    assert status is CycleStatus.EVALUATION_FAILED
+    assert record is not None
+    assert record.delivery is BriefDelivery.OWED
+    assert record.attempts == 1
+
+
+def test_a_brief_that_reached_nobody_is_not_tried_again_immediately(
     tmp_path: Path,
 ) -> None:
-    # The remembered day is what keeps a broken state file from making the brief
-    # permanently due.
-    blocker = tmp_path / "blocker"
-    blocker.write_text("not a directory", encoding="utf-8")
-    brief = _brief(
-        lambda: CycleStatus.NOTIFICATION_SENT, RuntimeState(path=blocker / "s.json")
+    # The hour it is owed at is already behind, so without the spacing a failed brief
+    # would be due the moment it failed — a loop that costs a full analysis each time.
+    state = RuntimeState(path=tmp_path / "s.json")
+    brief = _brief(lambda: _undelivered(), state)
+    brief.work()
+
+    assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC + BRIEF_RETRY_INTERVAL
+
+
+def test_a_brief_that_reached_nobody_is_retried_after_the_interval(
+    tmp_path: Path,
+) -> None:
+    state = RuntimeState(path=tmp_path / "s.json")
+    brief = _brief(lambda: _undelivered(), state)
+    brief.work()
+
+    assert brief.next_due(_NINE_BEIJING_UTC + BRIEF_RETRY_INTERVAL) <= (
+        _NINE_BEIJING_UTC + BRIEF_RETRY_INTERVAL
     )
 
+
+def test_a_brief_is_attempted_at_most_the_stated_number_of_times(
+    tmp_path: Path,
+) -> None:
+    # Capped, because a report the reader opened the morning for stops being that
+    # report if it arrives at noon, and because an outage that does not end must not
+    # keep the runtime busy until midnight.
+    state = RuntimeState(path=tmp_path / "s.json")
+    brief = _brief(lambda: _undelivered(), state)
+
+    for _ in range(MAX_BRIEF_ATTEMPTS):
+        brief.work()
+
+    record = state.brief_record()
+    assert record is not None
+    assert record.attempts == MAX_BRIEF_ATTEMPTS
+    assert record.delivery is BriefDelivery.ABANDONED
+
+
+def test_a_brief_that_ran_out_of_attempts_is_not_tried_again_that_day(
+    tmp_path: Path,
+) -> None:
+    state = RuntimeState(path=tmp_path / "s.json")
+    brief = _brief(lambda: _undelivered(), state)
+    for _ in range(MAX_BRIEF_ATTEMPTS):
+        brief.work()
+
+    assert brief.next_due(_NINE_BEIJING_UTC + timedelta(hours=6)) == (
+        _NINE_BEIJING_UTC + timedelta(days=1)
+    )
+
+
+def test_a_delivery_after_a_failure_settles_the_day(tmp_path: Path) -> None:
+    # An outage that ends is the case the retry exists for.
+    state = RuntimeState(path=tmp_path / "s.json")
+    outcomes = [_undelivered(), _delivered()]
+    brief = _brief(lambda: outcomes.pop(0), state)
+
     brief.work()
+    brief.work()
+
+    record = state.brief_record()
+    assert record is not None
+    assert record.delivery is BriefDelivery.SENT
+    assert record.attempts == 2
+    assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC + timedelta(days=1)
+
+
+def test_the_attempts_survive_a_restart(tmp_path: Path) -> None:
+    # A process that restarts after a failed brief must not start the count again,
+    # or a persistent outage would be retried for ever by a process that keeps
+    # coming back.
+    path = tmp_path / "s.json"
+    RuntimeState(path=path).record_brief(
+        BriefRecord(
+            day=date(2026, 9, 18),
+            delivery=BriefDelivery.OWED,
+            attempts=MAX_BRIEF_ATTEMPTS,
+            attempted_at=_NINE_BEIJING_UTC,
+        )
+    )
+    work, calls = _counting_work(delivered=False)
+
+    restarted = _brief(work, RuntimeState(path=path))
+    restarted.work()
+
+    record = RuntimeState(path=path).brief_record()
+    assert record is not None
+    assert record.delivery is BriefDelivery.ABANDONED
+    assert calls == [1]
+
+
+def test_a_state_file_that_cannot_be_written_still_caps_the_attempts(
+    tmp_path: Path,
+) -> None:
+    # The process keeps its own copy of what it has done, so a broken state file
+    # cannot make the brief permanently due.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+    brief = _brief(lambda: _undelivered(), RuntimeState(path=blocker / "s.json"))
+    for _ in range(MAX_BRIEF_ATTEMPTS):
+        brief.work()
 
     assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC + timedelta(days=1)
 
@@ -429,9 +620,10 @@ def test_the_brief_is_one_message_however_many_assets_are_watched(
     application = _application(tmp_path, analyzer)
     sent = _deliveries(monkeypatch, application)
 
-    status = application._run_brief()
+    outcome = application._run_brief()
 
-    assert status is CycleStatus.NOTIFICATION_SENT
+    assert outcome.status is CycleStatus.NOTIFICATION_SENT
+    assert outcome.delivered is True
     assert len(sent) == 1
     title, message = sent[0]
     assert title.startswith("AIS 晨报")
@@ -448,9 +640,10 @@ def test_the_brief_is_produced_while_the_market_is_closed(
     application = _application(tmp_path, analyzer)
     sent = _deliveries(monkeypatch, application)
 
-    status = application._run_brief()
+    outcome = application._run_brief()
 
-    assert status is CycleStatus.NOTIFICATION_SENT
+    assert outcome.status is CycleStatus.NOTIFICATION_SENT
+    assert outcome.delivered is True
     assert len(sent) == 1
 
 
@@ -498,7 +691,8 @@ def test_the_cycle_still_sends_one_message_per_changed_asset(
     second = application._run_cycle()
     third = application._run_cycle()
 
-    assert first is CycleStatus.NOTIFICATION_SENT
+    assert first.status is CycleStatus.NOTIFICATION_SENT
+    assert first.delivered is True
     assert second is CycleStatus.RECOMMENDATION_UNCHANGED
     assert third is CycleStatus.RECOMMENDATION_UNCHANGED
     assert len(sent) == 1
@@ -542,9 +736,10 @@ def test_a_brief_with_nothing_analysed_is_not_sent(
     application = _application(tmp_path, analyzer)
     sent = _deliveries(monkeypatch, application)
 
-    status = application._run_brief()
+    outcome = application._run_brief()
 
-    assert status is CycleStatus.EVALUATION_FAILED
+    assert outcome.status is CycleStatus.EVALUATION_FAILED
+    assert outcome.delivered is False
     assert sent == []
 
 
@@ -557,20 +752,23 @@ def test_an_asset_that_could_not_be_analysed_does_not_stop_the_brief(
     application = _application(tmp_path, analyzer)
     sent = _deliveries(monkeypatch, application)
 
-    status = application._run_brief()
+    outcome = application._run_brief()
 
-    assert status is CycleStatus.EVALUATION_FAILED
+    # An asset that could not be analysed fails the run and does not fail the
+    # delivery: the message went out, so nobody is owed another copy of it.
+    assert outcome.status is CycleStatus.EVALUATION_FAILED
+    assert outcome.delivered is True
     assert len(sent) == 1
     assert "未分析  RKLB" in sent[0][1]
     assert "分析 1 个标的" in sent[0][1]
 
 
-def test_a_brief_that_could_not_be_delivered_is_reported_rather_than_retried(
+def test_a_brief_that_reached_nobody_is_reported_as_not_delivered(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     # The failure that actually happened three mornings running: the machine had no
-    # network, so the send failed. It is reported as a failure and the runtime keeps
-    # running; what is not done is sending the whole brief again on every wake.
+    # network, so the send failed. What the runtime is told is not "the run failed"
+    # but "nobody was told", which is what decides whether the day is still owed.
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer)
 
@@ -579,8 +777,12 @@ def test_a_brief_that_could_not_be_delivered_is_reported_rather_than_retried(
 
     monkeypatch.setattr(application, "_deliver", refuse)
 
-    assert application._run_brief() is CycleStatus.EVALUATION_FAILED
-    assert application._run_brief() is CycleStatus.EVALUATION_FAILED
+    first = application._run_brief()
+    second = application._run_brief()
+
+    assert first.status is CycleStatus.EVALUATION_FAILED
+    assert first.delivered is False
+    assert second.delivered is False
 
 
 def test_the_expanded_report_of_every_asset_is_still_produced(

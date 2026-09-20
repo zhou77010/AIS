@@ -73,6 +73,7 @@ _TIMEZONE_NOTE = "北京时间"
 _TITLE = "AIS 晨报"
 _EXTERNAL_LABEL = "外部事件  "
 _NO_EXTERNAL_EVENT = "外部事件  暂无"
+_SHARED_LABEL = "共同结论  "
 _CATALYST_LABEL = "关注  "
 _WITHOUT_DATA_LABEL = "无实时数据  "
 _DEGRADED = "部分标的无实时数据"
@@ -96,7 +97,7 @@ def render_daily_brief(brief: DailyBrief) -> str:
     """
     parts = [
         [_header(brief), _coverage(brief), *_external_lines(brief)],
-        [line for entry in brief.entries for line in _entry_lines(entry, brief)],
+        _body(brief),
         _tail(brief),
     ]
     return "\n".join(_joined(parts))
@@ -148,16 +149,39 @@ def _external_lines(brief: DailyBrief) -> list[str]:
     )
 
 
-def _entry_lines(entry: BriefEntry, brief: DailyBrief) -> list[str]:
+def _body(brief: DailyBrief) -> list[str]:
+    """Return the assets the brief writes out, with a shared conclusion said once.
+
+    Assets that reached the same conclusion are written under one statement of it. A
+    brief for a universe that reads alike would otherwise spend its width saying the
+    same sentence three times, which costs the reader the lines that could have
+    differed and tells them nothing the first one did not.
+    """
+    lines: list[str] = []
+    for group in brief.groups:
+        conclusion = _judgement(group.entries[0].result)
+        shared = group.is_shared and conclusion is not None
+        if shared:
+            lines.extend(wrap(conclusion, first_prefix=_SHARED_LABEL))
+        for entry in group.entries:
+            lines.extend(_entry_lines(entry, brief, with_judgement=not shared))
+    return lines
+
+
+def _entry_lines(
+    entry: BriefEntry, brief: DailyBrief, *, with_judgement: bool
+) -> list[str]:
     """Return the block one asset gets: what it is, what AIS concluded, what to watch.
 
-    Three lines at most. The standing is on the heading so that a reader can scan
-    the column of them, the conclusion is one sentence, and the event is the one
-    thing about this asset that is still ahead.
+    Three lines at most. The standing is on the heading so that a reader can scan the
+    column of them, the conclusion is one sentence, and the event is the one thing
+    about this asset that is still ahead. The conclusion is left out when the assets
+    around this one share it: it has already been stated for all of them, and saying
+    it again is the repetition this projection exists to avoid.
     """
     result = entry.result
     lines = [_entry_heading(entry)]
-    judgement = _judgement(result)
+    judgement = _judgement(result) if with_judgement else None
     if judgement is not None:
         lines.extend(wrap(judgement))
     event = own_event(result)

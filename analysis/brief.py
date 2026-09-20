@@ -165,6 +165,35 @@ class BriefEntry:
 
 
 @dataclass(frozen=True)
+class BriefGroup:
+    """Assets that reached the same conclusion.
+
+    A group is what stops the report saying the same thing three times: the assets in
+    it are written out under one statement of what AIS concluded about them, instead
+    of each carrying a copy of that statement.
+
+    Attributes:
+        entries: The assets in the group, in the order the brief already held them.
+    """
+
+    entries: tuple[BriefEntry, ...]
+
+    @property
+    def is_shared(self) -> bool:
+        """Return whether more than one asset reached this conclusion."""
+        return len(self.entries) > 1
+
+    @property
+    def concluded_grade(self) -> int:
+        """Return the count of opportunity conditions holding for this group.
+
+        Zero means nothing could be judged about any member, which is a conclusion
+        too, and one the report states once rather than once per asset.
+        """
+        return _opportunity_grade(self.entries[0].result)
+
+
+@dataclass(frozen=True)
 class DailyBrief:
     """One morning's brief: what to look at first, and what it was read from.
 
@@ -209,6 +238,27 @@ class DailyBrief:
         """Return the symbols that were analysed and did not earn a line."""
         shown = {entry.ticker for entry in self.entries}
         return tuple(ticker for ticker in self.tickers if ticker not in shown)
+
+    @property
+    def groups(self) -> tuple[BriefGroup, ...]:
+        """Return the entries grouped by the conclusion they reached.
+
+        A conclusion several assets share is one thing the report has to say, so it is
+        written once and the assets it applies to are named under it. Grouping never
+        reorders the brief: a group sits where its most important member sat, and its
+        members keep the order they were already in. What changes is that the same
+        sentence is not repeated for every asset that happens to have reached it.
+
+        Two assets reached the same conclusion when their opportunity judgements hold
+        the same number of conditions. That count is what the sentence is written
+        from, so equal counts are equal words, and grouping by the count is the same
+        decision as grouping by the sentence without the report having to hold a
+        sentence to compare.
+        """
+        grouped: dict[int, list[BriefEntry]] = {}
+        for entry in self.entries:
+            grouped.setdefault(_opportunity_grade(entry.result), []).append(entry)
+        return tuple(BriefGroup(entries=tuple(entries)) for entries in grouped.values())
 
 
 def build_daily_brief(
