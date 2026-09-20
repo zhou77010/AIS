@@ -410,6 +410,20 @@ retry would send a second copy to whoever the first attempt reached and would re
 a full evaluation of the universe on every wake until the failure stopped. A failed
 brief is logged as an error and reported in the cycle status.
 
+**And the brief has not been delivered yet.** The log shows it running at 09:00 on
+three consecutive days and delivering nothing: the machine had no route to the
+network at that hour, both the market data source and the notification channel were
+refused, and every asset was reported as failed. Nothing about the trigger was wrong —
+it fired on time every day — and the reader has still never received a brief.
+
+That qualifies the retry rule above rather than contradicting it. The rule was written
+for a *partial* failure, where a retry would send a second copy to whoever the first
+attempt reached. When every channel fails, nobody has been told anything, and
+recording the day as sent spends the whole report on an outage that lasted a minute.
+Whether a total failure should leave the day owed — with a cap, so that an outage
+which does not end cannot become a retry on every wake — is open, and it is the first
+thing a runtime round should settle.
+
 ### Only one of the two scheduled reports is active, and it is the morning one
 
 **Confirmed.** **Only the 09:00 Live Morning Brief runs.** The 21:00 Pre-Market

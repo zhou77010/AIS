@@ -33,6 +33,7 @@ from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 from utils.constants import CycleStatus, Environment, LogLevel
 from utils.daily_moment import DailyMoment
+from utils.exceptions import AISException
 from utils.market_clock import MarketClock, MarketStatus
 
 # 09:00 Beijing is 01:00 UTC, and the moment the brief is owed at.
@@ -337,11 +338,14 @@ class _OpenMarket:
 class _Analyzer:
     """Analyzer stand-in counting the assets it was asked about."""
 
-    def __init__(self) -> None:
+    def __init__(self, failing: tuple[str, ...] = ()) -> None:
         self.seen: list[str] = []
+        self._failing = failing
 
     def analyze_result(self, asset: Asset) -> AnalysisResult:
         self.seen.append(asset.ticker)
+        if asset.ticker in self._failing:
+            raise RuntimeError(f"{asset.ticker} could not be analysed")
         return _result(asset)
 
 
@@ -526,6 +530,57 @@ def test_the_brief_is_computed_when_it_is_sent(
     assert analyzer.seen == []
     application._run_brief()
     assert analyzer.seen == ["AAPL", "RKLB"]
+
+
+def test_a_brief_with_nothing_analysed_is_not_sent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A brief with nothing behind it is not a report, it is a failure message. It is
+    # reported in the log and the status, and the reader is not sent a message that
+    # says nothing.
+    analyzer = _Analyzer(failing=("AAPL", "RKLB"))
+    application = _application(tmp_path, analyzer)
+    sent = _deliveries(monkeypatch, application)
+
+    status = application._run_brief()
+
+    assert status is CycleStatus.EVALUATION_FAILED
+    assert sent == []
+
+
+def test_an_asset_that_could_not_be_analysed_does_not_stop_the_brief(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # One asset must not cost the reader the whole report, and the brief names what
+    # it could not look at rather than leaving the gap invisible.
+    analyzer = _Analyzer(failing=("RKLB",))
+    application = _application(tmp_path, analyzer)
+    sent = _deliveries(monkeypatch, application)
+
+    status = application._run_brief()
+
+    assert status is CycleStatus.EVALUATION_FAILED
+    assert len(sent) == 1
+    assert "未分析  RKLB" in sent[0][1]
+    assert "分析 1 个标的" in sent[0][1]
+
+
+def test_a_brief_that_could_not_be_delivered_is_reported_rather_than_retried(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The failure that actually happened three mornings running: the machine had no
+    # network, so the send failed. It is reported as a failure and the runtime keeps
+    # running; what is not done is sending the whole brief again on every wake.
+    analyzer = _Analyzer()
+    application = _application(tmp_path, analyzer)
+
+    def refuse(title: str, message: str) -> None:
+        raise AISException("every notification channel failed: bark: refused")
+
+    monkeypatch.setattr(application, "_deliver", refuse)
+
+    assert application._run_brief() is CycleStatus.EVALUATION_FAILED
+    assert application._run_brief() is CycleStatus.EVALUATION_FAILED
 
 
 def test_the_expanded_report_of_every_asset_is_still_produced(
