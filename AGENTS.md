@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Version: 1.1.0
+Version: 1.2.0
 
 Project: AIS (Adaptive Investment System)
 
@@ -29,6 +29,32 @@ The AIS Constitution is the highest authority.
 If implementation conflicts with the Constitution,
 
 the Constitution always wins.
+
+---
+
+# Method Before Implementation
+
+AIS has finished building its infrastructure. What it lacks now is method, so the order
+of work is reversed from here on.
+
+**Every discussion settles what AIS wants to express before anything is written.** The
+order is: what AIS is trying to say, then what that means, then how it is decided, and
+only then how it is implemented. Code is the last step of a settled question, never the
+first step of an unsettled one.
+
+**One methodology question at a time.** Questions are taken one by one and settled
+before the next is opened. Designing two in parallel produces two half-answers that
+cannot be reconciled later, because each was shaped by the other's unfinished edges.
+
+**No code may introduce a meaning.** A name, a threshold, a state or a rule that the
+Constitution does not state may not be invented in an implementation because it is
+convenient there. Where the method is unsettled, the correct output is a recorded gap
+and an entry in the Backlog — which is what the code already does for the DCF fair
+value and for company guidance, and it is right to.
+
+**Proposals are not authority.** A design document, including one written by an agent,
+changes nothing until it is ratified. Until then the Constitution remains the highest
+authority and the Runtime behaves as it is.
 
 ---
 

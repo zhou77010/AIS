@@ -414,6 +414,46 @@ a preference to be settled in code.
 - The Runtime's freeze in force today is not lifted by this document. It is a proposal to
   be argued, and the argument comes before the code.
 
+## 8. Rulings in force, and what stays open
+
+Recorded after discussion. **A ruling binds implementation; it is not a frozen
+methodology.** Nothing in this section may be treated as settled method until the Decision
+Layer is frozen, and no code may implement any of it while the Observation Phase is
+running.
+
+| # | Item | Status | Ruling |
+| --- | --- | --- | --- |
+| 1 | **Overall Score** | **Ruled: freeze the discussion, implement nothing** | The current aggregate is not used as a judgement and is not restored. It stays in the code as the labelled placeholder it is, and it is neither retired nor replaced. **A Decision is the final conclusion. An Overall, if one ever exists, is an expression of a Decision and never a source of one.** What Overall should be is decided after the Decision Layer exists. |
+| 2 | **BUY / ACCUMULATE** | **Open: the intensity reading is rejected, a new one is not yet found** | Rejected: that the two states express whether the case has formed — the state of a case is already expressed by evidence, Catalyst and Confidence, and a state that repeats them says it twice (§2.10). Retained as direction: the Decision Layer judges the asset; execution belongs to the Portfolio Layer. **A Decision never knows what is held; an Action does.** The question stays open and needs more work. |
+| 3 | **Confidence** | **Ruled in part, open in part** | Ruled: no overall confidence is invented now (§7 defers its aggregation). Open, and named as the next question: AIS must eventually answer **"why do I believe this judgement?"**, not necessarily as a percentage, possibly as a structured explanation — and that answer is a **core part of the Decision Layer rather than an attachment to it**. But Confidence is not to remain a property of local evidence only. **First step: define the sources that lower Confidence. No algorithm, no threshold, no number.** |
+| 4 | **Portfolio Layer boundary** | **Ruled: accepted as a candidate Constitution principle** | The Decision Layer answers **what the world is like**; the Portfolio Layer answers **what to do in this account**. **A constraint may never modify a Decision.** Insufficient cash, a position limit, a currency or any other constraint changes the Action and leaves the Decision standing, with the obstacle recorded against the Action. |
+
+### 8.1 Candidate Constitution wording for the Portfolio boundary
+
+Offered as text for a future version of the Constitution, since this was ruled to belong
+there rather than in a design document:
+
+> **A constraint changes an Action, never a Decision.**
+>
+> A Decision states what an asset warrants. It is reached without knowledge of any
+> portfolio, so the same asset carries the same Decision whatever holds it.
+>
+> An Action states what to do in a portfolio. It is reached from a Decision, that
+> portfolio, and that portfolio's constraints.
+>
+> Where a constraint — cash, a position limit, a currency, a tax, a restriction — prevents
+> the Action a Decision calls for, **the obstacle is recorded against the Action and the
+> Decision is left as it stands.** A constraint that changed a Decision would make the
+> same asset carry two different judgements about itself, and would hide a limitation of
+> the account inside a statement about the world.
+
+### 8.2 What this section does not do
+
+- It does not freeze the Decision Layer, and it does not authorise any implementation.
+- It does not reopen the four items; item 2 and the open half of item 3 are the work.
+- It does not change the Observation Phase, the frozen Runtime, or the pause on paper
+  trading.
+
 ---
 
 End of Document
