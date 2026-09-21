@@ -53,10 +53,13 @@ class MarketMetric(StrEnum):
     RETURN_ON_EQUITY = "return_on_equity"
     FREE_CASH_FLOW_MARGIN = "free_cash_flow_margin"
     MARKET_DIRECTION = "market_direction"
+    PREMARKET_GAP = "premarket_gap"
     TREND_RANGE_POSITION = "trend_range_position"
     TREND_DIRECTION = "trend_direction"
     EARNINGS_GROWTH = "earnings_growth"
     EXPECTED_EARNINGS_CHANGE = "expected_earnings_change"
+    EARNINGS_SURPRISE = "earnings_surprise"
+    EARNINGS_GUIDANCE = "earnings_guidance"
     TREND_MA20_GAP = "trend_ma20_gap"
     TREND_MA60_GAP = "trend_ma60_gap"
     TREND_MA120_GAP = "trend_ma120_gap"
@@ -106,6 +109,7 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.RETURN_ON_EQUITY: "Return on equity",
     MarketMetric.FREE_CASH_FLOW_MARGIN: "Free cash flow margin",
     MarketMetric.MARKET_DIRECTION: "Broad market 52 week change",
+    MarketMetric.PREMARKET_GAP: "Premarket move against the previous close",
     # The window is part of the name on purpose. A price trend means nothing
     # without the window it was measured over, so the window travels with the
     # measurement and is displayed wherever the measurement is.
@@ -113,6 +117,8 @@ _METRIC_LABELS: dict[MarketMetric, str] = {
     MarketMetric.TREND_DIRECTION: "Price change over 52 weeks",
     MarketMetric.EARNINGS_GROWTH: "Quarterly earnings growth",
     MarketMetric.EXPECTED_EARNINGS_CHANGE: "Expected earnings change",
+    MarketMetric.EARNINGS_SURPRISE: "Latest reported earnings against the estimate",
+    MarketMetric.EARNINGS_GUIDANCE: "Company guidance",
     MarketMetric.TREND_MA20_GAP: "Price against 20 day average",
     MarketMetric.TREND_MA60_GAP: "Price against 60 day average",
     MarketMetric.TREND_MA120_GAP: "Price against 120 day average",
@@ -145,10 +151,22 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.RETURN_ON_EQUITY: (Category.FUNDAMENTAL,),
     MarketMetric.FREE_CASH_FLOW_MARGIN: (Category.FUNDAMENTAL,),
     MarketMetric.MARKET_DIRECTION: (Category.MARKET,),
+    # A premarket move is the asset's own price fact. It is filed under Market rather
+    # than Trend because of which question it answers: Trend asks what the price has
+    # done over stated windows, and a premarket move is what the price is doing before
+    # the session has opened at all. The primary category is the one the evidence is
+    # filed under and the one whose reading it changes.
+    MarketMetric.PREMARKET_GAP: (Category.MARKET,),
     MarketMetric.TREND_RANGE_POSITION: (Category.TREND,),
     MarketMetric.TREND_DIRECTION: (Category.TREND,),
     MarketMetric.EARNINGS_GROWTH: (Category.EARNINGS,),
     MarketMetric.EXPECTED_EARNINGS_CHANGE: (Category.EARNINGS,),
+    # What the last report actually did against what was expected of it. It is filed
+    # under Earnings, which is where the question it answers belongs.
+    MarketMetric.EARNINGS_SURPRISE: (Category.EARNINGS,),
+    # Guidance is filed with the other earnings facts so that its absence is recorded
+    # where its siblings are, and it is never anything but absent: see the note below.
+    MarketMetric.EARNINGS_GUIDANCE: (Category.EARNINGS,),
     MarketMetric.TREND_MA20_GAP: (Category.TREND,),
     MarketMetric.TREND_MA60_GAP: (Category.TREND,),
     MarketMetric.TREND_MA120_GAP: (Category.TREND,),
@@ -162,6 +180,13 @@ _METRIC_CATEGORIES: dict[MarketMetric, tuple[Category, ...]] = {
     MarketMetric.INSTITUTIONAL_OWNERSHIP: (Category.POSITIONING,),
     MarketMetric.INSIDER_OWNERSHIP: (Category.POSITIONING,),
 }
+
+# Guidance is permanently absent, in the same way the discounted cash flow fair value
+# is, and it is written down here for the same reason: an absence that is not recorded
+# looks like something nobody thought of. No source AIS reads publishes what a company
+# says about its own next quarter. What is published is what analysts expect, which is
+# a different fact about a different author, and putting it under this name would state
+# that a company guided to a number it never mentioned.
 
 
 @dataclass(frozen=True)

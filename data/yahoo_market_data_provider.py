@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -49,6 +49,7 @@ _TOKEN_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 _SUMMARY_URL = (
     "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
     "?modules=summaryDetail,defaultKeyStatistics,financialData,calendarEvents"
+    ",price,earningsHistory"
     "&crumb={token}"
 )
 _CHART_URL = (
@@ -68,6 +69,19 @@ _DCF_REASON = (
     f"model, not a datum a market data source publishes, and AIS has not defined "
     f"the model parameters. No value is invented to fill the gap."
 )
+_GUIDANCE_REASON = (
+    f"{MarketMetric.EARNINGS_GUIDANCE.label} is not retrieved: no source AIS reads "
+    f"publishes what a company says about its own next quarter. What is published is "
+    f"what analysts expect of it, which is a different fact about a different author, "
+    f"so it is not reported under this name. No value is invented to fill the gap."
+)
+# The measurements that are absent whatever the source does, and the reason each one
+# carries. They keep their own reason even when the source cannot be reached at all:
+# a connection failure is not why they are missing.
+_ABSENT_METRICS: dict[MarketMetric, str] = {
+    MarketMetric.DCF: _DCF_REASON,
+    MarketMetric.EARNINGS_GUIDANCE: _GUIDANCE_REASON,
+}
 
 
 class YahooMarketDataProvider:
@@ -481,6 +495,7 @@ def _points(
             MarketMetric.MARKET_DIRECTION,
             _raw(summary, "defaultKeyStatistics", "SandP52WeekChange"),
         ),
+        _premarket_gap_point(summary),
         _trend_range_position_point(
             _raw(summary, "financialData", "currentPrice"),
             _raw(summary, "summaryDetail", "fiftyTwoWeekLow"),
@@ -498,6 +513,8 @@ def _points(
             _raw(summary, "defaultKeyStatistics", "forwardEps"),
             _raw(summary, "defaultKeyStatistics", "trailingEps"),
         ),
+        _earnings_surprise_point(summary),
+        _point(MarketMetric.EARNINGS_GUIDANCE, None),
         _point(
             MarketMetric.SHORT_PERCENT_OF_FLOAT,
             _raw(summary, "defaultKeyStatistics", "shortPercentOfFloat"),
@@ -520,14 +537,14 @@ def _points(
 def _unavailable_points(reason: str) -> tuple[MarketDataPoint, ...]:
     """Build one point per metric, all stating the same reason.
 
-    The DCF point keeps its own reason: it is unavailable whatever the state of
-    the source is, so reporting a connection failure for it would be wrong.
+    The measurements that are absent whatever the state of the source keep their
+    own reason: reporting a connection failure for them would be wrong.
     """
     return tuple(
         MarketDataPoint(
             metric=metric,
             value=None,
-            reason=_DCF_REASON if metric is MarketMetric.DCF else reason,
+            reason=_ABSENT_METRICS.get(metric, reason),
         )
         for metric in MarketMetric
     )
@@ -535,8 +552,9 @@ def _unavailable_points(reason: str) -> tuple[MarketDataPoint, ...]:
 
 def _point(metric: MarketMetric, value: float | None) -> MarketDataPoint:
     """Build one point from a retrieved value, or record that it is missing."""
-    if metric is MarketMetric.DCF:
-        return MarketDataPoint(metric=metric, value=None, reason=_DCF_REASON)
+    absent = _ABSENT_METRICS.get(metric)
+    if absent is not None:
+        return MarketDataPoint(metric=metric, value=None, reason=absent)
     if value is None:
         return MarketDataPoint(
             metric=metric,
@@ -551,6 +569,143 @@ def _point(metric: MarketMetric, value: float | None) -> MarketDataPoint:
         value=value,
         reason=f"{metric.label} {value} retrieved from {SOURCE_NAME}.",
     )
+
+
+def _premarket_gap_point(summary: Mapping[str, Any]) -> MarketDataPoint:
+    """Build the point describing the move price made before the session opened.
+
+    The gap is what the source publishes as one number: the premarket price against
+    the previous close. Both legs and the moment the premarket reading belongs to are
+    named in the reason, because the size of a move is not enough to check it — a
+    reader has to be able to see which two prices it was computed from, and which
+    premarket session it describes.
+    """
+    change = _raw(summary, "price", "preMarketChangePercent")
+    price = _raw(summary, "price", "preMarketPrice")
+    previous = _raw(summary, "price", "regularMarketPreviousClose")
+    if change is None:
+        return MarketDataPoint(
+            metric=MarketMetric.PREMARKET_GAP,
+            value=None,
+            reason=(
+                f"{SOURCE_NAME} reported no premarket price for this symbol, so the "
+                f"move against the previous close could not be read."
+            ),
+        )
+    legs = (
+        f"a premarket price of {price} against a previous close of {previous}"
+        if price is not None and previous is not None
+        else "a premarket price the source did not report against a previous close "
+        "it did not report"
+    )
+    return MarketDataPoint(
+        metric=MarketMetric.PREMARKET_GAP,
+        value=change,
+        reason=(
+            f"{MarketMetric.PREMARKET_GAP.label} {change:+.2%} retrieved from "
+            f"{SOURCE_NAME}, computed by the source from {legs}."
+        ),
+    )
+
+
+def _earnings_surprise_point(summary: Mapping[str, Any]) -> MarketDataPoint:
+    """Build the point describing the last report against what was expected of it.
+
+    Only the most recent reported quarter is read. The quarters before it are logged
+    and not read: one number can be placed on a scale, and a run of them cannot
+    without a trend rule that nobody has approved, so a reader who wants the history
+    has it in the log rather than in a judgement.
+    """
+    quarters = _reported_quarters(summary)
+    if not quarters:
+        return MarketDataPoint(
+            metric=MarketMetric.EARNINGS_SURPRISE,
+            value=None,
+            reason=(
+                f"{SOURCE_NAME} reported no completed quarter for this symbol, so the "
+                f"last report could not be read against what was expected of it."
+            ),
+        )
+    latest = quarters[-1]
+    surprise = latest.get("surprise")
+    if surprise is None:
+        return MarketDataPoint(
+            metric=MarketMetric.EARNINGS_SURPRISE,
+            value=None,
+            reason=(
+                f"{SOURCE_NAME} reported the quarter ending {latest['quarter']} "
+                f"without a surprise against its estimate, so none was read."
+            ),
+        )
+    return MarketDataPoint(
+        metric=MarketMetric.EARNINGS_SURPRISE,
+        value=surprise,
+        reason=(
+            f"{MarketMetric.EARNINGS_SURPRISE.label} {surprise:+.2%} retrieved from "
+            f"{SOURCE_NAME}, on earnings per share of {latest['actual']} reported "
+            f"against an estimate of {latest['estimate']} for the quarter ending "
+            f"{latest['quarter']}."
+        ),
+    )
+
+
+def _reported_quarters(summary: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    """Return the quarters the source reports results for, oldest first.
+
+    Every quarter is logged as it is read, because the log is where a run can be
+    checked against what the source said without the history entering a judgement.
+    Quarters the source reports without enough of the three numbers to check the
+    surprise are dropped rather than carried half-read.
+    """
+    module = summary.get("earningsHistory")
+    rows = module.get("history") if isinstance(module, Mapping) else None
+    if not isinstance(rows, Sequence):
+        return ()
+    logger = get_logger(_LOGGER_NAME)
+    quarters: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        quarter = _date_in(row, "quarter")
+        actual = _number_in(row, "epsActual")
+        estimate = _number_in(row, "epsEstimate")
+        surprise = _number_in(row, "surprisePercent")
+        logger.info(
+            "reported quarter %s: earnings per share %s against an estimate of %s, "
+            "a surprise of %s",
+            quarter,
+            actual,
+            estimate,
+            surprise,
+        )
+        if quarter is None or actual is None or estimate is None:
+            continue
+        quarters.append(
+            {
+                "quarter": quarter.isoformat(),
+                "actual": actual,
+                "estimate": estimate,
+                "surprise": surprise,
+            }
+        )
+    quarters.sort(key=lambda entry: entry["quarter"])
+    return tuple(quarters)
+
+
+def _date_in(row: Mapping[str, Any], key: str) -> date | None:
+    """Return a date the source reported inside one row, or None."""
+    epoch = _number_in(row, key)
+    if epoch is None:
+        return None
+    return datetime.fromtimestamp(epoch, tz=UTC).date()
+
+
+def _number_in(row: Mapping[str, Any], key: str) -> float | None:
+    """Return one numeric field inside a row, or None when it is not usable."""
+    entry = row.get(key)
+    if isinstance(entry, Mapping):
+        entry = entry.get("raw")
+    return _finite(entry)
 
 
 def _expected_earnings_change_point(

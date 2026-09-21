@@ -24,6 +24,11 @@ from evaluation.reading.bands import (
 
 _ALL_METRICS = tuple(MarketMetric)
 
+# The measurements no source publishes, so there is no number for a scale to read.
+# They are carried as facts with the reason they are absent, and a scale for them
+# would describe a value that never arrives.
+_NEVER_RETRIEVED = (MarketMetric.DCF, MarketMetric.EARNINGS_GUIDANCE)
+
 
 def test_a_low_multiple_reads_better_than_a_high_one() -> None:
     assert score_for(MarketMetric.PE, 10.0) == 5
@@ -81,7 +86,7 @@ def test_every_scored_measurement_has_a_scale() -> None:
     unscaled = [
         metric
         for metric in _ALL_METRICS
-        if metric is not MarketMetric.DCF and scale_for(metric) is None
+        if metric not in _NEVER_RETRIEVED and scale_for(metric) is None
     ]
 
     assert unscaled == [MarketMetric.AVERAGE_VOLUME, MarketMetric.FLOAT_SHARES]

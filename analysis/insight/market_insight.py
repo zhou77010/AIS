@@ -93,7 +93,8 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
     The first sentence is the one a phone report shows, so it is the sentence about
     this asset. The environment itself comes second, because it is the same for every
     asset: the brief states it once for the whole universe, and repeating it per asset
-    is repeating one fact.
+    is repeating one fact. What the asset's own price did before the session opened
+    comes last, because it is the one measurement here that is about this asset alone.
 
     Where no environment measurement was retrieved, the sentence falls back to what
     the broad market has done over a year, which is the measure of the environment AIS
@@ -101,7 +102,9 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
     """
     if not context.has_any(*_ENVIRONMENT_METRICS):
         direction = _direction_line(context)
-        return () if direction is None else (direction,)
+        fallback = [] if direction is None else [direction]
+        premarket = _premarket_line(context)
+        return tuple(fallback + ([] if premarket is None else [premarket]))
 
     lines: list[InsightLine] = [
         InsightLine(impact.phrase, impact.references)
@@ -113,7 +116,34 @@ def build(context: InsightContext) -> tuple[InsightLine, ...]:
     environment = environment_line(context)
     if environment is not None:
         lines.append(environment)
+    premarket = _premarket_line(context)
+    if premarket is not None:
+        lines.append(premarket)
     return tuple(lines)
+
+
+def _premarket_line(context: InsightContext) -> InsightLine | None:
+    """Return what the price did before the session opened, or None.
+
+    This is the freshest thing AIS knows about the asset itself: the move was made
+    before the session it belongs to has opened, and it is a fact about this asset
+    rather than about the market it is in. It is described and not graded — the reading
+    layer decides that, and it decided against grading it — so the sentence says what
+    happened and claims nothing about what it is worth.
+
+    The wording carries the size only where there is a size to carry: a move inside the
+    flat band is a session that has not said anything yet, and putting a number beside
+    it would invite a reader to read one into it.
+    """
+    word = context.word(M.PREMARKET_GAP)
+    value = context.value(M.PREMARKET_GAP)
+    reference = context.reference(M.PREMARKET_GAP)
+    if word is None or value is None or not reference:
+        return None
+    band = context.band(M.PREMARKET_GAP)
+    if band is not None and band.is_flat:
+        return InsightLine("盘前基本持平，开盘前没有新的价格信息。", reference)
+    return InsightLine(f"{word} {abs(value):.1%}，开盘前价格已经先动。", reference)
 
 
 def environment_line(context: InsightContext) -> InsightLine | None:

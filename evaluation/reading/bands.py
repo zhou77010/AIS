@@ -337,6 +337,26 @@ SCALES: dict[ReadableMetric, MetricScale] = {
         ((-0.05, "很小"), (-0.10, "较小"), (-0.20, "中等"), (-0.35, "较大")),
         "很大",
     ),
+    # The move price made before the session opened, against the previous close. It is
+    # **described and not graded**, and that is a decision rather than an omission: AIS
+    # has decided what a gap reads as and has not decided what it is worth. A graded
+    # measurement changes the category's reading and therefore what the brief leads
+    # with, and that is a change to what the report concludes rather than to what it
+    # says. The evidence is connected first and graded later, if it earns it.
+    #
+    # A band either side of zero is flat, because a premarket move smaller than a
+    # percent is the noise of a thin session rather than something that happened.
+    MarketMetric.PREMARKET_GAP: _higher(
+        (
+            (0.03, "盘前明显高开"),
+            (0.01, "盘前高开"),
+            (-0.01, "盘前基本持平"),
+            (-0.03, "盘前低开"),
+        ),
+        "盘前明显低开",
+        graded=False,
+        flat="盘前基本持平",
+    ),
     # --- What the reported results said, and what is expected next -----------
     MarketMetric.EARNINGS_GROWTH: _higher(
         ((0.30, "强劲"), (0.15, "明显改善"), (0.05, "小幅改善"), (0.0, "持平")),
@@ -345,6 +365,22 @@ SCALES: dict[ReadableMetric, MetricScale] = {
     MarketMetric.EXPECTED_EARNINGS_CHANGE: _higher(
         ((0.30, "强劲"), (0.15, "明显改善"), (0.05, "小幅改善"), (0.0, "持平")),
         "下滑",
+    ),
+    # What the last report did against what was expected of it. Described and not
+    # graded, for the reason the premarket gap is: what a surprise is worth has not
+    # been decided, and deciding it here would be deciding it silently. Two percent
+    # either side of zero is not read as a surprise at all — an estimate is a consensus
+    # of several analysts and the distance between them is routinely larger than that.
+    MarketMetric.EARNINGS_SURPRISE: _higher(
+        (
+            (0.10, "明显超预期"),
+            (0.02, "超预期"),
+            (-0.02, "符合预期"),
+            (-0.10, "不及预期"),
+        ),
+        "明显不及预期",
+        graded=False,
+        flat="符合预期",
     ),
     # --- Who else holds this asset, and how crowded that is ------------------
     MarketMetric.SHORT_PERCENT_OF_FLOAT: _lower(
