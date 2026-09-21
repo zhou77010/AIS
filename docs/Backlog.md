@@ -18,12 +18,14 @@ Agreed direction, in order:
 | **A** | **Reading Layer** — one owner for what a reading means, so the grade, the insights and HPO stop disagreeing. | Nothing. Highest priority. |
 | **B** | **Watch Universe** — membership sets, replacing the flat ticker list. | A. |
 | **C** | **Market Layer** — what the current environment means for this stock. | New evidence (industry, style, flows). Shares its data with the Theme watchlist. |
-| **D** | **Runtime** — the three triggers: Pre-Market Brief, Live Morning Brief, and the intraday alert with its runtime priority. | **C**, because the Brief's distinguishing content is the market-level evidence C introduces. |
+| **D** | **Runtime** — the three triggers: Pre-Market Brief, Live Morning Brief, and the intraday alert with its runtime priority. | **C** for the environment half, which is done; the Pre-Market Brief also needs the **Company Layer**, and that is the work that is open. |
 | **E** | **IBKR Portfolio Layer** — the fourth question, how much. | An IBKR connection. |
 
 The journal records why A comes before B even though B looks cheaper, and why the
-Brief cannot be built before the Market Layer: without market-level evidence it is
-the same analysis sent at a different hour.
+Brief could not be built before the Market Layer: without market-level evidence it is
+the same analysis sent at a different hour. The half of that which is still missing is
+the Company Layer — per-asset pre-market prices, overnight news and realised macro
+results — which is what the 21:00 report waits for now.
 
 ---
 
@@ -484,13 +486,36 @@ yet, so it is recorded here rather than written into
 | Trigger | State | Where |
 | --- | --- | --- |
 | **Live Morning Brief** — 09:00 Beijing | **Built** | `app/morning_brief.py`, scheduled by `app/scheduler.py` |
-| **Pre-Market Brief** — 21:00 Beijing | Defined, off until the Market Layer exists | — |
+| **Pre-Market Brief** — 21:00 Beijing | Defined, **not implemented and not scheduled**; the Environment layer it needs is complete and the Company Layer is not | — |
 | **Intraday Alert** | Defined, not built | — |
 
 **How it is built.** The scheduler no longer runs one cycle on an interval. It runs
 **schedules**, each of which answers "when am I next owed", and sleeps to the
 earliest answer. Two are wired: the evaluation cycle on its interval, and the brief
 at an hour of the day. Adding 21:00 later is another schedule and nothing else.
+
+### Nothing fires at 21:00, and a missing report there is not a fault
+
+**Two schedules exist: `cycle` and `morning-brief`.** Those two are what
+`app/application.py` registers and there are no others; the scheduler sleeps to the
+earliest moment either of them is owed. **The 21:00 Pre-Market Brief is defined and
+not implemented** — there is no schedule for it, so nothing wakes at that hour and no
+message is owed.
+
+**A report that never arrives at 21:00 is the recorded state of the system, not a
+bug.** It is not the scheduler failing to wake, not the state file holding a day it
+should not, not the notifier dropping a message, and not the market gate refusing at
+that hour. A report cannot be missing when none was ever scheduled: the absence has
+exactly one cause, and it is this paragraph. Read it before looking anywhere else, and
+before believing that 21:00 was ever built.
+
+**What "built" would require, so that its absence is checkable.** A schedule with its
+own id, its own runtime-state key, its own attempts and its own delivery state. A
+report shares none of those with the morning brief: two reports sharing one state
+record would each read the other's day as their own, and would then either send a
+second copy or stay silent, which is the failure the state record exists to prevent.
+The state file is already shaped for that — one bucket per report under `reports` —
+and no second report is written into it.
 
 **It arrives as one message.** The brief covers the whole watch universe and is
 delivered as a single digest; see "The brief is one message" below. The evaluation
@@ -504,15 +529,26 @@ It does not consult the change detector, because it is expected: "nothing has
 changed" is what most days look like, not a reason to say nothing. And it is
 computed at the hour it is sent, so there is no earlier result delivered late.
 
-**What it remembers is a state, not a flag.** `state/runtime.json` holds, for one
-local day, **where that day's brief stands**: `owed`, `sent` or `abandoned`, how many
-times it has been attempted, and when the last attempt was. It is written by
-replacement, so a process killed mid-write leaves the previous state intact, and it is
-read at startup, so a restart neither repeats a brief nor loses one. `AIS_STATE_FILE`
-moves the file; the path is in the configuration like every other path. The day is a
-field of the record rather than a key of its own, so a record about yesterday says
-nothing about today. A file written by the previous format — one key naming the day
-the brief was sent — is still read, as a delivered brief.
+**What it remembers is a state, not a flag.** `state/runtime.json` holds, under
+`reports`, one bucket per report, and in each bucket **where that report's day
+stands**: `owed`, `sent` or `abandoned`, how many times it has been attempted, and when
+the last attempt was. It is written by replacement, so a process killed mid-write
+leaves the previous state intact, and it is read at startup, so a restart neither
+repeats a report nor loses one. `AIS_STATE_FILE` moves the file; the path is in the
+configuration like every other path. The day is a field of the record rather than a key
+of its own, so a record about yesterday says nothing about today. Two earlier shapes
+are still read: the record written at the top level of the file under the report's
+name, and before that the single key naming the day the brief was sent. Both name a day
+the runtime recorded, and forgetting either would send the reader a second copy.
+
+**One bucket per report is the whole of the multi-report design.** A report is any
+message the runtime owes on a schedule, and each one has its own day, its own attempts
+and its own delivery state. Two reports sharing a bucket would each read the other's
+day as their own and would then either send a second copy or stay silent, and neither
+is visible from outside. The morning brief is the only report there is; the pre-market
+brief gets a bucket of its own when it exists, and the file already has the shape for
+it. What a report is *named* in the state file is its own identity and not the
+scheduler's: the scheduler logs a job, the state file holds a bucket.
 
 **Why a state rather than a flag.** "A brief was sent at some point" cannot tell a
 brief that reached a reader from one that reached nobody, and that difference is the
@@ -547,11 +583,12 @@ the whole report on an outage that lasted a minute.
 
 ### Only one of the two scheduled reports is active, and it is the morning one
 
-**Confirmed.** **Only the 09:00 Live Morning Brief runs.** The 21:00 Pre-Market
-Brief stays defined and stays off until the Market Layer exists.
+**Confirmed.** **Only the 09:00 Live Morning Brief runs.** The 21:00 Pre-Market Brief
+stays defined and stays off, and what it is waiting for is the Company Layer rather
+than the Market one — see "The gap at 21:00 is one layer wide" below.
 
-The reason is not caution, it is that the two would be the same report. AIS reads
-per-asset evidence — a quote summary and a year of daily bars — and that evidence
+The reason it is off is not caution, it is that the two would be the same report. AIS
+reads per-asset evidence — a quote summary and a year of daily bars — and that evidence
 changes about once per trading day. At 09:00 Beijing the latest completed US session
 is D-1 and the latest daily bar is D-1's; at 21:00 Beijing the session has not opened
 yet, so the latest completed session is **still D-1** and the bar is the same bar.
@@ -564,20 +601,56 @@ that tick as though it were news.
 
 **What makes 21:00 a report of its own is Phase C.** A pre-market brief answers what
 changed overnight: pre-market prices, futures, volatility, yields, the dollar, the
-morning's macro releases, overnight news. **Futures, volatility and yields are now
-connected** — they are what the Market category reads and what the 09:00 brief leads
-with — and the rest is not: there are no pre-market prices per asset, no realised macro
-releases and no overnight news. So the 21:00 brief would still be the 09:00 brief sent
-twelve hours earlier with the same evidence behind it, and it stays off.
+morning's macro releases, overnight news. **Futures, volatility, yields and the curve
+are now connected** — they are what the Market category reads and what the 09:00 brief
+leads with — and the rest is not: there are no pre-market prices per asset, no realised
+macro releases and no overnight news.
+
+**The gap at 21:00 is one layer wide, and it is the Company Layer.** This is the
+sentence to keep, because the wrong one has been written twice: 21:00 is not
+"not worth doing" and it is not "waiting for the Market Layer". The Market Layer is
+**done**. What is missing is the layer under it:
+
+| Layer | State at 21:00 today |
+| --- | --- |
+| **Environment** | **Complete** — futures, volatility, yields and the curve are retrieved once per pass, shared across assets, and read beside each one |
+| **Company premarket** | **Unavailable** — there is no per-asset pre-market price, so the newest per-asset fact is still the previous session's close |
+| **News** | **Unavailable** — no overnight news is read, and no macro release is read as a realised result |
+
+**So the report is buildable and would be thin, and it is off until it is not.** The
+order of work, and nothing else, is:
+
+| # | Work | Ends with |
+| --- | --- | --- |
+| **P1** | Build the **21:00 Pre-Market Brief** as its own schedule and its own state, labelled for what it holds: **Environment complete / Company premarket unavailable / News unavailable**. It states which of its three layers answered rather than waiting for all three. | A second scheduled report that is honest about being thin |
+| **P2** | **A per-asset pre-market quote**, read against a ±1.3% band: inside the band the quote says nothing and gets no line, outside it the asset has an overnight fact of its own. | Company premarket answers |
+| **P3** | **Overnight news, one sentence per asset.** | News answers |
+| **P4** | **The morning's macro result** — CPI actual against expected, and one line on the Fed — read as a realised result rather than as a calendar entry. | Releases stop being calendar-only |
+
+**P1 is a report, not a layer.** It is written from what exists, and its labels are the
+part that matters: a reader told that the company layer is unavailable knows why the
+message is about the market and not about their holdings. Waiting for P2 and P3 before
+sending anything is the alternative, and it is the one that leaves the reader with
+nothing at 21:00 for no stated reason.
+
+**The band in P2 belongs to the Reading Layer when it is built.** 1.3% is recorded here
+as the plan; every threshold in AIS has exactly one owner, and that owner is
+`evaluation/reading/bands.py`, not this document.
+
+**What is not being added.** **No more market indicators, no more yields, no more
+futures, no more sectors.** The Environment layer is finished: it already answers what
+the market is doing, and every measurement added to it makes the report longer without
+making it truer. The next work in AIS is the **Company Layer**, which is what P2 and
+P3 are, and what the company half of the Report Model still lacks.
 
 **E is done, and it did not make 21:00 its own report by itself.** The evidence the
 Market Layer needed turned out to be a smaller set than the pre-market brief needs:
 what the environment is doing is not the same as what the next session is being priced
-at, and the second half is still missing.
+at. That is why the work left is the Company Layer and not more Environment.
 
-So the order holds: **the rest of Phase C first, then 21:00 becomes its own report.**
-Until then, one scheduled report, at the hour when the data is freshest — five hours
-after the session it describes, with the after-hours results already in.
+So the order holds: **the Company Layer first, then 21:00 becomes a report worth
+reading.** Until then, one scheduled report, at the hour when the data is freshest —
+five hours after the session it describes, with the after-hours results already in.
 
 **What this does not mean.** It does not mean a second trigger was built. Nothing fires
 at 21:00: the brief is owed once a day at 09:00, and adding 21:00 is another schedule
@@ -630,11 +703,12 @@ cannot.**
 | **Intraday Alert** | An event happens | Whether this is worth interrupting for | Not scheduled |
 
 **Pre-Market Brief.** Forward-oriented: what changed overnight and what is on the
-calendar, never which way the market will go. **Confirmed: it depends on the Market
-Layer.** Its distinguishing content — futures, volatility, yields, the dollar, the
-morning's macro releases, overnight news — is market-level evidence that does not
-exist yet, and without it a brief degenerates into the same analysis sent at a
-different hour. Status: **defined, not settled.**
+calendar, never which way the market will go. **Confirmed: its market half is built and
+its company half is not.** The environment it leads with — futures, volatility, yields
+and the curve — exists and is shared across assets; per-asset pre-market prices,
+overnight news and realised macro results do not. That is the Company Layer, and it is
+what P2–P4 in "The gap at 21:00 is one layer wide" are. Status: **defined, not
+scheduled.**
 
 **Live Morning Brief.** *Not* a recap of the previous session, and not to be
 described as one. **Confirmed.** It is computed at 09:00 Beijing from the freshest

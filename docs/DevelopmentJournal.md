@@ -1670,4 +1670,116 @@ place rather than describing it.
 
 ---
 
+### A conclusion said once has to say who it is about
+
+**Context.** The brief states a conclusion that several assets share once, and named those
+assets only through the order they appeared in. The order between assets that read alike is
+the one thing about them that carries no meaning, so a reader was asked to infer a set from
+a sequence that was never meant to convey one. Beside it, the environment was stated once
+at the top and the list below led with one asset, with nothing joining the two: a reader
+was told what the market is doing, then handed a list in which somebody leads, and left to
+work out why that one.
+
+**Decision.** Three lines were added, and nothing else changed. A shared conclusion names
+the assets it covers, on the line above the sentence rather than in front of it. The asset
+the brief puts first is told why it is first — it holds more opportunity conditions than
+the others shown, or it moved while they did not. And the environment sentence that asset's
+own report opens its Market block with is repeated beside it, read back from the insight
+the run already built.
+
+**Reason.** All three are the same complaint: the brief made a decision and did not say
+what it was. Naming the roster costs a line, and it buys the reader the answer to "does
+this apply to me" without making them reconstruct a set from a list. The rank line only
+puts an existing ordering decision into words, which is why it is derived from the table
+that makes the decision and not from a second opinion about the same assets. The leader
+link is read from the insight rather than composed again for the same reason: the brief and
+the report must not be able to say two things about one holding.
+
+**What it caught.** The first implementation of the rank line claimed the leader held the
+most conditions whenever the brief showed one group — a comparison against a list that does
+not exist, and true of any single group of assets. It is the second time this round that a
+line was written for a case with nothing to compare against; both were found by asking what
+the sentence means when the other half of it is empty, which is now the first question the
+tests ask.
+
+**Impact.** The message is unchanged in what it decides and changed in what it shows. The
+roster pushes the shared sentence onto its own line, so a brief with a shared conclusion is
+one line longer than it was, inside the budget it already had.
+
+**Revisit.** When the pre-market brief is written: it needs the same three answers, and the
+leader link must read the leader's own insight there too rather than growing a second set
+of words for the same fact.
+
+---
+
+### One state file, one bucket per report
+
+**Context.** The state file held one record, under one key, and the key named the morning
+brief. That is the same shape as everything else that was built when exactly one report
+existed, and it holds the same trap: it works until a second report is added, and then it
+fails quietly. Two reports sharing one record would each read the other's day as their own
+and would then either send a second copy or stay silent, and neither is visible from outside
+— the reader sees a wrong message or no message, and nothing in the log says which report
+did it.
+
+**Decision.** A record now lives in a bucket named after the report it belongs to, the name
+is a member of `ReportName` rather than a string written where it was needed, and the API
+asks about one report by name. `BriefRecord` and `BriefDelivery` became `ReportRecord` and
+`ReportDelivery`. No second report was built and no member was added for one: what exists
+now is the shape the pre-market brief will be written into, so that building it is a
+schedule and a member rather than a change to the state file.
+
+**Reason.** The alternative was to make the change at the moment the second report is
+written, which is exactly the moment when the failure it prevents is hardest to see. Doing
+it now costs one rename and one migration path, and the migration is the part that has to
+be written carefully: three shapes have to keep being read — the bucket, the record at the
+top level of the file, and the single day the brief was sent on — because each names a day
+the runtime recorded, and forgetting one makes a day that has already been reported look
+owed.
+
+**Impact.** `state/runtime.json` gains `reports`, with one bucket in it. The file on disk
+today is read as it stands and rewritten in the new shape on the next attempt, so no day is
+lost and nothing has to be done by hand.
+
+**Revisit.** When the pre-market brief is scheduled: it takes a member of `ReportName`, and
+if it needs anything more than that, what it needs is a change to the file's shape rather
+than to the brief.
+
+---
+
+### 21:00 is not missing, it is unbuilt
+
+**Context.** More than once the question has been where the 21:00 report went, and the
+answer is that there has never been one. The backlog said the pre-market brief was "off
+until the Market Layer exists", and the Market Layer now exists, so that sentence had gone
+stale in the worst direction: it read as a reason that no longer applies, which invites
+either "it must be built by now" or "something is broken". The system looked like it was
+failing at 21:00 rather than doing nothing at 21:00.
+
+**Decision.** Two things are now written down where the next reader will look. **Only two
+schedules exist — `cycle` and `morning-brief` — and a missing report at 21:00 has exactly
+one cause**, which is that none was ever scheduled; it is not the scheduler, the state file,
+the notifier or the market gate. And the reason it is off is restated as a layer instead of
+a phase: **Environment complete, Company premarket unavailable, News unavailable**, with the
+order of work that closes it (P1 the report itself, labelled for what it holds; P2 a
+per-asset pre-market quote; P3 overnight news; P4 the morning's macro result) and an
+explicit list of what is not being added.
+
+**Reason.** A document that says "off until X" goes stale silently, and a stale line about
+why something is off is read as evidence about whether it is on. The cost is not a wrong
+report; it is a person spending an evening looking for a fault in four components that are
+not involved. The other correction matters more: **"not worth doing" was the wrong
+summary.** The report is worth having — it is the hour before the open — and what it lacks
+is the company half, which is different work in a different layer.
+
+**Impact.** The next round has a name, and it is the Company Layer. The Environment layer is
+declared finished: no more market indicators, no more yields, no more futures, no more
+sectors, because a layer that already answers its question only gets longer when things are
+added to it.
+
+**Revisit.** When P1 is built, at which point the first paragraph of this entry becomes
+false and is the thing that has to be edited.
+
+---
+
 End of Document
