@@ -136,7 +136,7 @@ def test_a_row_missing_a_leg_is_dropped_rather_than_repaired() -> None:
     # A spread computed from one yield and one guess is not a spread, so a row that is
     # missing a leg is skipped and the pair used is the two sessions that are whole.
     payload = _file(
-        '09/18/2026,3.97,3.98,4.10,4.14,4.24,4.24,4.44,4.76,4.83,4.86,4.93,,5.38,5.34',
+        "09/18/2026,3.97,3.98,4.10,4.14,4.24,4.24,4.44,4.76,4.83,4.86,4.93,,5.38,5.34",
         _row("09/17/2026", two_year=4.67, ten_year=4.94),
         _row("09/16/2026", two_year=4.74, ten_year=5.01),
     )
@@ -180,9 +180,10 @@ def test_a_file_with_a_single_session_answers_the_level_and_no_move() -> None:
 
     assert _value(snapshot, EnvironmentMetric.CURVE_STEEPNESS) is not None
     assert snapshot.point(EnvironmentMetric.CURVE_CHANGE).value is None
-    assert "one usable curve session" in snapshot.point(
-        EnvironmentMetric.CURVE_CHANGE
-    ).reason
+    assert (
+        "one usable curve session"
+        in snapshot.point(EnvironmentMetric.CURVE_CHANGE).reason
+    )
 
 
 def test_a_year_that_has_not_been_published_yet_reads_the_previous_one() -> None:

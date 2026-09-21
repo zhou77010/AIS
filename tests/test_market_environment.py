@@ -319,9 +319,7 @@ def test_a_measurement_no_source_carries_says_so() -> None:
 
 def test_the_composite_joins_what_the_sources_answer() -> None:
     first = _Source("First", (_point(EnvironmentMetric.VOLATILITY, 14.8),))
-    second = _Source(
-        "Second", (_point(EnvironmentMetric.CURVE_STEEPNESS, 25.0),)
-    )
+    second = _Source("Second", (_point(EnvironmentMetric.CURVE_STEEPNESS, 25.0),))
 
     snapshot = CompositeEnvironmentProvider((first, second)).fetch()
 

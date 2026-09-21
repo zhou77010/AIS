@@ -582,17 +582,13 @@ def test_a_bank_is_told_which_way_the_curve_is_going() -> None:
     steeper = _market_lines(
         _result(
             asset=_asset("HSBC", AssetProfile.FINANCIAL),
-            environment=_environment(
-                **{EnvironmentMetric.CURVE_CHANGE: 8.0}
-            ),
+            environment=_environment(**{EnvironmentMetric.CURVE_CHANGE: 8.0}),
         )
     )
     flatter = _market_lines(
         _result(
             asset=_asset("HSBC", AssetProfile.FINANCIAL),
-            environment=_environment(
-                **{EnvironmentMetric.CURVE_CHANGE: -8.0}
-            ),
+            environment=_environment(**{EnvironmentMetric.CURVE_CHANGE: -8.0}),
         )
     )
 
@@ -631,9 +627,7 @@ def test_an_asset_that_is_not_rate_sensitive_is_not_told_about_the_curve() -> No
 
 def test_the_curve_is_named_in_the_environment_when_it_is_inverted() -> None:
     lines = _market_lines(
-        _result(
-            environment=_environment(**{EnvironmentMetric.CURVE_STEEPNESS: -30.0})
-        )
+        _result(environment=_environment(**{EnvironmentMetric.CURVE_STEEPNESS: -30.0}))
     )
     environment = lines[-1]
 

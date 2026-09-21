@@ -677,7 +677,9 @@ def test_a_shared_conclusion_that_does_not_fit_is_broken_not_overflowed() -> Non
     # here reads aloud as one sentence, so an overflow would only be visible as a line
     # running off the screen.
     lines = _render([_thin("AAPL"), _thin("CGDV")])
-    label = next(index for index, line in enumerate(lines) if line.startswith("共同结论"))
+    label = next(
+        index for index, line in enumerate(lines) if line.startswith("共同结论")
+    )
 
     assert "尚无可用的类别判断" in lines[label + 1], lines
     for line in lines:
