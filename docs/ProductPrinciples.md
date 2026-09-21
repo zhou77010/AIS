@@ -450,4 +450,35 @@ never visible in the output.
 
 ---
 
+## 14. Evidence Maturity Rule
+
+New evidence is connected before it is trusted, and the two are separate decisions.
+
+**A new measurement arrives described and not graded.** It enters through the same path
+everything else travels — evidence, then a reading, then a sentence — and it carries a
+word and no score. A reader is told what it says and is told nothing about what it is
+worth: AIS has decided what the number reads as and has not decided what it is for.
+
+**Why the distinction is not a formality.** A graded measurement does not merely appear
+in the report. It enters the mean of its category, it moves that category's grade, it can
+meet or fail the bar an opportunity condition is decided at, and — because a grade that
+moved is a change — it reorders what the brief leads with. Grading is therefore a change
+to what AIS *concludes*, not to what it *says*, and a conclusion changed quietly by adding
+a data source is the kind of change nobody reviews.
+
+**So the promotion is its own decision, and it comes later.** A measurement is promoted
+to graded once real runs have shown what it reads as: whether its bands separate anything,
+whether the flat band is where it should be, whether a month of values has ever left the
+middle of the scale. Until then it is described in every report and reaches no grade, no
+condition and no ordering. Entering HPO is a further decision on top of that one, and not
+the same one.
+
+**The rule is about evidence, and it binds the whole chain.** Nothing may route around it:
+a fact not yet promoted may not be sorted on in the brief, weighted by hand, or given an
+extra score because it "obviously" matters. If it should change what the reader looks at
+first, it earns that by being graded — through the reading layer, with a scale somebody
+approved — and not by a special case.
+
+---
+
 End of Document

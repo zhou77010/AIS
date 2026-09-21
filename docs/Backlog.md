@@ -238,6 +238,62 @@ about which categories HPO reads, and it is not decided here.
 
 ---
 
+## Company Layer — what is connected, and what it is not
+
+**The phase that is open.** Everything AIS has read per asset has been about the asset
+as a thing to value: what it costs, what it earns, how the price has behaved. Two facts
+about the company *itself*, as of now, are connected in this round, and they are the
+first of the layer the 21:00 report and half the Report Model have been waiting for.
+
+| Fact | State | Where it comes from |
+| --- | --- | --- |
+| **The move price made before the session opened** | **Connected.** The premarket price against the previous close, one number, read as a band and written into a sentence. | The vendor's quote summary, `price` module. Both legs are named in the evidence reason, so the size of the move can be checked against the two prices it came from. |
+| **What the last report did against what was expected of it** | **Connected.** The most recent reported quarter's surprise, read as a band and written into a sentence. The quarters before it are logged and never read. | The vendor's quote summary, `earningsHistory` module. One source carries both the reported figure and the estimate it was held to, so the surprise cannot be a comparison between two authors. |
+| **What the company said about its own next quarter** | **Not connected, and it is not obtainable.** Recorded as absent, with the reason, in the evidence for every asset. | Nothing AIS reads publishes it. What is published is what analysts expect, which is a different fact about a different author. |
+| **Premarket volume** | **Not connected.** Deferred as P1.5, and it may never be obtainable from this source. | The quote summary publishes no premarket volume at all, and the intraday chart returns premarket bars with their volume reported as zero — measured against the live endpoints, not assumed. Connecting it would cost one extra request per asset per pass for a number that currently arrives empty. |
+| **Company news** | **Deferred by decision.** The quality of the free headline feed is far below that of a reported result or a traded price. | — |
+| **Insider transactions and buybacks** | **Deferred to P2.** Low frequency, high explanatory value, low immediacy. | The vendor's share purchase activity, and the filings themselves. |
+
+### New evidence is connected before it is trusted
+
+**Both facts arrive described and not graded**, and that is the whole of the design rather
+than an unfinished part of it. They are filed under the category whose question they
+answer, they are read against a scale in the reading layer, and they are written into the
+report's sentences. They carry no score, so they do not move a category's mean, do not
+meet or fail an opportunity condition, and do not reorder the brief.
+
+**Why it stops there.** A graded measurement does not only appear in the report: it enters
+its category's mean, and a grade that moved is a change, and a change is what makes an
+asset lead the brief. Grading is therefore a change to what AIS concludes, and a
+conclusion changed by connecting a data source is exactly the kind of change that would
+never be reviewed. So the promotion is its own decision, taken once real runs have shown
+what the measurement reads as — whether its bands separate anything, whether a month of
+values has ever left the middle of the scale.
+
+**What is deliberately not done to force the effect.** No measurement is weighted, given
+an extra score, or sorted on in the brief because it seems important. The order of the
+brief is decided by the table it was always decided by, and a fact that should change it
+earns that by being graded through the reading layer, with a scale somebody approved.
+
+### What the two facts change, and what they do not
+
+| | Now | After a promotion decision |
+| --- | --- | --- |
+| The evidence stream | Carried, with the reason it was retrieved or why it is missing | unchanged |
+| The category reading | Read, with a word and no score | Same reading, now with a score |
+| The report's sentences | Said, with the size and the band's own words | unchanged |
+| The category's grade | **Unchanged** | Would move with the reading |
+| The opportunity conditions | **Cannot be read from either category** — the four measured conditions and the catalyst window are the same five they were | Would move only if the category is one a condition reads, which is a separate decision |
+| The order of the brief | **Unchanged** | Would move, because a grade that moved is a change |
+
+**The gap that this leaves, stated rather than hidden.** Neither fact can change Today
+Priority yet. That is the price of connecting evidence without concluding from it, and it
+is paid deliberately: the alternative was to grade a scale nobody has looked at a real
+month of, which would have decided what a premarket move is worth on the day the field
+was first read.
+
+---
+
 ## Reading Layer — done, and it is now one layer
 
 **Completed.** The conventions AIS uses to read its own numbers were written down in
@@ -495,7 +551,6 @@ earliest answer. Two are wired: the evaluation cycle on its interval, and the br
 at an hour of the day. Adding 21:00 later is another schedule and nothing else.
 
 ### Nothing fires at 21:00, and a missing report there is not a fault
-
 **Two schedules exist: `cycle` and `morning-brief`.** Those two are what
 `app/application.py` registers and there are no others; the scheduler sleeps to the
 earliest moment either of them is owed. **The 21:00 Pre-Market Brief is defined and

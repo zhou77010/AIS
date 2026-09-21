@@ -1782,4 +1782,91 @@ false and is the thing that has to be edited.
 
 ---
 
+### Evidence is connected before it is trusted
+
+**Context.** The Company Layer started with two facts: the move price made before the
+session opened, and what the last report did against the estimate it was held to. Both
+are reachable — the vendor's quote summary publishes a premarket price and four quarters
+of reported results — and both are the kind of fact a reader would want to see before
+anything else. The obvious next step was to grade them, because a graded measurement is
+what moves a category's grade, and a grade that moved is what makes an asset lead the
+brief. That is what "evidence that can change Today Priority" was asked for.
+
+**Decision.** They are connected and **not graded**. They travel the whole path every
+other measurement travels — evidence, then a reading, then a sentence — and they carry a
+word and no score. Promoting either one to graded, and any question of HPO reading them,
+is a separate decision taken after real runs have shown what they read as.
+
+**Reason.** Grading is not a display setting. A graded measurement enters its category's
+mean; the mean decides the category's grade; a grade that moved is a change; a change is
+what a brief leads with. So grading a new source changes what AIS *concludes*, and doing
+that on the day a field is first read means deciding what a premarket move is worth
+before seeing one. The two things being separated here are saying and concluding: what
+the number reads as is a fact about the number, and what it is for is a judgement, and
+they were about to be made in one keystroke.
+
+**Impact.** Both facts appear in the evidence stream, in the reading, and in the report's
+sentences, and neither can move a grade, a condition or the order of the brief. What that
+costs is stated rather than hidden: Today Priority cannot be changed by company evidence
+yet, and the way it will be changed is by promoting a measurement that has earned it,
+never by a special case in the renderer.
+
+**Revisit.** After a period of real runs. The questions for that review are specific:
+does the flat band sit where the moves actually cluster, does a month of values ever
+leave the middle of the scale, and does either fact separate one asset from another. A
+scale that never leaves the middle has not been read at all.
+
+---
+
+### Guidance is absent, and nothing stands in for it
+
+**Context.** The third fact wanted for the Company Layer was guidance: what a company said
+about its own next quarter. No source AIS reads publishes it. What the vendor publishes
+instead is a table of analyst estimates for the coming quarters, which is easy to reach
+and looks like the same thing.
+
+**Decision.** Guidance is recorded as absent, for every asset, with the reason. The
+analyst table is not read in its place and is not called guidance anywhere.
+
+**Reason.** An analyst's expectation is a fact about an analyst. Reporting it under the
+name of guidance would state that a company guided to a number it never mentioned, and
+nothing in the output would look wrong — the failure mode this project keeps finding. The
+same reasoning that made a discounted cash flow fair value permanently absent applies: an
+absence that is written down looks like a decision, and an absence that is filled with the
+nearest available number looks like an answer.
+
+**Impact.** A reader is told that guidance is unavailable, in the sentence about the last
+report, rather than being left to assume it was not looked for.
+
+**Revisit.** If a source that publishes company guidance is found and approved. It would
+be a new source with its own authority decision, not a substitution.
+
+---
+
+### The premarket volume is not there to read
+
+**Context.** Premarket volume was on the list: price, volume and the gap are the three
+things a premarket reading usually means. The vendor's quote summary publishes a premarket
+price and no premarket volume, so the intraday chart was asked for its extended session
+instead.
+
+**Decision.** Premarket volume is deferred, and recorded as possibly unobtainable from
+this source rather than merely not yet connected.
+
+**Reason.** The chart does return premarket bars — sixty-six of them on a five minute
+interval — and every one of them carries a volume of zero, while the regular session bars
+beside them carry real volumes. That is the source saying it does not publish the number,
+not AIS failing to ask for it. The alternative reading, that the volume is genuinely zero,
+would be wrong on its face for a symbol that traded in the premarket, and it would cost an
+extra request per asset per pass to obtain a column of zeroes.
+
+**Impact.** The 21:00 report will have a premarket price and a gap, and no volume to
+confirm that a move was traded rather than quoted. That is worth knowing before the report
+is designed rather than after.
+
+**Revisit.** When another source is added, or if the quote summary begins publishing it.
+The check is one request, and the answer was measured rather than assumed.
+
+---
+
 End of Document
