@@ -26,7 +26,7 @@ from app.morning_brief import (
     BriefOutcome,
     MorningBrief,
 )
-from app.runtime_state import BriefDelivery, BriefRecord, RuntimeState
+from app.runtime_state import ReportDelivery, ReportName, ReportRecord, RuntimeState
 from app.scheduler import IntervalSchedule, Scheduler
 from config.config import Config
 from contracts.market_data_provider import MarketDataSnapshot
@@ -116,21 +116,24 @@ def test_an_hour_already_behind_is_owed_now_rather_than_skipped() -> None:
 
 
 def test_nothing_is_recorded_when_nothing_is_written(tmp_path: Path) -> None:
-    assert RuntimeState(path=tmp_path / "runtime.json").brief_record() is None
+    assert (
+        RuntimeState(path=tmp_path / "runtime.json").report(ReportName.MORNING_BRIEF)
+        is None
+    )
 
 
 def test_the_state_of_the_day_survives_a_restart(tmp_path: Path) -> None:
     path = tmp_path / "runtime.json"
-    record = BriefRecord(
+    record = ReportRecord(
         day=date(2026, 9, 18),
-        delivery=BriefDelivery.OWED,
+        delivery=ReportDelivery.OWED,
         attempts=2,
         attempted_at=_NINE_BEIJING_UTC,
     )
-    RuntimeState(path=path).record_brief(record)
+    RuntimeState(path=path).record_report(ReportName.MORNING_BRIEF, record)
 
     # A different object reading the same file is what a restart looks like.
-    assert RuntimeState(path=path).brief_record() == record
+    assert RuntimeState(path=path).report(ReportName.MORNING_BRIEF) == record
 
 
 def test_the_state_file_holds_the_day_the_state_and_the_attempts(
@@ -139,23 +142,121 @@ def test_the_state_file_holds_the_day_the_state_and_the_attempts(
     # Not a flag: a day that reached nobody is owed, and "a brief was sent at some
     # point" cannot say that.
     path = tmp_path / "runtime.json"
-    RuntimeState(path=path).record_brief(
-        BriefRecord(
+    RuntimeState(path=path).record_report(
+        ReportName.MORNING_BRIEF,
+        ReportRecord(
             day=date(2026, 9, 18),
-            delivery=BriefDelivery.SENT,
+            delivery=ReportDelivery.SENT,
             attempts=1,
             attempted_at=_NINE_BEIJING_UTC,
-        )
+        ),
     )
 
     assert json.loads(path.read_text(encoding="utf-8")) == {
-        "morning_brief": {
-            "day": "2026-09-18",
-            "delivery": "sent",
-            "attempts": 1,
-            "attempted_at": _NINE_BEIJING_UTC.isoformat(),
+        "reports": {
+            "morning_brief": {
+                "day": "2026-09-18",
+                "delivery": "sent",
+                "attempts": 1,
+                "attempted_at": _NINE_BEIJING_UTC.isoformat(),
+            }
         }
     }
+
+
+def test_the_record_written_today_is_still_read(tmp_path: Path) -> None:
+    # The state on disk was written before a report had a bucket of its own. The day it
+    # names is a fact the runtime recorded, so the upgrade reads it rather than treating
+    # the day as owed and sending the reader a second copy.
+    path = tmp_path / "runtime.json"
+    path.write_text(
+        json.dumps(
+            {
+                "morning_brief": {
+                    "day": "2026-09-18",
+                    "delivery": "sent",
+                    "attempts": 1,
+                    "attempted_at": _NINE_BEIJING_UTC.isoformat(),
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    record = RuntimeState(path=path).report(ReportName.MORNING_BRIEF)
+
+    assert record == ReportRecord(
+        day=date(2026, 9, 18),
+        delivery=ReportDelivery.SENT,
+        attempts=1,
+        attempted_at=_NINE_BEIJING_UTC,
+    )
+
+
+def test_one_reports_state_is_not_another_reports(tmp_path: Path) -> None:
+    # The point of a bucket per report: two reports that shared one would each read the
+    # other's day as their own, and would then either send a second copy or stay silent.
+    path = tmp_path / "runtime.json"
+    path.write_text(
+        json.dumps(
+            {
+                "reports": {
+                    "premarket_brief": {
+                        "day": "2026-09-18",
+                        "delivery": "sent",
+                        "attempts": 1,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = RuntimeState(path=path)
+
+    assert state.report(ReportName.MORNING_BRIEF) is None
+
+
+def test_writing_one_report_leaves_the_others_as_they_were(tmp_path: Path) -> None:
+    path = tmp_path / "runtime.json"
+    path.write_text(
+        json.dumps(
+            {
+                "reports": {
+                    "premarket_brief": {
+                        "day": "2026-09-17",
+                        "delivery": "abandoned",
+                        "attempts": 3,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    RuntimeState(path=path).record_report(
+        ReportName.MORNING_BRIEF,
+        ReportRecord(day=date(2026, 9, 18), delivery=ReportDelivery.SENT, attempts=1),
+    )
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert set(written["reports"]) == {"premarket_brief", "morning_brief"}
+    assert written["reports"]["premarket_brief"]["delivery"] == "abandoned"
+
+
+def test_the_earlier_shapes_are_not_written_again(tmp_path: Path) -> None:
+    # Once the record is in its own bucket the older keys are dropped, so the file
+    # cannot hold two records for one report that disagree about the day.
+    path = tmp_path / "runtime.json"
+    path.write_text('{"morning_brief_sent_on": "2026-09-17"}', encoding="utf-8")
+
+    RuntimeState(path=path).record_report(
+        ReportName.MORNING_BRIEF, ReportRecord(day=date(2026, 9, 18))
+    )
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert "morning_brief_sent_on" not in written
+    assert "morning_brief" not in written
 
 
 def test_a_state_file_from_the_older_format_is_still_read(tmp_path: Path) -> None:
@@ -165,11 +266,11 @@ def test_a_state_file_from_the_older_format_is_still_read(tmp_path: Path) -> Non
     path = tmp_path / "runtime.json"
     path.write_text('{"morning_brief_sent_on": "2026-09-18"}', encoding="utf-8")
 
-    record = RuntimeState(path=path).brief_record()
+    record = RuntimeState(path=path).report(ReportName.MORNING_BRIEF)
 
     assert record is not None
     assert record.day == date(2026, 9, 18)
-    assert record.delivery is BriefDelivery.SENT
+    assert record.delivery is ReportDelivery.SENT
 
 
 def test_a_record_that_cannot_be_read_is_treated_as_no_record(tmp_path: Path) -> None:
@@ -179,7 +280,7 @@ def test_a_record_that_cannot_be_read_is_treated_as_no_record(tmp_path: Path) ->
         '{"morning_brief": {"day": "not a day", "delivery": "sent"}}', encoding="utf-8"
     )
 
-    assert RuntimeState(path=path).brief_record() is None
+    assert RuntimeState(path=path).report(ReportName.MORNING_BRIEF) is None
 
 
 def test_an_unknown_state_is_treated_as_no_record(tmp_path: Path) -> None:
@@ -189,14 +290,14 @@ def test_an_unknown_state_is_treated_as_no_record(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    assert RuntimeState(path=path).brief_record() is None
+    assert RuntimeState(path=path).report(ReportName.MORNING_BRIEF) is None
 
 
 def test_an_unreadable_state_file_is_treated_as_an_empty_one(tmp_path: Path) -> None:
     path = tmp_path / "runtime.json"
     path.write_text("{not json", encoding="utf-8")
 
-    assert RuntimeState(path=path).brief_record() is None
+    assert RuntimeState(path=path).report(ReportName.MORNING_BRIEF) is None
 
 
 def test_a_state_file_that_cannot_be_written_does_not_raise(tmp_path: Path) -> None:
@@ -205,8 +306,8 @@ def test_a_state_file_that_cannot_be_written_does_not_raise(tmp_path: Path) -> N
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory", encoding="utf-8")
 
-    RuntimeState(path=blocker / "runtime.json").record_brief(
-        BriefRecord(day=date(2026, 9, 18))
+    RuntimeState(path=blocker / "runtime.json").record_report(
+        ReportName.MORNING_BRIEF, ReportRecord(day=date(2026, 9, 18))
     )
 
 
@@ -267,8 +368,9 @@ def test_a_restarted_brief_does_not_send_a_second_copy(tmp_path: Path) -> None:
 def test_a_brief_that_was_missed_is_still_owed(tmp_path: Path) -> None:
     # Yesterday's brief says nothing about today's.
     path = tmp_path / "s.json"
-    RuntimeState(path=path).record_brief(
-        BriefRecord(day=date(2026, 9, 17), delivery=BriefDelivery.SENT, attempts=1)
+    RuntimeState(path=path).record_report(
+        ReportName.MORNING_BRIEF,
+        ReportRecord(day=date(2026, 9, 17), delivery=ReportDelivery.SENT, attempts=1),
     )
 
     brief = _brief(lambda: _delivered(), RuntimeState(path=path))
@@ -281,10 +383,10 @@ def test_a_delivered_brief_settles_the_day(tmp_path: Path) -> None:
 
     _brief(lambda: _delivered(), state).work()
 
-    record = state.brief_record()
+    record = state.report(ReportName.MORNING_BRIEF)
     assert record is not None
     assert record.day == date(2026, 9, 18)
-    assert record.delivery is BriefDelivery.SENT
+    assert record.delivery is ReportDelivery.SENT
     assert record.attempts == 1
 
 
@@ -297,9 +399,9 @@ def test_a_partial_failure_still_counts_as_delivered(tmp_path: Path) -> None:
 
     _brief(lambda: _delivered(CycleStatus.EVALUATION_FAILED), state).work()
 
-    record = state.brief_record()
+    record = state.report(ReportName.MORNING_BRIEF)
     assert record is not None
-    assert record.delivery is BriefDelivery.SENT
+    assert record.delivery is ReportDelivery.SENT
 
 
 # --------------------------------------------------------------------------
@@ -312,10 +414,10 @@ def test_a_brief_that_reached_nobody_is_not_recorded_as_sent(tmp_path: Path) -> 
 
     status = _brief(lambda: _undelivered(), state).work()
 
-    record = state.brief_record()
+    record = state.report(ReportName.MORNING_BRIEF)
     assert status is CycleStatus.EVALUATION_FAILED
     assert record is not None
-    assert record.delivery is BriefDelivery.OWED
+    assert record.delivery is ReportDelivery.OWED
     assert record.attempts == 1
 
 
@@ -355,10 +457,10 @@ def test_a_brief_is_attempted_at_most_the_stated_number_of_times(
     for _ in range(MAX_BRIEF_ATTEMPTS):
         brief.work()
 
-    record = state.brief_record()
+    record = state.report(ReportName.MORNING_BRIEF)
     assert record is not None
     assert record.attempts == MAX_BRIEF_ATTEMPTS
-    assert record.delivery is BriefDelivery.ABANDONED
+    assert record.delivery is ReportDelivery.ABANDONED
 
 
 def test_a_brief_that_ran_out_of_attempts_is_not_tried_again_that_day(
@@ -383,9 +485,9 @@ def test_a_delivery_after_a_failure_settles_the_day(tmp_path: Path) -> None:
     brief.work()
     brief.work()
 
-    record = state.brief_record()
+    record = state.report(ReportName.MORNING_BRIEF)
     assert record is not None
-    assert record.delivery is BriefDelivery.SENT
+    assert record.delivery is ReportDelivery.SENT
     assert record.attempts == 2
     assert brief.next_due(_NINE_BEIJING_UTC) == _NINE_BEIJING_UTC + timedelta(days=1)
 
@@ -395,22 +497,23 @@ def test_the_attempts_survive_a_restart(tmp_path: Path) -> None:
     # or a persistent outage would be retried for ever by a process that keeps
     # coming back.
     path = tmp_path / "s.json"
-    RuntimeState(path=path).record_brief(
-        BriefRecord(
+    RuntimeState(path=path).record_report(
+        ReportName.MORNING_BRIEF,
+        ReportRecord(
             day=date(2026, 9, 18),
-            delivery=BriefDelivery.OWED,
+            delivery=ReportDelivery.OWED,
             attempts=MAX_BRIEF_ATTEMPTS,
             attempted_at=_NINE_BEIJING_UTC,
-        )
+        ),
     )
     work, calls = _counting_work(delivered=False)
 
     restarted = _brief(work, RuntimeState(path=path))
     restarted.work()
 
-    record = RuntimeState(path=path).brief_record()
+    record = RuntimeState(path=path).report(ReportName.MORNING_BRIEF)
     assert record is not None
-    assert record.delivery is BriefDelivery.ABANDONED
+    assert record.delivery is ReportDelivery.ABANDONED
     assert calls == [1]
 
 

@@ -50,12 +50,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
-from app.runtime_state import BriefDelivery, BriefRecord, RuntimeState
+from app.runtime_state import ReportDelivery, ReportName, ReportRecord, RuntimeState
 from config.logging_config import get_logger
 from utils.constants import CycleStatus
 from utils.daily_moment import DailyMoment
 
 _LOGGER_NAME = "runtime"
+
+# Where this report's state is written. It is not the name the scheduler logs, and it
+# is not shared with any other report: a report that read another's day as its own
+# would either send a second copy or stay silent, and neither is visible from outside.
+_REPORT = ReportName.MORNING_BRIEF
 
 # How many times the brief is attempted in one day. Three: the point is to survive an
 # outage that lasts minutes at the hour the brief was due, and not to keep a phone
@@ -113,7 +118,7 @@ class MorningBrief:
         self._state = state
         self._work = work
         self._clock = clock if clock is not None else _utc_now
-        self._memory: BriefRecord | None = None
+        self._memory: ReportRecord | None = None
         self._logger = get_logger(_LOGGER_NAME)
 
     @property
@@ -197,19 +202,19 @@ class MorningBrief:
     def _settle(
         self,
         day: date,
-        record: BriefRecord,
+        record: ReportRecord,
         moment: datetime,
         outcome: BriefOutcome,
     ) -> CycleStatus:
         """Write down what one attempt did to the day and report it."""
         attempt = replace(record, attempts=record.attempts + 1, attempted_at=moment)
         if outcome.delivered:
-            self._commit(replace(attempt, delivery=BriefDelivery.SENT))
+            self._commit(replace(attempt, delivery=ReportDelivery.SENT))
             self._logger.info("morning brief for %s was delivered", day)
             return outcome.status
 
         if attempt.attempts >= MAX_BRIEF_ATTEMPTS:
-            self._commit(replace(attempt, delivery=BriefDelivery.ABANDONED))
+            self._commit(replace(attempt, delivery=ReportDelivery.ABANDONED))
             self._logger.error(
                 "the brief for %s reached nobody in %d attempts and will not be "
                 "tried again today; the reader was not told",
@@ -228,7 +233,7 @@ class MorningBrief:
         )
         return outcome.status
 
-    def _record(self, day: date) -> BriefRecord:
+    def _record(self, day: date) -> ReportRecord:
         """Return where the given day's brief stands.
 
         A record about another day says nothing about this one: the brief is owed once
@@ -236,20 +241,20 @@ class MorningBrief:
         copy of what it has done as well as reading the file, so that a state file
         which cannot be written cannot make the brief run again for ever.
         """
-        record = _furthest(self._memory, self._state.brief_record())
+        record = _furthest(self._memory, self._state.report(_REPORT))
         if record is None or record.day != day:
-            return BriefRecord(day=day)
+            return ReportRecord(day=day)
         return record
 
-    def _commit(self, record: BriefRecord) -> None:
+    def _commit(self, record: ReportRecord) -> None:
         """Write down where today's brief stands, in memory and on disk."""
         self._memory = record
-        self._state.record_brief(record)
+        self._state.record_report(_REPORT, record)
 
 
 def _furthest(
-    first: BriefRecord | None, second: BriefRecord | None
-) -> BriefRecord | None:
+    first: ReportRecord | None, second: ReportRecord | None
+) -> ReportRecord | None:
     """Return whichever of two records is further along.
 
     Two records describe the same day when the file is readable, and the one with more
