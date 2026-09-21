@@ -162,7 +162,20 @@ def _conditions(context: InsightContext) -> str:
     rates = context.word(E.TEN_YEAR_YIELD_CHANGE)
     if rates is not None and context.moved(E.TEN_YEAR_YIELD_CHANGE):
         parts.append(rates)
+    curve = _inverted_curve_clause(context)
+    if curve is not None:
+        parts.append(curve)
     return "、".join(parts) if parts else "环境各项指标均无明显变化"
+
+
+def _inverted_curve_clause(context: InsightContext) -> str | None:
+    """Return the shape of the curve when it is inverted, and nothing otherwise.
+
+    A level is named when it is a state the reader has to know about. "The curve is
+    normal" every morning is noise; an inverted curve is not, and it is worth saying
+    even on a day when it did not move.
+    """
+    return context.word(E.CURVE_STEEPNESS) if _curve_is_inverted(context) else None
 
 
 def _verdict(context: InsightContext) -> str:
@@ -303,24 +316,41 @@ def _kind(context: InsightContext) -> _Impact | None:
 
 
 def _sensitivity(context: InsightContext) -> _Impact | None:
-    """Return an exposure AIS can name and cannot yet judge the direction of.
+    """Return what the shape of the curve means for a rate sensitive business.
 
-    A bank's margin moves with the shape of the yield curve and not with one yield,
-    and the curve is not connected. The exposure is real and a reader holding the
-    asset needs to know it is there, so the sentence states the exposure and says
-    plainly that the direction is not judged. Reading a direction out of one yield
-    would be a guess dressed as a finding.
+    This is the sentence that used to say the direction could not be judged. A bank's
+    margin moves with the shape of the curve rather than with one yield, and the curve
+    is read now — from the Treasury's daily file, which is the only place rates are read
+    from — so the sentence can say which way the margin environment is moving.
+
+    An inverted curve is named whether or not it moved: it is a state a holder of a
+    financial needs to know about, and the morning after it stopped moving it is still
+    inverted.
     """
     if context.profile is not _FINANCIAL_PROFILE:
         return None
-    if not context.moved(E.TEN_YEAR_YIELD_CHANGE):
+    inverted = _curve_is_inverted(context)
+    if not inverted and not context.moved(E.CURVE_CHANGE):
         return None
-    rates = context.word(E.TEN_YEAR_YIELD_CHANGE)
-    return _Impact(
-        f"{rates}，本标的属金融机构，息差与资产质量直接受利率影响，"
-        f"方向还需要收益率曲线的形状，目前判断不了。",
-        context.reference(E.TEN_YEAR_YIELD_CHANGE),
-    )
+    references = context.reference(E.CURVE_CHANGE, E.CURVE_STEEPNESS)
+    if inverted:
+        return _Impact(
+            f"{context.word(E.CURVE_STEEPNESS)}，金融机构的息差环境偏紧。", references
+        )
+    if context.rose(E.CURVE_CHANGE):
+        return _Impact("曲线走陡，金融机构的息差环境偏有利。", references)
+    return _Impact("曲线趋平，金融机构的息差环境偏紧。", references)
+
+
+def _curve_is_inverted(context: InsightContext) -> bool:
+    """Return whether the curve is inverted, which is what a negative spread is.
+
+    It is asked of the value rather than of a band because inversion has a definition
+    and not a threshold: a ten year yield below a two year yield is an inverted curve,
+    by the meaning of the words.
+    """
+    spread = context.value(E.CURVE_STEEPNESS)
+    return spread is not None and spread < 0
 
 
 def _risk_is_falling(context: InsightContext) -> bool:

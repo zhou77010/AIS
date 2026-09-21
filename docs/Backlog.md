@@ -119,8 +119,29 @@ a reader can tell a shared fact from one of the asset's own.
 | Nasdaq 100 futures since the last close | `NQ=F` | Which end of the market it is being taken in |
 | Volatility index level | `^VIX` | How turbulent the conditions are |
 | Volatility index change | `^VIX` | Whether they are settling or deteriorating |
-| Ten year yield change, in basis points | `^TNX` | Which way the cost of money is going |
+| Ten year yield change, in basis points | **United States Treasury** | Which way the cost of money is going |
+| The ten year less the two year, in basis points | **United States Treasury** | The shape of the curve, and whether it is inverted |
+| The same spread's change, in basis points | **United States Treasury** | Whether the curve is steepening or flattening |
 | The asset's own sector against the market | the sector instruments | Is the part of the market this asset is in being bought |
+
+**Rates have one authority: the Treasury's own daily curve.** The vendor quotes a ten
+year yield too, and it is deliberately not read — not as a fallback either. Two
+slightly different ten year yields in one report are two versions of one fact, and a
+reader has no way to tell which one a sentence was written from. The composite refuses
+to carry one measurement twice, so the rule is enforced rather than remembered, and a
+source that cannot answer leaves a gap saying rates could not be read rather than a
+number from somewhere else.
+
+**And one definition of the curve.** The file carries the three month bill as well as
+the two year, and AIS reads the ten year less the two year, which is what the market
+quotes as "the curve". Holding both spreads would be the same defect as holding two ten
+year yields: one concept, two versions.
+
+**What the curve let the report say, and what it replaced.** The sentence about a
+financial used to end by admitting the direction could not be judged, because a bank's
+margin moves with the shape of the curve and only one yield was connected. It now says
+which way the margin environment is moving, and names an inverted curve whether or not
+it moved that day.
 
 **The sector is measured against the market and never on its own.** "Technology moved
 1%" says nothing when the market moved 0.9%; what a reader holding a technology
@@ -191,7 +212,7 @@ with what was found about them.
 | --- | --- |
 | The asset's own sector | **Connected.** The sector's move against the market, once per sector the universe is in. |
 | Market style | **Partly connected.** Growth against the broad market, read from the two index futures. A value and growth pair of sector instruments would say it in the same asset class rather than across two, and is not connected. |
-| The shape of the yield curve | **Not connected, and it is the next one worth doing.** It is what the rate sentence about a bank needs: one yield is a level and a bank's margin moves with the curve. A source is verified — the United States Treasury publishes the whole daily curve as CSV with no key — and what it needs decided first is whether all rate readings move to that source together, because a report holding a ten year yield from the vendor and a curve from the Treasury could state two different numbers about the same thing. |
+| The shape of the yield curve | **Connected.** Ten year less two year, level and change, from the Treasury's own daily file. The three month bill is published beside it and is not read: two definitions of "the curve" would be the same defect as two ten year yields. |
 | Realised macro releases — CPI, payrolls, growth readings | **Not connected, and there is no source AIS can read.** The vendor publishes no economic calendar, and the central bank provider publishes meeting dates that are still ahead: it was checked, and its next event is a month away with nothing behind it. So "what the important overnight release said" is not obtainable today, and the market's own response to it is what the futures, volatility and yields already record. |
 | Industry environment — policy, competition, cycle | Not connected. Named as a gap in the report. |
 | Flows — where money is actually moving | Not connected. The sector's relative move is a proxy and is stated as a comparison, never as a flow. |

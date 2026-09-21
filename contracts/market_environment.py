@@ -63,6 +63,8 @@ class EnvironmentMetric(StrEnum):
     VOLATILITY = "volatility"
     VOLATILITY_CHANGE = "volatility_change"
     TEN_YEAR_YIELD_CHANGE = "ten_year_yield_change"
+    CURVE_STEEPNESS = "curve_steepness"
+    CURVE_CHANGE = "curve_change"
 
     # Not a measurement of the whole market: it is a measurement of one part of it,
     # and which part an asset belongs to is stated rather than inferred. It is read
@@ -96,6 +98,8 @@ _LABELS: dict[EnvironmentMetric, str] = {
     EnvironmentMetric.VOLATILITY: "Volatility index level",
     EnvironmentMetric.VOLATILITY_CHANGE: "Volatility index change",
     EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: "Ten year yield change in basis points",
+    EnvironmentMetric.CURVE_STEEPNESS: "Ten year less two year yield, in basis points",
+    EnvironmentMetric.CURVE_CHANGE: "The same spread's change, in basis points",
     EnvironmentMetric.SECTOR_RELATIVE_MOVE: "Sector against the broad market",
 }
 
@@ -109,6 +113,8 @@ WIDE_METRICS: tuple[EnvironmentMetric, ...] = (
     EnvironmentMetric.VOLATILITY,
     EnvironmentMetric.VOLATILITY_CHANGE,
     EnvironmentMetric.TEN_YEAR_YIELD_CHANGE,
+    EnvironmentMetric.CURVE_STEEPNESS,
+    EnvironmentMetric.CURVE_CHANGE,
 )
 
 
@@ -157,11 +163,12 @@ class SectorMove:
 class EnvironmentSnapshot:
     """Every environment measurement retrieved at one moment.
 
-    The snapshot always carries one point per member of :data:`WIDE_METRICS`, so a
-    measurement the source could not provide is still visible and explained. The sector
-    measurements are held separately, because there is one of them per sector AIS
-    watches rather than one for the market: a snapshot cannot hold "the sector move"
-    without saying whose.
+    The snapshot a composite returns carries one point per member of
+    :data:`WIDE_METRICS`, so a measurement the sources could not provide is still
+    visible and explained. A snapshot one source returns carries only the points that
+    source measured. The sector measurements are held separately either way, because
+    there is one of them per sector AIS watches rather than one for the market: a
+    snapshot cannot hold "the sector move" without saying whose.
 
     Attributes:
         source: Name of the source the measurements came from.
@@ -223,7 +230,15 @@ class EnvironmentSnapshot:
 
 
 class EnvironmentProvider(Protocol):
-    """Contract for a source of environment measurements."""
+    """Contract for a source of environment measurements.
+
+    A provider answers with the measurements it is able to take. A snapshot from one
+    source carries the points it measured and no others: the measurements another
+    source carries are not its to fill in, and a point saying "not mine" would be a
+    claim about a file the provider never opened. A caller that needs every
+    measurement reads the composite, which fills what no source carries and refuses to
+    let one measurement arrive twice.
+    """
 
     def fetch(self) -> EnvironmentSnapshot:
         """Return the environment as it is at the moment of the call.
@@ -233,5 +248,5 @@ class EnvironmentProvider(Protocol):
         why, so an unreachable source degrades the analysis instead of stopping it.
 
         Returns:
-            Snapshot holding one point per measurement.
+            Snapshot holding the measurements this source takes.
         """

@@ -9,12 +9,21 @@ that one as the previous session would report a week's move as an overnight one.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 import pytest
 
-from contracts.market_environment import WIDE_METRICS, EnvironmentMetric
-from data.market_environment import YahooEnvironmentProvider
+from contracts.market_environment import (
+    WIDE_METRICS,
+    EnvironmentMetric,
+    EnvironmentPoint,
+    EnvironmentSnapshot,
+)
+from data.market_environment import (
+    CompositeEnvironmentProvider,
+    YahooEnvironmentProvider,
+)
 from models.sector import Sector
 
 
@@ -57,13 +66,11 @@ def _series(
     equity: list[float | None] = (100.0, 110.0),
     growth: list[float | None] = (200.0, 200.0),
     volatility: list[float | None] = (17.1, 15.4),
-    yield_: list[float | None] = (4.90, 4.95),
 ) -> dict[str, list[float | None]]:
     return {
         "ES=F": list(equity),
         "NQ=F": list(growth),
         "^VIX": list(volatility),
-        "^TNX": list(yield_),
     }
 
 
@@ -76,15 +83,29 @@ def _value(snapshot, metric: EnvironmentMetric) -> float | None:
     return snapshot.point(metric).value
 
 
-def test_a_snapshot_holds_one_point_per_market_measurement() -> None:
-    # Every measurement of the whole market, and no reading for a sector nobody asked
-    # about: a pass that measures no sectors costs no sector requests.
+def test_the_vendor_carries_the_measurements_it_owns_and_no_rates() -> None:
+    # The vendor also quotes a ten year yield, and it is deliberately not read: two
+    # slightly different ten year yields in one report are two versions of one fact.
+    # Rates come from the Treasury's own file and from nowhere else, so this provider
+    # answers with the futures and the volatility index and stops there.
     snapshot, transport = _fetch()
 
-    assert {point.metric for point in snapshot.points} == set(WIDE_METRICS)
+    assert {point.metric for point in snapshot.points} == {
+        metric for metric in WIDE_METRICS if not _is_a_rate(metric)
+    }
     assert snapshot.sectors == ()
     assert snapshot.is_live is True
     assert len(set(transport.urls)) == len(transport.urls), "each symbol once"
+    assert not any("TNX" in url for url in transport.urls), "no vendor rate quote"
+
+
+def _is_a_rate(metric: EnvironmentMetric) -> bool:
+    """Return whether a measurement is about rates, which the vendor does not carry."""
+    return metric in {
+        EnvironmentMetric.TEN_YEAR_YIELD_CHANGE,
+        EnvironmentMetric.CURVE_STEEPNESS,
+        EnvironmentMetric.CURVE_CHANGE,
+    }
 
 
 def test_the_change_is_the_last_two_sessions_not_the_range_start() -> None:
@@ -106,13 +127,6 @@ def test_the_move_is_stated_with_how_it_was_derived() -> None:
     assert "100.00" in reason and "110.00" in reason
 
 
-def test_the_yield_move_is_reported_in_basis_points() -> None:
-    snapshot, _ = _fetch(_series(yield_=[4.90, 4.95]))
-
-    move = _value(snapshot, EnvironmentMetric.TEN_YEAR_YIELD_CHANGE)
-    assert move == pytest.approx(5.0)
-
-
 def test_the_volatility_level_and_its_change_come_from_one_series() -> None:
     # Two measurements, one fact, one request: asking twice would be asking the same
     # question twice and could answer it with two different numbers.
@@ -120,7 +134,7 @@ def test_the_volatility_level_and_its_change_come_from_one_series() -> None:
 
     assert _value(snapshot, EnvironmentMetric.VOLATILITY) == pytest.approx(15.4)
     assert _value(snapshot, EnvironmentMetric.VOLATILITY_CHANGE) == pytest.approx(-0.6)
-    assert len(transport.urls) == 4
+    assert len(transport.urls) == 3
     assert sum("/chart/%5EVIX" in url for url in transport.urls) == 1
 
 
@@ -254,3 +268,63 @@ def test_a_sector_that_cannot_be_compared_without_the_market_says_why() -> None:
     assert move is not None
     assert move.value is None
     assert "market" in move.reason
+
+
+# --------------------------------------------------------------------------
+# One measurement, one source
+# --------------------------------------------------------------------------
+
+
+class _Source:
+    """Source stand-in answering with whatever points it was given."""
+
+    def __init__(self, source: str, points: tuple[EnvironmentPoint, ...]) -> None:
+        self._source = source
+        self._points = points
+
+    def fetch(self) -> EnvironmentSnapshot:
+        return EnvironmentSnapshot(
+            source=self._source,
+            retrieved_at=datetime(2026, 9, 21, 1, 0, tzinfo=UTC),
+            points=self._points,
+        )
+
+
+def _point(metric: EnvironmentMetric, value: float) -> EnvironmentPoint:
+    return EnvironmentPoint(metric=metric, value=value, reason=f"from {value}")
+
+
+def test_two_sources_carrying_one_measurement_is_refused() -> None:
+    # Two versions of one fact is the defect the single authority exists to prevent,
+    # and the second version would be invisible: a reader cannot tell which of two ten
+    # year yields a sentence was written from.
+    first = _Source("First", (_point(EnvironmentMetric.TEN_YEAR_YIELD_CHANGE, 5.0),))
+    second = _Source("Second", (_point(EnvironmentMetric.TEN_YEAR_YIELD_CHANGE, 7.0),))
+
+    snapshot = CompositeEnvironmentProvider((first, second)).fetch()
+
+    assert snapshot.point(EnvironmentMetric.TEN_YEAR_YIELD_CHANGE).value == 5.0
+    assert snapshot.source == "First, Second"
+
+
+def test_a_measurement_no_source_carries_says_so() -> None:
+    # Removing a source leaves a visible gap rather than a silent one.
+    snapshot = CompositeEnvironmentProvider(()).fetch()
+
+    assert {point.metric for point in snapshot.points} == set(WIDE_METRICS)
+    assert snapshot.is_live is False
+    for point in snapshot.points:
+        assert "No connected source measures" in point.reason
+
+
+def test_the_composite_joins_what_the_sources_answer() -> None:
+    first = _Source("First", (_point(EnvironmentMetric.VOLATILITY, 14.8),))
+    second = _Source(
+        "Second", (_point(EnvironmentMetric.CURVE_STEEPNESS, 25.0),)
+    )
+
+    snapshot = CompositeEnvironmentProvider((first, second)).fetch()
+
+    assert snapshot.point(EnvironmentMetric.VOLATILITY).value == pytest.approx(14.8)
+    spread = snapshot.point(EnvironmentMetric.CURVE_STEEPNESS).value
+    assert spread == pytest.approx(25.0)

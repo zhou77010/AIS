@@ -249,6 +249,33 @@ SCALES: dict[ReadableMetric, MetricScale] = {
         graded=False,
         flat="利率基本持平",
     ),
+    # The curve, read as the ten year less the two year. It is described and never
+    # graded: a steeper curve is not better in itself, because a steepening the market
+    # prices for recession and one it prices for growth are the same number and
+    # opposite news. Whether it helps or hurts is a statement about an asset — a bank's
+    # margin, a long duration business's discount rate — and it is made beside that
+    # asset's own measurements.
+    EnvironmentMetric.CURVE_STEEPNESS: _higher(
+        (
+            (100.0, "曲线陡峭"),
+            (25.0, "曲线正常"),
+            (0.0, "曲线平坦"),
+            (-25.0, "曲线轻度倒挂"),
+        ),
+        "曲线深度倒挂",
+        graded=False,
+    ),
+    EnvironmentMetric.CURVE_CHANGE: _higher(
+        (
+            (10.0, "曲线走陡"),
+            (3.0, "曲线略走陡"),
+            (-3.0, "曲线基本持平"),
+            (-10.0, "曲线趋平"),
+        ),
+        "曲线明显趋平",
+        graded=False,
+        flat="曲线基本持平",
+    ),
     # A sector is measured against the market it is in, so this scale reads a
     # difference rather than a level. It is graded: a sector being bought while the
     # market is not is a favourable condition for holding something in it, which is

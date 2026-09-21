@@ -1,8 +1,16 @@
-"""AIS Yahoo Finance environment provider.
+"""AIS environment providers, and the selection of them.
 
-Retrieves the measurements that belong to the market rather than to an asset, from
-the same vendor the asset data comes from and through the same endpoint. They are
-retrieved once per pass and shared by every asset in it.
+Retrieves the measurements that belong to the market rather than to an asset, from the
+sources that publish them, and shares them with every asset in a pass.
+
+**Two sources, and one authority per fact.** The equity futures, the volatility index
+and the sector instruments come from the market data vendor; the rates come from the
+United States Treasury's own daily curve, in
+:mod:`data.treasury_yield_curve`. The vendor also quotes a ten year yield and it is
+deliberately not read: two slightly different ten year yields in one report would be
+two versions of one fact, and a reader has no way to tell which one a sentence was
+written from. The composite refuses to carry one measurement twice, so that rule is
+enforced rather than remembered.
 
 **What is derived, and how.** Each measurement is read from a short daily bar series,
 as the most recent close against the one before it. That is the most recent session's
@@ -18,10 +26,10 @@ own move less the broad market's over the same session. Reading all eleven secto
 would be requests for sectors nobody holds; reading one sector's own move would say
 nothing, because the market moved too.
 
-Nothing here is a judgement. The provider states what the market did and how it
+Nothing here is a judgement. The providers state what the market did and how they
 derived it, and never whether that is good or bad for anything.
 
-The provider never raises and never invents a value: a measurement that cannot be
+No provider raises and no provider invents a value: a measurement that cannot be
 retrieved is returned as a point without a value that states why.
 """
 
@@ -34,6 +42,7 @@ from urllib.parse import quote
 
 from config.logging_config import get_logger
 from contracts.market_environment import (
+    WIDE_METRICS,
     EnvironmentMetric,
     EnvironmentPoint,
     EnvironmentProvider,
@@ -41,6 +50,7 @@ from contracts.market_environment import (
     SectorMove,
 )
 from data.http import HttpTransport, UrllibTransport
+from data.treasury_yield_curve import TreasuryYieldCurveProvider
 from models.sector import Sector
 
 SOURCE_NAME = "Yahoo Finance"
@@ -56,20 +66,19 @@ _CHART_URL = (
 _SERIES_RANGE = "5d"
 
 # Which symbol carries which measurement. Two measurements share a symbol, and the
-# series is therefore retrieved once for both.
+# series is therefore retrieved once for both. Rates are not here: they come from the
+# Treasury's own file, and the vendor's quote for the same yield is not read.
 _SYMBOL_BY_METRIC: dict[EnvironmentMetric, str] = {
     EnvironmentMetric.OVERNIGHT_EQUITY: "ES=F",
     EnvironmentMetric.OVERNIGHT_GROWTH: "NQ=F",
     EnvironmentMetric.VOLATILITY: "^VIX",
     EnvironmentMetric.VOLATILITY_CHANGE: "^VIX",
-    EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: "^TNX",
 }
 
 _SYMBOL_NAMES: dict[str, str] = {
     "ES=F": "S&P 500 futures",
     "NQ=F": "Nasdaq 100 futures",
     "^VIX": "Volatility index",
-    "^TNX": "Ten year yield",
 }
 
 # What measures each sector. A sector is stated by a person and measured by an
@@ -94,8 +103,69 @@ _SYMBOL_BY_SECTOR: dict[Sector, str] = {
 # moved.
 _MARKET_SYMBOL = "SPY"
 
-# The ten year yield is quoted in percent; a basis point is a hundredth of one.
-_BASIS_POINTS = 100.0
+
+class CompositeEnvironmentProvider:
+    """Reads every source and returns the environment they describe together.
+
+    **One measurement, one source.** A measurement two sources both carry is a fact
+    with two versions, and the second one is refused rather than preferred: which of
+    two slightly different ten year yields a sentence was written from is not something
+    a reader could work out, so the mistake would be invisible. The first source to
+    answer for a measurement keeps it, and the refusal is logged.
+
+    A measurement no source carries is returned as a point without a value that says so,
+    so removing a source leaves a visible gap rather than a silent one.
+    """
+
+    def __init__(self, providers: Sequence[EnvironmentProvider]) -> None:
+        """Create the composite over the sources it reads.
+
+        Args:
+            providers: Sources to read, in the order they are read.
+        """
+        self._providers = tuple(providers)
+        self._logger = get_logger(_LOGGER_NAME)
+
+    def fetch(self) -> EnvironmentSnapshot:
+        """Return the environment every source describes, as one snapshot."""
+        retrieved_at = datetime.now()
+        points: dict[EnvironmentMetric, EnvironmentPoint] = {}
+        sectors: list[SectorMove] = []
+        names: list[str] = []
+
+        for provider in self._providers:
+            snapshot = provider.fetch()
+            names.append(snapshot.source)
+            sectors.extend(snapshot.sectors)
+            for point in snapshot.points:
+                if point.metric in points:
+                    self._logger.warning(
+                        "two sources carry %s; %s is used and %s is not read",
+                        point.metric.value,
+                        points[point.metric].reason,
+                        snapshot.source,
+                    )
+                    continue
+                points[point.metric] = point
+
+        ordered = tuple(
+            points.get(metric, _unmeasured(metric)) for metric in WIDE_METRICS
+        )
+        return EnvironmentSnapshot(
+            source=", ".join(dict.fromkeys(names)),
+            retrieved_at=retrieved_at,
+            points=ordered,
+            sectors=tuple(sectors),
+        )
+
+
+def _unmeasured(metric: EnvironmentMetric) -> EnvironmentPoint:
+    """Return the point for a measurement no connected source carries."""
+    return EnvironmentPoint(
+        metric=metric,
+        value=None,
+        reason=f"No connected source measures {metric.label}, so it was not read.",
+    )
 
 
 class YahooEnvironmentProvider:
@@ -279,16 +349,6 @@ def _point(
             value=latest,
             reason=f"{name} {symbol} at {latest:,.2f} on the most recent session.",
         )
-    if metric is EnvironmentMetric.TEN_YEAR_YIELD_CHANGE:
-        change = (latest - previous) * _BASIS_POINTS
-        return EnvironmentPoint(
-            metric=metric,
-            value=change,
-            reason=(
-                f"{name} {symbol} {change:+.1f} basis points on the most recent "
-                f"session, from {previous:.3f} to {latest:.3f} percent."
-            ),
-        )
     if metric is EnvironmentMetric.VOLATILITY_CHANGE:
         change = latest - previous
         return EnvironmentPoint(
@@ -360,8 +420,10 @@ def build_environment_provider(
 ) -> EnvironmentProvider:
     """Return the environment provider AIS uses.
 
-    The return type is the contract rather than the vendor implementation, so that a
-    caller cannot depend on anything vendor specific.
+    The return type is the contract rather than the vendor implementations, so that a
+    caller cannot depend on anything source specific. Rates come from the Treasury and
+    everything else from the market data vendor; the composite is what keeps one
+    measurement from arriving twice.
 
     Args:
         sectors: The sectors the watch universe is in. Only these are measured
@@ -371,4 +433,9 @@ def build_environment_provider(
     Returns:
         The environment provider AIS reads the market's own measurements from.
     """
-    return YahooEnvironmentProvider(sectors=sectors)
+    return CompositeEnvironmentProvider(
+        (
+            YahooEnvironmentProvider(sectors=sectors),
+            TreasuryYieldCurveProvider(),
+        )
+    )

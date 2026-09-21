@@ -415,6 +415,17 @@ the same thing starts ignoring both.
 
 A setting tells AIS how to behave. It does not tell AIS what the world is like.
 
+**And one fact has one authority.** Where two sources publish the same thing, AIS reads
+one of them and says which — not both, and not one with the other kept as a fallback.
+Two versions of one number are worse than one missing number, because a missing number
+looks missing and a disagreement looks like an answer: a reader given two ten year
+yields has no way to tell which one the sentence beside them was written from. A
+fallback is not a mitigation either. It is the second version arriving exactly when
+nobody is looking, because the first source failed.
+
+So the source is chosen deliberately, the choice is written down, and the other is not
+read at all. When the chosen source cannot answer, the report says so.
+
 The line matters because a file that states a fact will eventually state a wrong
 one, and nothing will correct it. Whether a position is held is decided by a broker;
 whether an event is near is decided by a calendar. Written into a settings file,

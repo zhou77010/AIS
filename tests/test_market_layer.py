@@ -97,6 +97,8 @@ _CALM_TAPE: dict[EnvironmentMetric, float] = {
     EnvironmentMetric.VOLATILITY: 14.8,
     EnvironmentMetric.VOLATILITY_CHANGE: -0.6,
     EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: 5.1,
+    EnvironmentMetric.CURVE_STEEPNESS: 25.0,
+    EnvironmentMetric.CURVE_CHANGE: -2.0,
 }
 
 
@@ -573,18 +575,76 @@ def test_growth_lagging_beside_a_growth_company_reads_as_under_pressure() -> Non
     assert not any("属成长型" in line for line in defensive), defensive
 
 
-def test_a_bank_is_told_the_direction_needs_the_curve() -> None:
-    # One yield is not the curve, so the exposure is named and the direction is not
-    # claimed. Reading a direction out of one yield would be a guess.
-    lines = _market_lines(
+def test_a_bank_is_told_which_way_the_curve_is_going() -> None:
+    # This is the sentence that used to say the direction could not be judged: a bank's
+    # margin moves with the shape of the curve and not with one yield, and the curve is
+    # read now.
+    steeper = _market_lines(
         _result(
             asset=_asset("HSBC", AssetProfile.FINANCIAL),
-            environment=_environment(),
+            environment=_environment(
+                **{EnvironmentMetric.CURVE_CHANGE: 8.0}
+            ),
+        )
+    )
+    flatter = _market_lines(
+        _result(
+            asset=_asset("HSBC", AssetProfile.FINANCIAL),
+            environment=_environment(
+                **{EnvironmentMetric.CURVE_CHANGE: -8.0}
+            ),
         )
     )
 
-    assert any("收益率曲线" in line for line in lines), lines
-    assert any("目前判断不了" in line for line in lines), lines
+    assert any("曲线走陡" in line and "偏有利" in line for line in steeper), steeper
+    assert any("曲线趋平" in line and "偏紧" in line for line in flatter), flatter
+
+
+def test_a_bank_is_told_when_the_curve_is_inverted() -> None:
+    # An inversion is a state, not a move, and it is named even on a day when the
+    # spread did not change: a holder of a financial needs to know it.
+    lines = _market_lines(
+        _result(
+            asset=_asset("HSBC", AssetProfile.FINANCIAL),
+            environment=_environment(
+                **{
+                    EnvironmentMetric.CURVE_STEEPNESS: -12.0,
+                    EnvironmentMetric.CURVE_CHANGE: 0.0,
+                }
+            ),
+        )
+    )
+
+    assert any("曲线轻度倒挂" in line for line in lines), lines
+
+
+def test_an_asset_that_is_not_rate_sensitive_is_not_told_about_the_curve() -> None:
+    lines = _market_lines(
+        _result(
+            asset=_asset("APP", AssetProfile.HIGH_GROWTH),
+            environment=_environment(**{EnvironmentMetric.CURVE_CHANGE: 8.0}),
+        )
+    )
+
+    assert not any("曲线" in line for line in lines), lines
+
+
+def test_the_curve_is_named_in_the_environment_when_it_is_inverted() -> None:
+    lines = _market_lines(
+        _result(
+            environment=_environment(**{EnvironmentMetric.CURVE_STEEPNESS: -30.0})
+        )
+    )
+    environment = lines[-1]
+
+    assert "曲线" in environment, lines
+
+
+def test_a_normal_curve_is_not_announced_in_the_environment() -> None:
+    # "The curve is normal" every morning is noise; an inverted curve is not.
+    lines = _market_lines(_result(environment=_environment()))
+
+    assert not any("曲线" in line for line in lines), lines
 
 
 def test_an_asset_the_environment_does_not_reach_is_told_that() -> None:

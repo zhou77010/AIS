@@ -1628,4 +1628,46 @@ already in place, which is what the earlier rounds were for.
 
 ---
 
+### One fact, one authority
+
+**Context.** The ten year yield was read from the market data vendor. The Treasury
+publishes its whole daily curve, and reading it would let the report say what a bank's
+margin environment is doing instead of admitting it could not judge the direction. The
+obvious implementation — add the Treasury curve beside the vendor's yield — would have
+put two slightly different ten year yields in one report.
+
+**Decision.** Rates have one authority: the Treasury's daily curve. The vendor's rate
+quote is not read at all, and not as a fallback either. The environment composite
+refuses to carry one measurement twice, so the rule is enforced in code rather than
+remembered in a comment.
+
+**Reason.** Two versions of one fact is worse than one missing fact. A reader who sees a
+ten year yield in a sentence has no way to know which of two numbers it came from, and
+nothing in the output would look wrong — the kind of error this project keeps finding and
+keeps writing down. And a fallback is not a mitigation: it is the second version arriving
+exactly when nobody is looking, because the first source failed. So when the Treasury
+cannot be read, the report says the rate could not be read, which is worth more than a
+number from somewhere else because it is true.
+
+**And the curve has one definition.** The file also carries the three month bill, and AIS
+reads the ten year less the two year. Holding both spreads would be the same defect in a
+different place: a reader told that "the curve" is inverted on one measure and flat on
+another has been given two answers to one question.
+
+**What it bought.** The sentence about a financial used to end by saying the direction
+needed the shape of the curve and that AIS could not judge it. It now says which way the
+margin environment is moving, and names an inversion whether or not the spread moved that
+day. That admission was honest and it was still a hole in the report; closing it needed
+evidence, not a better sentence.
+
+**Impact.** The environment now has two sources, and the composite is what makes them one
+snapshot. A source answers with the points it owns and no others, so a provider never
+claims to have looked at a file it never opened, and the composite is the one place that
+knows a measurement arrived exactly once.
+
+**Revisit.** When another source is added, which is when the refusal starts earning its
+place rather than describing it.
+
+---
+
 End of Document

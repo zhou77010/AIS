@@ -411,6 +411,8 @@ def _environment_snapshot(*, live: bool = True) -> EnvironmentSnapshot:
         EnvironmentMetric.VOLATILITY: 16.5,
         EnvironmentMetric.VOLATILITY_CHANGE: -1.2,
         EnvironmentMetric.TEN_YEAR_YIELD_CHANGE: 4.0,
+        EnvironmentMetric.CURVE_STEEPNESS: 25.0,
+        EnvironmentMetric.CURVE_CHANGE: -2.0,
     }
     return EnvironmentSnapshot(
         source="Test environment",
