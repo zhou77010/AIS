@@ -43,8 +43,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from analysis.analysis_result import AnalysisResult
-from analysis.brief import BRIEF_REASON_LABELS, BriefEntry, DailyBrief, own_event
+from analysis.brief import (
+    BRIEF_REASON_LABELS,
+    BriefEntry,
+    BriefGroup,
+    BriefReason,
+    DailyBrief,
+    own_event,
+)
 from analysis.category_grade import stars
+from analysis.insight.builder import insight_for
 from analysis.labels import (
     DISCLAIMER,
     NO_GRADE,
@@ -67,6 +75,7 @@ from analysis.report import (
     data_quality_label,
 )
 from models.catalyst_event import CatalystEvent
+from models.category import Category
 
 # The budget this projection is held to by tests/test_daily_brief.py. A brief that
 # has to be scrolled is a brief nobody finishes, and the cap is what stops a
@@ -77,9 +86,20 @@ _TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 _TIMEZONE_NOTE = "北京时间"
 _TITLE = "AIS 晨报"
 _ENVIRONMENT_LABEL = "市场环境  "
+_LEADER_LINK = "对今日优先的 {ticker} 而言，"
+_RANK_LABEL = "今日优先  "
+_MOST_CONDITIONS = "机会条件最多"
+_HAS_MOVED = "今日有变化"
+
+# The reasons that mean something about this asset moved, rather than where it stands.
+# A leader whose reason is one of these leads because it moved, which is what the brief
+# sorts on first.
+_MOVED_REASONS = frozenset({BriefReason.MOVED, BriefReason.PORTFOLIO_CHANGE})
+
 _EXTERNAL_LABEL = "外部事件  "
 _NO_EXTERNAL_EVENT = "外部事件  暂无"
-_SHARED_LABEL = "共同结论  "
+_SHARED_LABEL = "共同结论"
+_INDENT = "  "
 _CATALYST_LABEL = "关注  "
 _WITHOUT_DATA_LABEL = "无实时数据  "
 _DEGRADED = "部分标的无实时数据"
@@ -145,18 +165,38 @@ def _coverage(brief: DailyBrief) -> str:
 
 
 def _environment_lines(brief: DailyBrief) -> list[str]:
-    """Return what the market is doing, before anything about an individual asset.
+    """Return what the market is doing, and what it means for the asset put first.
 
     This is the line that makes the brief a pre-market brief rather than a review: it
     is the environment the reader is about to trade into, and every asset below it was
     judged in it. It is absent when no environment measurement was retrieved, which is
     the honest thing to show rather than a claim about a market nobody looked at.
+
+    The second half answers the question the first half raises. A reader told what the
+    market is doing, and then given a list in which one asset leads, still does not know
+    why that one leads — so the environment is applied to it, in the words that asset's
+    own report opens its Market block with. The sentence is read from the insight the
+    run already built, so the brief and the report cannot say two things about one
+    holding.
     """
     if brief.environment is None or brief.environment.is_empty:
         return []
-    return wrap_at_clauses(
+    lines = wrap_at_clauses(
         brief.environment.lines[0].text, first_prefix=_ENVIRONMENT_LABEL
     )
+    lines.extend(_leader_link(brief))
+    return lines
+
+
+def _leader_link(brief: DailyBrief) -> list[str]:
+    """Return what the environment means for the first asset, or nothing."""
+    if not brief.entries:
+        return []
+    entry = brief.entries[0]
+    insight = insight_for(entry.result, Category.MARKET)
+    if insight is None or insight.is_empty:
+        return []
+    return wrap(f"{_LEADER_LINK.format(ticker=entry.ticker)}{insight.lines[0].text}")
 
 
 def _external_lines(brief: DailyBrief) -> list[str]:
@@ -178,8 +218,12 @@ def _external_lines(brief: DailyBrief) -> list[str]:
 def _body(brief: DailyBrief) -> list[str]:
     """Return the assets the brief writes out, with a shared conclusion said once.
 
-    Assets that reached the same conclusion are written under one statement of it. A
-    brief for a universe that reads alike would otherwise spend its width saying the
+    Assets that reached the same conclusion are written under one statement of it, and
+    that statement names them: a reader who is told a conclusion applies to several
+    assets and not which ones has to work it out from the order, and the order is the
+    one thing about a shared conclusion that carries no meaning.
+
+    A brief for a universe that reads alike would otherwise spend its width saying the
     same sentence three times, which costs the reader the lines that could have
     differed and tells them nothing the first one did not.
     """
@@ -188,25 +232,47 @@ def _body(brief: DailyBrief) -> list[str]:
         conclusion = _judgement(group.entries[0].result)
         shared = group.is_shared and conclusion is not None
         if shared:
-            lines.extend(wrap(conclusion, first_prefix=_SHARED_LABEL))
+            lines.append(_shared_label(group))
+            lines.extend(wrap_at_clauses(conclusion))
         for entry in group.entries:
             lines.extend(_entry_lines(entry, brief, with_judgement=not shared))
     return lines
 
 
+def _shared_label(group: BriefGroup) -> str:
+    """Return the label naming a shared conclusion and the assets it covers.
+
+    The label carries the roster because a conclusion stated once for several assets
+    is ambiguous without it: a reader has to work out which assets it applies to from
+    the order, and the order between assets that reached the same conclusion is the one
+    thing about them that carries no meaning.
+
+    It goes on a line of its own rather than in front of the sentence. The roster is
+    long enough that a sentence beside it would be broken in the middle of a phrase,
+    and a phrase broken in half is harder to read than a line spent on the roster.
+    """
+    names = "、".join(entry.ticker for entry in group.entries)
+    return f"{_SHARED_LABEL}（{names}）"
+
+
 def _entry_lines(
     entry: BriefEntry, brief: DailyBrief, *, with_judgement: bool
 ) -> list[str]:
-    """Return the block one asset gets: what it is, what AIS concluded, what to watch.
+    """Return the block one asset gets: what it is, why it leads, what to watch.
 
-    Three lines at most. The standing is on the heading so that a reader can scan the
-    column of them, the conclusion is one sentence, and the event is the one thing
-    about this asset that is still ahead. The conclusion is left out when the assets
-    around this one share it: it has already been stated for all of them, and saying
-    it again is the repetition this projection exists to avoid.
+    Three lines at most, and a fourth for the asset the brief put first. The standing
+    is on the heading so that a reader can scan the column of them, the conclusion is
+    one sentence, and the event is the one thing about this asset that is still ahead.
+    The conclusion is left out when the assets around this one share it: it has already
+    been stated for all of them, and saying it again is the repetition this projection
+    exists to avoid.
     """
     result = entry.result
     lines = [_entry_heading(entry)]
+    if entry is brief.entries[0]:
+        rank = _rank_line(brief)
+        if rank is not None:
+            lines.append(rank)
     judgement = _judgement(result) if with_judgement else None
     if judgement is not None:
         lines.extend(wrap(judgement))
@@ -214,6 +280,43 @@ def _entry_lines(
     if event is not None:
         lines.extend(wrap(f"{_CATALYST_LABEL}{_event_phrase(event, brief)}"))
     return lines
+
+
+def _rank_line(brief: DailyBrief) -> str | None:
+    """Return why the first asset is first, in the fewest words that are true.
+
+    The order is decided by the brief's own rule, and this only puts that decision into
+    words a reader can check. It describes what is already on the screen: the asset
+    leads either because it moved while the others did not, or because it holds more
+    opportunity conditions than the others shown, which is what the stars beside each
+    heading count. Where neither is true, nothing is claimed — the assets are alike and
+    the order between them means nothing, so saying why would invent a reason.
+    """
+    if not brief.entries:
+        return None
+    leader = brief.entries[0]
+    if _leads_on_conditions(brief):
+        return f"{_RANK_LABEL}{_MOST_CONDITIONS}"
+    if leader.reason in _MOVED_REASONS:
+        return f"{_RANK_LABEL}{_HAS_MOVED}"
+    return None
+
+
+def _leads_on_conditions(brief: DailyBrief) -> bool:
+    """Return whether the leading asset holds more conditions than the rest shown.
+
+    It compares the conclusions the brief already reached rather than recomputing
+    anything: a group's conclusion is the count of opportunity conditions that hold,
+    and two assets in the same group hold the same number by definition.
+
+    One group is the case this is written for. Where every asset shown holds the same
+    number of conditions there is nothing for the leader to hold more of, and a claim
+    that it holds the most would be a comparison against a list that does not exist.
+    """
+    grades = [group.concluded_grade for group in brief.groups]
+    if len(grades) < 2 or grades[0] <= 0:
+        return False
+    return grades[0] > max(grades[1:])
 
 
 def _entry_heading(entry: BriefEntry) -> str:

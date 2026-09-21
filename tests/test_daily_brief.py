@@ -535,6 +535,56 @@ def test_two_assets_nothing_distinguishes_keep_the_universe_order() -> None:
 
 
 # --------------------------------------------------------------------------
+# Why the first asset is first
+# --------------------------------------------------------------------------
+
+
+def test_the_asset_that_leads_on_conditions_says_so() -> None:
+    # The order is decided by one table, and this only puts that decision into words
+    # a reader can check against what is already on the screen: the leader holds more
+    # opportunity conditions than the others shown, which the stars beside each
+    # heading count.
+    warned = [
+        _with_grade(_with_risk(_rich(ticker), satisfied=False), 1)
+        for ticker in ("AAPL", "CGDV", "APP")
+    ]
+    best = _with_grade(_with_risk(_rich("HSBC"), satisfied=True), 4)
+
+    lines = _render([*warned, best])
+    start = next(index for index, line in enumerate(lines) if line.startswith("HSBC"))
+
+    assert lines[start + 1] == "今日优先  机会条件最多", lines
+
+
+def test_an_asset_that_leads_because_it_moved_says_so() -> None:
+    # Where the assets hold the same number of conditions, the order is decided by
+    # what moved, and that is what the line says instead.
+    lines = _render(
+        [
+            _with_grade(_rich("AAPL", ratings=(_moved_rating(),)), 1),
+            *_alike("CGDV", "APP"),
+        ]
+    )
+    start = next(index for index, line in enumerate(lines) if line.startswith("AAPL"))
+
+    assert lines[start + 1] == "今日优先  今日有变化", lines
+
+
+def test_the_order_between_alike_assets_claims_no_reason() -> None:
+    # Nothing separates them, so nothing is claimed. A line here would invent a reason
+    # for an order that carries none.
+    lines = _render(_alike("AAPL", "CGDV", "APP"))
+
+    assert not any(line.startswith("今日优先") for line in lines), lines
+
+
+def test_only_the_asset_that_leads_is_told_why_it_leads() -> None:
+    lines = _render([_with_grade(_rich("HSBC"), 4), _with_grade(_rich("AAPL"), 1)])
+
+    assert sum(line.startswith("今日优先") for line in lines) == 1, lines
+
+
+# --------------------------------------------------------------------------
 # The same conclusion is said once
 # --------------------------------------------------------------------------
 
@@ -567,9 +617,13 @@ def test_an_asset_with_its_own_conclusion_keeps_its_own_line() -> None:
 
     lines = _render(results)
     own = next(index for index, line in enumerate(lines) if line.startswith("HSBC"))
+    shared = next(
+        index for index, line in enumerate(lines) if line.startswith("共同结论")
+    )
 
-    assert "值得优先配置" in lines[own + 1], lines
+    assert "值得优先配置" in "".join(lines[own:shared]), lines
     assert sum("目前不是优先配置的时点" in line for line in lines) == 1, lines
+    assert lines[shared] == "共同结论（AAPL、CGDV）", lines
 
 
 def test_assets_that_reached_different_conclusions_are_not_grouped() -> None:
@@ -618,13 +672,14 @@ def test_each_asset_keeps_its_own_event_under_a_shared_conclusion() -> None:
 
 
 def test_a_shared_conclusion_that_does_not_fit_is_broken_not_overflowed() -> None:
-    # The label costs columns, so the sentence has to be broken earlier than it would
-    # be on its own. Nothing here reads aloud as one sentence, so an overflow would
-    # only be visible as a line running off the screen.
+    # The roster goes on the line above the sentence rather than in front of it, so
+    # the sentence starts at full width and is broken only by its own length. Nothing
+    # here reads aloud as one sentence, so an overflow would only be visible as a line
+    # running off the screen.
     lines = _render([_thin("AAPL"), _thin("CGDV")])
-    shared = next(line for line in lines if line.startswith("共同结论"))
+    label = next(index for index, line in enumerate(lines) if line.startswith("共同结论"))
 
-    assert "尚无可用的类别判断" in shared, lines
+    assert "尚无可用的类别判断" in lines[label + 1], lines
     for line in lines:
         assert _width(line) <= LINE_WIDTH, line
 
@@ -804,10 +859,11 @@ def test_the_opportunity_conditions_are_left_to_the_full_report() -> None:
 def test_each_asset_is_given_a_name_a_standing_and_a_conclusion() -> None:
     lines = _render([_rich("AAPL", ratings=(_moved_rating(),))])
     start = next(index for index, line in enumerate(lines) if line.startswith("AAPL"))
+    block = "".join(lines[start:])
 
     assert "★" in lines[start]
     assert "观望" in lines[start]
-    assert lines[start + 1].startswith(" ")
+    assert "当前机会一般，优先级不高。" in block, lines
 
 
 def test_the_brief_names_the_source_and_the_state_of_the_data() -> None:

@@ -784,6 +784,36 @@ def test_the_environment_line_is_broken_between_clauses() -> None:
     assert lines and lines[0].rstrip().endswith(("、", "，")), report
 
 
+def test_the_environment_is_applied_to_the_asset_the_brief_puts_first() -> None:
+    # The environment says what the market is doing. A brief in which one asset leads
+    # then leaves the reader to work out why that one, which is the one question a
+    # pre-market brief is for. So the environment is applied to the asset the brief
+    # put first, in the words that asset's own report opens its Market block with:
+    # the sentence is read back from the insight the run already built, so the brief
+    # and the report cannot say two things about one holding.
+    environment = _environment(**{EnvironmentMetric.OVERNIGHT_GROWTH: -0.014})
+    results = [
+        _result(asset=_asset(ticker), environment=environment, beta=2.1)
+        for ticker in ("AAPL", "CGDV", "APP")
+    ]
+
+    brief = build_daily_brief(results, moment=_MORNING)
+    leader = brief.entries[0]
+    insight = insight_for(leader.result, Category.MARKET)
+    joined = "".join(line.strip() for line in render_daily_brief(brief).splitlines())
+
+    assert insight is not None
+    assert f"对今日优先的 {leader.ticker} 而言，{insight.lines[0].text}" in joined
+
+
+def test_no_environment_means_no_claim_about_what_it_means() -> None:
+    # With no environment measurement retrieved there is nothing to apply, and the
+    # brief says nothing rather than applying a market nobody read.
+    report = render_daily_brief(build_daily_brief([_result()], moment=_MORNING))
+
+    assert "对今日优先" not in report
+
+
 def _width(line: str) -> int:
     """Return how many columns a line occupies, counting Chinese as two."""
     return sum(
