@@ -14,6 +14,7 @@ from models.asset import Asset
 from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.category_rating import CategoryRating
+from models.decision_result import DecisionResult
 from models.insight import Insight
 from models.opportunity_assessment import OpportunityAssessment
 from models.overall_assessment import OverallAssessment
@@ -45,6 +46,10 @@ class AnalysisResult:
             than inside it: the assessment is a composite of the categories, and
             an opportunity built from those same categories would be counted
             twice if it were folded into them.
+        decision: The Decision reached for the asset, or None when the run reached
+            none. It reads the judgements already made and answers one question of
+            its own — whether this asset is worth becoming a standard position
+            today — without reading a fact or re-deciding anything.
         events: Dated catalyst events the run was built on, in date order. They
             are the input the catalyst judgement started from, like the market
             data, and the report writes them out so that a reader sees the
@@ -67,6 +72,7 @@ class AnalysisResult:
     market_data: MarketDataSnapshot | None = None
     ratings: tuple[CategoryRating, ...] = ()
     opportunity: OpportunityAssessment | None = None
+    decision: DecisionResult | None = None
     events: tuple[CatalystEvent, ...] = ()
     insights: tuple[Insight, ...] = ()
     environment: EnvironmentSnapshot | None = None

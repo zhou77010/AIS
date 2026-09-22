@@ -23,6 +23,7 @@ from contracts.market_environment import EnvironmentSnapshot
 from core.overall_evaluator import OverallEvaluator
 from core.recommendation_engine import RecommendationEngine
 from evaluation.catalyst.catalyst_evaluator import CatalystEvaluator
+from evaluation.decision.decision_assessor import DecisionAssessor
 from evaluation.earnings.earnings_evaluator import EarningsEvaluator
 from evaluation.fundamental.fundamental_evaluator import FundamentalEvaluator
 from evaluation.hpo.opportunity_assessor import OpportunityAssessor
@@ -135,6 +136,7 @@ class AssetAnalyzer:
         )
         result = replace(result, ratings=self._rate(asset, result))
         result = replace(result, opportunity=self._assess_opportunity(result))
+        result = replace(result, decision=DecisionAssessor().assess(result))
         return replace(result, insights=build_insights(result))
 
     def _assess_opportunity(self, result: AnalysisResult) -> OpportunityAssessment:

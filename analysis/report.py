@@ -99,6 +99,7 @@ def generate_report(result: AnalysisResult) -> str:
         lines.append(f"      summary: {category_score.summary}")
     lines.extend(_insight_lines(result))
     lines.extend(_opportunity_lines(result))
+    lines.extend(_decision_lines(result))
     lines.extend(_event_lines(result))
     lines.extend(_environment_lines(result))
     lines.extend(_gap_lines(result))
@@ -117,6 +118,33 @@ def _insight_lines(result: AnalysisResult) -> list[str]:
         for entry in insight.lines:
             lines.append(f"      - {entry.text}")
             lines.append(f"        from: {', '.join(entry.references)}")
+    return lines
+
+
+def _decision_lines(result: AnalysisResult) -> list[str]:
+    """Return the Decision, every condition behind it, and the evidence it rests on.
+
+    The decision is written out for the same reason the opportunity judgement is: a
+    reader
+    has to be able to disagree with it on the merits, which means seeing which condition
+    failed rather than only that something did.
+    """
+    decision = result.decision
+    if decision is None:
+        return []
+    lines = ["  Decision:"]
+    lines.append(f"    outcome: {decision.outcome.value}")
+    lines.append(f"    summary: {decision.summary}")
+    for entry in decision.conditions:
+        state = (
+            "not evaluated"
+            if entry.satisfied is None
+            else ("satisfied" if entry.satisfied else "not satisfied")
+        )
+        lines.append(f"    - {entry.condition.value}: {state}")
+        lines.append(f"      {entry.reason}")
+    if decision.evidence_references:
+        lines.append("    from: " + ", ".join(decision.evidence_references))
     return lines
 
 
