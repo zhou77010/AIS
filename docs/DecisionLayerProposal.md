@@ -447,10 +447,49 @@ there rather than in a design document:
 > same asset carry two different judgements about itself, and would hide a limitation of
 > the account inside a statement about the world.
 
-### 8.2 What this section does not do
+### 8.2 Risk Methodology — ruled
+
+Four things were ruled, three questions were left open deliberately, and one principle was
+added that constrains how the layer may be designed.
+
+| # | Item | Ruling |
+| --- | --- | --- |
+| 1 | **A single Risk Score** | **Rejected.** Risk is never aggregated into one number. It answers *which kind of risk is the problem*, and that is an explainability requirement rather than a preference: a reader told "risk is 72" knows nothing about what could make the judgement wrong. |
+| 2 | **Risk expressed dimension by dimension** | **Accepted**, and it follows from the Constitution rather than from taste: §5.1 forbids naming a dimension after a measurement, and §5.3 forbids merging dimensions with one another. Together they rule out both a measurement wearing the name of a risk and a composite wearing the name of a risk. |
+| 3 | **Risk may block a Decision** | **Accepted.** A dimension judged unacceptable makes the favourable states unavailable. |
+| 4 | **Risk may not size** | **Accepted.** A size needs a magnitude, a magnitude needs the dimensions combined into one number, and §5.3 forbids that. Sizing belongs to the Action, which belongs to the portfolio layer. |
+
+**What the ruling on size implies about the vocabulary.** Risk answers exactly one question:
+**whether increasing the position is reasonable.** It does not answer whether a position
+should be reduced or exited, because an exit needs a positive reason — the ground the
+holding rests on has changed — and risk is only one of the things that can change it. So
+risk blocks the favourable states and may not by itself produce a reduction or an exit.
+
+### 8.3 Open, and deliberately not settled
+
+| # | Question | Why it waits |
+| --- | --- | --- |
+| 5 | **Does an unknown risk dimension block?** | Not settled, and the counter-argument was named in the discussion: an asset with a good business, a fair valuation, a sound trend and one dimension without data would be refused a favourable state, which is a system that never dares to conclude. **Unknown says "I do not know"; unacceptable says "I know there is a problem"** — two different states, and treating the first as the second is a decision nobody has data for yet. What is needed first is how often a dimension is unexamined in real runs, and how often it is unexamined *while everything else reads well*. |
+| 6 | **May risk produce a reduction?** | Deferred to Exit Methodology, for the reason above. Exit is its own question with its own reasons, and it is not settled inside Risk. |
+| 7 | **How each risk dimension is defined and assessed** | Deferred. §5.2 fixes the eight dimensions as meanings; how each is judged is work that has not been done. |
+
+### 8.4 The one-sentence principle
+
+Adopted for Risk, and recorded here as a principle for the Decision Layer as a whole:
+
+> **Every element of a Decision must be answerable in one sentence.** A risk dimension must
+> be able to say, in one sentence, why it would make the judgement wrong. A decision state
+> must be able to say, in one sentence, why the position is what it is. Where an element
+> needs five minutes to explain, the element is defined badly — and AIS is an investment
+> decision system, not an enterprise risk register.
+
+It constrains what may be added rather than how anything is computed: it rules out a
+dimension, a state or a reason that exists only to be thorough.
+
+### 8.5 What this section does not do
 
 - It does not freeze the Decision Layer, and it does not authorise any implementation.
-- It does not reopen the four items; item 2 and the open half of item 3 are the work.
+- It does not reopen the four items; item 2 and the open half of item 3 are still the work.
 - It does not change the Observation Phase, the frozen Runtime, or the pause on paper
   trading.
 
