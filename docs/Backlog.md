@@ -537,40 +537,58 @@ yet, so it is recorded here rather than written into
 
 ## Runtime — three triggers, three times
 
-**The 09:00 brief is built.** The other two are defined and are not.
+**The two scheduled reports are built.** The intraday alert is defined and is not.
 
 | Trigger | State | Where |
 | --- | --- | --- |
 | **Live Morning Brief** — 09:00 Beijing | **Built** | `app/morning_brief.py`, scheduled by `app/scheduler.py` |
-| **Pre-Market Brief** — 21:00 Beijing | Defined, **not implemented and not scheduled**; the Environment layer it needs is complete and the Company Layer is not | — |
+| **Pre-Market Brief** — 21:00 Beijing | **Built** | `app/premarket_brief.py`, rendered by `analysis/premarket_report.py` |
 | **Intraday Alert** | Defined, not built | — |
 
 **How it is built.** The scheduler no longer runs one cycle on an interval. It runs
 **schedules**, each of which answers "when am I next owed", and sleeps to the
-earliest answer. Two are wired: the evaluation cycle on its interval, and the brief
-at an hour of the day. Adding 21:00 later is another schedule and nothing else.
+earliest answer. Three are wired: the evaluation cycle on its interval, and the two
+reports at their own hours.
 
-### Nothing fires at 21:00, and a missing report there is not a fault
-**Two schedules exist: `cycle` and `morning-brief`.** Those two are what
-`app/application.py` registers and there are no others; the scheduler sleeps to the
-earliest moment either of them is owed. **The 21:00 Pre-Market Brief is defined and
-not implemented** — there is no schedule for it, so nothing wakes at that hour and no
-message is owed.
+### Both scheduled reports now fire, and each stands on its own
 
-**A report that never arrives at 21:00 is the recorded state of the system, not a
-bug.** It is not the scheduler failing to wake, not the state file holding a day it
-should not, not the notifier dropping a message, and not the market gate refusing at
-that hour. A report cannot be missing when none was ever scheduled: the absence has
-exactly one cause, and it is this paragraph. Read it before looking anywhere else, and
-before believing that 21:00 was ever built.
+**Three schedules exist: `cycle`, `morning-brief` and `premarket-brief`.** Those three are
+what `app/application.py` registers and there are no others; the scheduler sleeps to the
+earliest moment any of them is owed.
 
-**What "built" would require, so that its absence is checkable.** A schedule with its
-own id, its own runtime-state key, its own attempts and its own delivery state. A
-report shares none of those with the morning brief: two reports sharing one state
-record would each read the other's day as their own, and would then either send a
-second copy or stay silent, which is the failure the state record exists to prevent.
-The state file is already shaped for that — one bucket per report under `reports` —
-and no second report is written into it.
+**What independence means here, because it was the requirement.** A report shares the
+delivery policy — when it is owed, what a failed attempt does to the day, how a retry is
+spaced — and shares nothing else:
+
+| | Morning brief | Pre-market brief |
+| --- | --- | --- |
+| Schedule name (the log's id) | `morning-brief` | `premarket-brief` |
+| State key (the file's bucket) | `morning_brief` | `premarket_brief` |
+| Attempts | its own count | its own count |
+| Delivery state | its own `owed`/`sent`/`abandoned` | its own |
+
+One report being owed, delivered or abandoned therefore says nothing about the other, and
+`tests/test_premarket_brief.py` drives both through one state file to prove it. The policy
+itself is written once, in `app/scheduled_report.py`: two copies of "what a failed attempt
+does to the day" would be two places to disagree about it.
+
+**What the pre-market report is, and what it is not.** It is a second projection of the
+same brief model, sent thirty minutes before the United States session opens, and the fact
+it can state that the morning one cannot is **what price is doing before the open**: the
+pre-market move, read minutes ago rather than twelve hours ago. It leads with the line
+naming which of its three layers of evidence answered — the environment, the company's own
+pre-market evidence, and news — because the report exists before all three do. It does not
+forecast the session, and it does not re-rank the assets: the pre-market move is described
+and not graded, because the Reading Layer has not decided what it is worth.
+
+**A defect found while building it, recorded rather than fixed.** The provenance line every
+projection closes with names the sources that answered and the assets that were degraded.
+On a run with more than one source, or with degraded assets, it exceeds the 42 columns
+every phone projection is held to:
+`来源 Yahoo Finance、US Treasury·部分标的无实时数据·不构成投资建议` measures 50. The width test
+never caught it because its fixtures use a single short source name, so the line has been
+over-width in real runs since the rates source was added. It is a presentation defect in a
+frozen surface, so it is recorded here and left alone.
 
 **It arrives as one message.** The brief covers the whole watch universe and is
 delivered as a single digest; see "The brief is one message" below. The evaluation
@@ -637,6 +655,14 @@ a partial failure; a total one had no rule at all, and recording the day as sent
 the whole report on an outage that lasted a minute.
 
 ### Only one of the two scheduled reports is active, and it is the morning one
+
+**Superseded. Both reports are built and both are scheduled.** The reasoning below was
+correct while the pre-market report had nothing to say that the morning one did not, and
+what changed is not the reasoning but the evidence: the company layer now reads the
+pre-market move, which is a fact that exists at 21:00 and is stale by 09:00. The section is
+kept because it records why the second report waited, and because the same test — could
+this report be the other one sent at a different hour? — is the test any further report
+must still pass.
 
 **Confirmed.** **Only the 09:00 Live Morning Brief runs.** The 21:00 Pre-Market Brief
 stays defined and stays off, and what it is waiting for is the Company Layer rather
@@ -753,7 +779,7 @@ cannot.**
 
 | Trigger | Fires when | Answers | Send time |
 | --- | --- | --- | --- |
-| **Pre-Market Brief** | 30 minutes before the US open | What matters before the open today | **21:00 Beijing** |
+| **Pre-Market Brief** | 30 minutes before the US open | What price is doing before the open today | **21:00 Beijing** — **built** |
 | **Live Morning Brief** | A fixed morning time | What the state is right now, and what changed to get there | **09:00 Beijing** |
 | **Intraday Alert** | An event happens | Whether this is worth interrupting for | Not scheduled |
 
@@ -821,7 +847,7 @@ still open.
 | A | The cadence stops being an interval and becomes **moment-anchored**. The phase used to come from when the process started, which has nothing to do with a clock. | `app/scheduler.py` | **Done** — schedules answer when they are next owed |
 | C | The **market-open gate moves off the cycle** and onto the triggers that need it. It used to guard every cycle, which is why nothing could ever fire at 09:00 ET. | `app/application.py` | **Done** for the brief; the cycle still keeps its own gate, which is what an alert should do |
 | D | **Notification policy becomes an owned concept.** There used to be one policy, hardwired into the per-asset cycle. The brief is the second, and it lives with the brief. | `app/morning_brief.py`, `analysis/brief.py` | **Done** — the brief owns both when it speaks and what it shows |
-| F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | `app/runtime_state.py` | **Partly** — what is *owed* survives a restart; what AIS *concluded* still does not |
+| F | **The baseline survives a restart**, so that "what changed" means something after the process is restarted. | `app/runtime_state.py` | **Done** — what is *owed* and what AIS *concluded* both survive a restart |
 | B | The market clock gains **transition queries**: when the next open and close are, and whether a session has closed since a given moment. | `utils/market_clock.py` | Open — needed by the close-anchored part of F |
 | E | **Market-level evidence appears.** Futures, volatility, yields and the dollar are not measurements of one asset; they are fetched once per cycle and shared. | `contracts/`, `pipeline/` | **Done** — futures, volatility and yields are retrieved once per pass and read beside each asset |
 

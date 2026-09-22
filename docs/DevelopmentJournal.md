@@ -1869,4 +1869,78 @@ The check is one request, and the answer was measured rather than assumed.
 
 ---
 
+### The second report, and the state that lets it be a second one
+
+**Context.** The project had one scheduled report and a rule that the second would wait
+until it had something to say that the first did not. It now does: the company layer reads
+the pre-market move, which exists thirty minutes before the open and is twelve hours stale
+by the time the morning report is written. The remaining question was structural rather
+than editorial, and it had been answered in advance: two reports must not share a name in
+the log, a key in the state file, an attempt count or a delivery state, or each would read
+the other's day as its own and would then either send a second copy or stay silent.
+
+**Decision.** The delivery policy moved to `app/scheduled_report.py`, and each report brings
+its own identity to it: its own schedule name, its own state key, its own attempts, its own
+delivery. The pre-market report is a second projection of the same brief model — not a
+second model — and it leads with a line naming which of its three layers of evidence
+answered.
+
+**Reason.** The two requirements pulled in opposite directions and both were right.
+Independence is about *state*: one report's failure must not touch the other's day. But the
+policy — when a report is owed, what a failed attempt does, how a retry is spaced — is one
+thing, and two copies of it would be two places for the runtime to disagree with itself
+about the same question. So the state is duplicated in the sense that matters, and the logic
+is written once. Reading the morning report's existing tests unchanged after the refactor is
+what made that safe: the policy was moved rather than altered, and eight hundred lines of
+assertions about its behaviour said so.
+
+**And what the layer line bought.** The report exists before all three kinds of evidence do.
+The alternative was to wait for all three before speaking, which means never speaking while
+any one of them is unconnected. Saying which of them answered is what makes an early report
+honest rather than thin: a reader told that the company layer answered for one asset of two
+knows what the rest of the message is and is not about.
+
+**Impact.** Three schedules run: the cycle, the morning report and the pre-market report.
+The state file holds a bucket per report, and the two reports can be delivered, retried or
+abandoned independently — which is tested by driving both through one state file rather than
+asserted in a comment.
+
+**Revisit.** When a third report is proposed. The test to apply is the one this round
+applied: could it be one of the existing reports sent at a different hour? If it could, it
+is not a report.
+
+---
+
+### A restart no longer resets what AIS knows
+
+**Context.** Two things made the runtime start again every time it started. The rating
+tracker forgot where each category stood, so the first reading after a restart carried no
+movement and every category read as newly rated. The change detector forgot what it had last
+said, so the first conclusion after a restart was sent again — measured twice in one
+evening, seven messages each time, caused by nothing but a restart. Both were documented as
+intentional, and the reasoning was honest as far as it went: a restarted process has not
+notified anyone, so it notifies again.
+
+**Decision.** Both baselines are written to the state file and restored at startup.
+
+**Reason.** The original reasoning confused *this process* with *this system*. A process that
+restarts has not notified anyone, but AIS has, and the reader does not care which process
+said it. The cost of forgetting was paid in the two currencies the project cares about: a
+message stream nobody asked for, and an observation baseline whose statistics are broken by
+every restart — a category that did not move looks like one that moved. Writing the
+baselines down invents nothing either: a restored baseline was recorded at a real moment, so
+the movement measured from it is movement that actually happened, including any that
+happened while the process was not running. A baseline that cannot be read is still treated
+as absent, and the first reading after that is honest about being the first.
+
+**Impact.** `state/runtime.json` gained a `baselines` section, kept apart from the report
+records because a baseline says where something stood and a record says what has been
+delivered. Restarting the runtime is now an ordinary operation rather than a decision with a
+visible cost.
+
+**Revisit.** If a baseline grows large enough to matter: it holds each category's
+measurements per symbol, which is small for seven assets and will need a look at fifty.
+
+---
+
 End of Document

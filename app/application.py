@@ -20,10 +20,13 @@ from analysis.analyzer import AssetAnalyzer
 from analysis.brief import DailyBrief, build_daily_brief
 from analysis.brief_report import render_daily_brief
 from analysis.mobile_report import render_mobile_report
+from analysis.premarket_report import render_premarket_brief
 from analysis.report import generate_report
-from app.morning_brief import BriefOutcome, MorningBrief
+from app.morning_brief import MorningBrief
+from app.premarket_brief import PreMarketBrief
 from app.rating_tracker import RatingTracker
-from app.runtime_state import RuntimeState
+from app.runtime_state import BaselineName, RuntimeState
+from app.scheduled_report import ReportOutcome
 from app.scheduler import IntervalSchedule, Scheduler
 from communication.bark import BarkNotifier
 from communication.change_detector import ChangeDetector, RecommendationFingerprint
@@ -45,11 +48,21 @@ from utils.daily_moment import DailyMoment
 from utils.exceptions import AISException
 from utils.market_clock import MarketClock
 
-# The hour the daily brief is owed at. It is stated in Beijing time because that is
-# where the reader is, and it falls half an hour before the United States session
-# opens, which is the point: the reader gets the freshest state before the market
-# they are exposed to starts moving again.
+# The hours AIS speaks at, stated in Beijing time because that is where the reader is.
+# They sit at the two ends of the United States day and they answer different questions,
+# which is the whole reason there are two of them rather than one sent twice.
+#
+# 09:00 Beijing is five hours after the previous session closed, with the extended
+# session
+# over: the completed state of a day that has ended, which is what the morning brief is
+# for.
 MORNING_BRIEF_MOMENT = DailyMoment.beijing(hour=9, minute=0)
+
+# 21:00 Beijing is thirty minutes before the next session opens, with the pre-market
+# already traded: what price is doing before the open, which is a fact that does not
+# exist
+# at the other hour and is stale by the time the next report is written.
+PREMARKET_BRIEF_MOMENT = DailyMoment.beijing(hour=21, minute=0)
 
 
 class Application:
@@ -78,6 +91,11 @@ class Application:
         self._config = config if config is not None else Config.from_environment()
         self._universe, self._universe_loaded = _resolve_universe(self._config)
         self._market_clock = market_clock if market_clock is not None else MarketClock()
+        self._state = RuntimeState(path=self._config.state_file)
+        # Held here rather than created inside the analyzer because the runtime is what
+        # writes it down: the tracker remembers where each category stood, and a restart
+        # that silently forgot it would turn every comparison into a first reading.
+        self._ratings = RatingTracker()
         self._environment_provider = (
             environment_provider
             if environment_provider is not None
@@ -88,7 +106,7 @@ class Application:
             if analyzer is not None
             else AssetAnalyzer(
                 build_market_data_provider(),
-                RatingTracker(),
+                self._ratings,
                 build_catalyst_event_provider(),
             )
         )
@@ -99,14 +117,19 @@ class Application:
     def run(self) -> None:
         """Run the runtime until the process is interrupted.
 
-        Two things are owed, and they are owed differently. The evaluation cycle
-        runs on an interval for as long as the process lives; the morning brief runs
-        once a day at an hour that comes from the clock. They are separate schedules
-        because they answer different questions, and neither borrows the other's
-        rules about when to speak.
+        Three things are owed, and they are owed differently. The evaluation cycle runs
+        on
+        an interval for as long as the process lives, and the two reports run once a day
+        each at an hour that comes from the clock. They are separate schedules because
+        they answer different questions, and neither borrows the other's rules about
+        when
+        to speak.
 
-        A keyboard interrupt stops the scheduler politely instead of tearing the
-        process down.
+        The baselines are restored before anything runs, because the first thing a
+        restored process would otherwise do is compare the world with nothing.
+
+        A keyboard interrupt stops the scheduler politely instead of tearing the process
+        down.
         """
         configure_logging(self._config)
         self._logger.info("%s %s started", APP_NAME, APP_VERSION)
@@ -120,12 +143,15 @@ class Application:
             self._config.analysis_interval_minutes,
         )
         self._logger.info("morning brief at %s", MORNING_BRIEF_MOMENT.describe())
+        self._logger.info("pre-market brief at %s", PREMARKET_BRIEF_MOMENT.describe())
+        self._restore_baselines()
         try:
             self._scheduler.run(
                 IntervalSchedule(
                     self._config.analysis_interval_minutes, self._run_cycle
                 ),
                 self._morning_brief(),
+                self._premarket_brief(),
             )
         except KeyboardInterrupt:
             self._logger.info("shutdown requested")
@@ -149,41 +175,108 @@ class Application:
         return self._environment_provider.fetch()
 
     def _morning_brief(self) -> MorningBrief:
-        """Return the daily brief, reading and writing what it has already done."""
-        return MorningBrief(
-            MORNING_BRIEF_MOMENT,
-            RuntimeState(path=self._config.state_file),
-            self._run_brief,
+        """Return the morning brief, reading and writing what it has already done."""
+        return MorningBrief(MORNING_BRIEF_MOMENT, self._state, self._run_brief)
+
+    def _premarket_brief(self) -> PreMarketBrief:
+        """Return the pre-market brief, with its own day and its own delivery.
+
+        It shares the state file with the morning brief and nothing else: its own key,
+        its own attempts and its own delivery state, so that one report failing or being
+        abandoned says nothing about the other.
+        """
+        return PreMarketBrief(
+            PREMARKET_BRIEF_MOMENT, self._state, self._run_premarket_brief
         )
 
-    def _run_brief(self) -> BriefOutcome:
-        """Produce and deliver one brief over the whole watch universe.
+    def _restore_baselines(self) -> None:
+        """Read back what the last process held, so a restart keeps a comparison.
 
-        No market clock and no change detector is consulted. The hour was chosen by
-        a reader and falls outside the United States session by definition, and a
-        brief that waits for a market to open never arrives at the hour it is owed
-        at. Nothing is suppressed either: the brief is expected, and "nothing has
-        changed" is what most days look like rather than a reason to say nothing.
+        Both baselines are written down for the same reason: the first reading after a
+        restart would otherwise look like a first reading ever, which turns a comparison
+        into a false statement — an unchanged conclusion announced as news, and a
+        measurement reported as never having moved.
+        """
+        ratings = self._ratings.restore(self._state.baseline(BaselineName.RATINGS))
+        recommendations = self._change_detector.restore(
+            self._state.baseline(BaselineName.RECOMMENDATIONS)
+        )
+        self._logger.info(
+            "restored %d rating baseline(s) and %d recommendation baseline(s)",
+            ratings,
+            recommendations,
+        )
+
+    def _commit_baselines(self) -> None:
+        """Write down what the process holds, so the next one starts where this is."""
+        self._state.record_baseline(BaselineName.RATINGS, self._ratings.snapshot())
+        self._state.record_baseline(
+            BaselineName.RECOMMENDATIONS, self._change_detector.snapshot()
+        )
+
+    def _run_brief(self) -> ReportOutcome:
+        """Produce and deliver the morning brief over the whole watch universe."""
+        return self._run_report(
+            render=render_daily_brief, title=_brief_title, name="brief"
+        )
+
+    def _run_premarket_brief(self) -> ReportOutcome:
+        """Produce and deliver the pre-market brief over the whole watch universe."""
+        return self._run_report(
+            render=render_premarket_brief,
+            title=_premarket_title,
+            name="pre-market brief",
+        )
+
+    def _run_report(
+        self,
+        *,
+        render: Callable[[DailyBrief], str],
+        title: Callable[[DailyBrief], str],
+        name: str,
+    ) -> ReportOutcome:
+        """Produce and deliver one report over the whole watch universe.
+
+        Both reports come through here, and they differ only in what they render and
+        what
+        they are called. They share this path deliberately: the analysis, the selection,
+        the delivery and the outcome are the same question, and a second copy of them
+        would be a second place for the two to disagree.
+
+        No market clock and no change detector is consulted. The hour was chosen by a
+        reader and falls outside the United States session by definition, and a report
+        that waits for a market to open never arrives at the hour it is owed at. Nothing
+        is suppressed either: a scheduled report is expected, and "nothing has changed"
+        is
+        what most days look like rather than a reason to say nothing.
 
         Every asset is analysed and **one** message is sent. Those are two different
-        sets, and they are deliberately not the same size: AIS has to look at
-        everything to know what matters, and a reader who receives seven messages
-        has received a feed rather than a brief. What each asset's run produced is
-        still written to the log in full, so nothing is dropped by being left out of
-        the message.
+        sets,
+        and they are deliberately not the same size: AIS has to look at everything to
+        know
+        what matters, and a reader who receives seven messages has received a feed
+        rather
+        than a report. What each asset's run produced is still written to the log in
+        full,
+        so nothing is dropped by being left out of the message.
 
-        Each asset is analysed as it is now, and the brief is built from those
-        results at the moment it is sent, so there is no earlier result delivered
-        late.
+        Each asset is analysed as it is now, and the report is built from those results
+        at
+        the moment it is sent, so there is no earlier result delivered late.
 
         **Delivery is reported rather than inferred from the status.** A run can fail
-        for two reasons that look alike from the outside and are not alike at all: an
-        asset that could not be analysed, and a message that reached nobody. Only the
-        second leaves the day owed, and telling them apart is why the outcome carries
-        both.
+        for
+        two reasons that look alike from the outside and are not alike at all: an asset
+        that could not be analysed, and a message that reached nobody. Only the second
+        leaves the day owed, and telling them apart is why the outcome carries both.
+
+        Args:
+            render: Projection that turns the brief model into the text this report is.
+            title: What the report is delivered under, for the channels that show one.
+            name: How the report is named in the log.
 
         Returns:
-            What the brief did, and whether it reached anybody.
+            What the report did, and whether it reached anybody.
         """
         moment = datetime.now(MORNING_BRIEF_MOMENT.timezone)
         environment = self._environment()
@@ -195,17 +288,20 @@ class Application:
                 without_data.append(asset.ticker)
                 continue
             results.append(result)
-            # The brief has just told the reader about this asset, so the next cycle
+            # The report has just told the reader about this asset, so the next cycle
             # must not announce the same conclusion again as though it were news.
             self._change_detector.observe(
                 RecommendationFingerprint.of(result.recommendation, asset.ticker)
             )
+        # The baselines are written after a report as well as after a cycle: a report is
+        # what the reader was told, and what the next process must not tell them again.
+        self._commit_baselines()
 
         if not results:
             self._logger.error(
-                "no asset could be analysed, so no brief was produced or sent"
+                "no asset could be analysed, so no %s was produced or sent", name
             )
-            return BriefOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
+            return ReportOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
 
         brief = build_daily_brief(
             results,
@@ -213,26 +309,24 @@ class Application:
             universe=self._universe,
             without_data=without_data,
         )
-        message = render_daily_brief(brief)
-        self._logger.info("brief: %s", _describe_brief(brief))
+        message = render(brief)
+        self._logger.info("%s: %s", name, _describe_brief(brief))
         for line in message.splitlines():
             self._logger.info("%s", line)
 
         delivered = True
         try:
-            self._deliver(_brief_title(brief), message)
-        except (
-            Exception
-        ) as error:  # noqa: BLE001 - the brief must not crash the runtime
+            self._deliver(title(brief), message)
+        except Exception as error:  # noqa: BLE001 - a report must not crash the runtime
             delivered = False
-            self._logger.error("the brief was not delivered: %s", error)
+            self._logger.error("the %s was not delivered: %s", name, error)
 
         status = (
             CycleStatus.NOTIFICATION_SENT
             if delivered and not without_data
             else CycleStatus.EVALUATION_FAILED
         )
-        return BriefOutcome(status=status, delivered=delivered)
+        return ReportOutcome(status=status, delivered=delivered)
 
     def _run_cycle(self) -> CycleStatus:
         """Run one evaluation cycle over every watched asset.
@@ -255,6 +349,10 @@ class Application:
         outcomes = [
             self._run_asset(asset, environment) for asset in self._universe.assets
         ]
+        # What the cycle concluded is written down here rather than only held in memory:
+        # a restart that forgot it would report movement that did not happen and repeat
+        # conclusions the reader has already been sent.
+        self._commit_baselines()
         summary = _summarise(outcomes)
         self._logger.info("cycle outcome: %s", _describe_outcomes(outcomes))
         return summary
@@ -423,6 +521,11 @@ def _brief_title(brief: DailyBrief) -> str:
     message does not already state.
     """
     return f"AIS 晨报 {brief.day.isoformat()}"
+
+
+def _premarket_title(brief: DailyBrief) -> str:
+    """Return the title the pre-market brief is delivered under."""
+    return f"AIS 盘前简报 {brief.day.isoformat()}"
 
 
 def _describe_brief(brief: DailyBrief) -> str:

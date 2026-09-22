@@ -10,10 +10,13 @@ grade was set at, the moment the current run of movement began, and what every
 measurement read at that moment. The last of those is what lets the report say
 *why* a category is moving rather than only that it is.
 
-The tracker is memory only, like the notification change detector. A restart
-begins again: the first rating a category is given after a restart carries no
-movement, because there is nothing to have accumulated from, and inventing a
-baseline would put a movement in the report that never happened.
+The tracker holds its standing in memory and can write it down, because a restart that
+silently reset it would turn a comparison into a false statement. A restored standing is
+a real one: it was recorded at a real moment, so the movement measured from it is
+movement that happened, including any that happened while the process was not running. A
+standing that cannot be restored is treated as absent, and the first rating after that
+carries no movement — which is the honest answer when there is nothing to compare with,
+not an invented baseline.
 
 Nothing here judges. The grade is decided elsewhere and handed in; the tracker
 only remembers it and measures how far the measurement has travelled since.
@@ -43,12 +46,121 @@ class _Standing:
     measurements: dict[MarketMetric, float] = field(default_factory=dict)
 
 
+def _key(symbol: str, category: Category) -> str:
+    """Return the key one standing is written under.
+
+    A separator that cannot appear in a ticker keeps the two halves unambiguous, so a
+    key is read back into exactly the pair it was written from.
+    """
+    return f"{symbol}|{category.value}"
+
+
+def _split_key(key: object) -> tuple[str, Category] | None:
+    """Return the symbol and category a written key names, or None."""
+    if not isinstance(key, str) or "|" not in key:
+        return None
+    symbol, _, name = key.partition("|")
+    if not symbol:
+        return None
+    try:
+        return symbol, Category(name)
+    except ValueError:
+        return None
+
+
+def _as_written(standing: _Standing) -> dict[str, object]:
+    """Return one standing as it is written down."""
+    return {
+        "grade": standing.grade,
+        "score": standing.score,
+        "changed_at": standing.changed_at.isoformat(),
+        "reason": standing.reason,
+        "since": standing.since.isoformat(),
+        "direction": standing.direction,
+        "measurements": {
+            metric.value: value for metric, value in standing.measurements.items()
+        },
+    }
+
+
+def _as_standing(raw: object) -> _Standing | None:
+    """Return the standing a written payload holds, or None when it cannot be read.
+
+    A half-read standing would put a movement in the report that rests on a baseline
+    nobody recorded, so anything unreadable is reported as absent instead.
+    """
+    if not isinstance(raw, Mapping):
+        return None
+    try:
+        return _Standing(
+            grade=int(raw["grade"]),
+            score=float(raw["score"]),
+            changed_at=datetime.fromisoformat(str(raw["changed_at"])),
+            reason=str(raw["reason"]),
+            since=datetime.fromisoformat(str(raw["since"])),
+            direction=int(raw.get("direction", 0)),
+            measurements=_as_measurements(raw.get("measurements")),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _as_measurements(raw: object) -> dict[MarketMetric, float]:
+    """Return the measurements a written payload holds, skipping anything unreadable."""
+    if not isinstance(raw, Mapping):
+        return {}
+    readings: dict[MarketMetric, float] = {}
+    for name, value in raw.items():
+        try:
+            metric = MarketMetric(name)
+        except ValueError:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        readings[metric] = float(value)
+    return readings
+
+
 class RatingTracker:
     """Remembers the standing of every category of every symbol it has seen."""
 
     def __init__(self) -> None:
         """Create a tracker that has seen nothing yet."""
         self._standings: dict[tuple[str, Category], _Standing] = {}
+
+    def snapshot(self) -> dict[str, object]:
+        """Return everything the tracker holds, in a form that can be written down.
+
+        The payload is the tracker's own shape and is read back by :meth:`restore`. It
+        is flat and keyed by symbol and category so that a state file stays readable by
+        a person, which is the only way a wrong baseline would ever be noticed.
+        """
+        return {
+            _key(symbol, category): _as_written(standing)
+            for (symbol, category), standing in self._standings.items()
+        }
+
+    def restore(self, payload: Mapping[str, object]) -> int:
+        """Fill the tracker from a written payload and report how many it restored.
+
+        A key or a standing that cannot be read is skipped rather than half-read, so a
+        corrupt entry costs its own comparison and nothing else.
+
+        Args:
+            payload: What :meth:`snapshot` wrote, or an empty mapping.
+
+        Returns:
+            How many standings were restored, for the log line that says so.
+        """
+        restored = 0
+        for key, raw in payload.items():
+            parsed = _split_key(key)
+            standing = _as_standing(raw)
+            if parsed is None or standing is None:
+                continue
+            self._standings[parsed] = standing
+            restored += 1
+        return restored
 
     def update(
         self,

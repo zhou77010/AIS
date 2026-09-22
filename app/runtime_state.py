@@ -62,6 +62,10 @@ _LOGGER_NAME = "runtime"
 # Where each report's record is written. A report with no bucket is a report that has
 # never been attempted.
 _REPORTS_KEY = "reports"
+# Where the continuous things are written. They are kept apart from the report records
+# because they answer a different question: a report record says what has been
+# delivered, and a baseline says where something stood.
+_BASELINES_KEY = "baselines"
 # The key the morning brief's record was written at the top level of the file, before
 # a report's state had a bucket of its own.
 _BRIEF_KEY = "morning_brief"
@@ -85,6 +89,24 @@ class ReportName(StrEnum):
     """
 
     MORNING_BRIEF = "morning_brief"
+    PREMARKET_BRIEF = "premarket_brief"
+
+
+class BaselineName(StrEnum):
+    """Something continuous the runtime remembers between restarts.
+
+    A report's record says what has already been delivered. A baseline says where
+    something stood, so the next reading can be compared with it. They answer different
+    questions and are kept apart: a baseline is never a claim about what the runtime
+    owes.
+
+    The set is deliberately small. A baseline exists to keep a measurement continuous
+    across a restart — because a restart that silently resets one turns a comparison
+    into a false statement — and not to remember everything a process happens to hold.
+    """
+
+    RATINGS = "ratings"
+    RECOMMENDATIONS = "recommendations"
 
 
 class ReportDelivery(StrEnum):
@@ -171,6 +193,43 @@ class RuntimeState:
         payload[_REPORTS_KEY] = reports
         self._forget_earlier(payload, name)
         self._write(payload)
+
+    def baseline(self, name: BaselineName) -> Mapping[str, object]:
+        """Return a baseline the runtime wrote down, or nothing when there is none.
+
+        The payload is returned as it was written, because the shape belongs to the
+        component that owns the baseline and not to this file. An unreadable or absent
+        baseline is an empty one: a component that cannot restore what it held simply
+        starts again, which is what it did before anything was written down.
+
+        Args:
+            name: Which baseline to read.
+
+        Returns:
+            The payload the component wrote, or an empty mapping.
+        """
+        held = self._read().get(_BASELINES_KEY)
+        raw = held.get(name.value) if isinstance(held, Mapping) else None
+        return dict(raw) if isinstance(raw, Mapping) else {}
+
+    def record_baseline(
+        self, name: BaselineName, payload: Mapping[str, object]
+    ) -> None:
+        """Write down a baseline so that a restart does not break its continuity.
+
+        The other baselines in the file are left as they were found, and so are the
+        report records: what one thing stood at is not evidence about another.
+
+        Args:
+            name: Which baseline is being written.
+            payload: The state the owning component produced.
+        """
+        written = self._read()
+        held = written.get(_BASELINES_KEY)
+        baselines = dict(held) if isinstance(held, Mapping) else {}
+        baselines[name.value] = dict(payload)
+        written[_BASELINES_KEY] = baselines
+        self._write(written)
 
     def _reports(self, payload: Mapping[str, object]) -> dict[str, object]:
         """Return the bucket per report, as a copy that is safe to write back."""

@@ -123,18 +123,18 @@ def render_daily_brief(brief: DailyBrief) -> str:
     """
     parts = [
         [
-            _header(brief),
-            _coverage(brief),
-            *_environment_lines(brief),
+            header_line(brief),
+            coverage_line(brief),
+            *environment_lines(brief),
             *_external_lines(brief),
         ],
         _body(brief),
-        _tail(brief),
+        tail_lines(brief),
     ]
-    return "\n".join(_joined(parts))
+    return "\n".join(joined_parts(parts))
 
 
-def _joined(parts: Sequence[Sequence[str]]) -> list[str]:
+def joined_parts(parts: Sequence[Sequence[str]]) -> list[str]:
     """Return the parts of a report, separated by a rule and never by a blank one.
 
     An empty part is dropped rather than written as two rules in a row, which is
@@ -150,12 +150,20 @@ def _joined(parts: Sequence[Sequence[str]]) -> list[str]:
     return lines
 
 
-def _header(brief: DailyBrief) -> str:
-    """Return the line naming the report, the day it is for, and the hour."""
-    return f"{_TITLE} · {brief.moment.strftime(_TIMESTAMP_FORMAT)} {_TIMEZONE_NOTE}"
+def header_line(brief: DailyBrief, *, title: str | None = None) -> str:
+    """Return the line naming the report, the day it is for, and the hour.
+
+    The title is a parameter because more than one report is rendered from this model: a
+    reader has to be able to tell which of them arrived, and the moment they were sent
+    at
+    is what tells them. Everything else about the line is the same, so the two cannot
+    disagree about the day or the hour.
+    """
+    name = _TITLE if title is None else title
+    return f"{name} · {brief.moment.strftime(_TIMESTAMP_FORMAT)} {_TIMEZONE_NOTE}"
 
 
-def _coverage(brief: DailyBrief) -> str:
+def coverage_line(brief: DailyBrief) -> str:
     """Return the line stating how much was looked at and how much earned a line.
 
     These are the two numbers the brief exists to keep apart. A reader who is told
@@ -164,7 +172,7 @@ def _coverage(brief: DailyBrief) -> str:
     return f"分析 {len(brief.analysed)} 个标的 · 今日优先 {len(brief.entries)} 个"
 
 
-def _environment_lines(brief: DailyBrief) -> list[str]:
+def environment_lines(brief: DailyBrief) -> list[str]:
     """Return what the market is doing, and what it means for the asset put first.
 
     This is the line that makes the brief a pre-market brief rather than a review: it
@@ -211,7 +219,7 @@ def _external_lines(brief: DailyBrief) -> list[str]:
         return [_NO_EXTERNAL_EVENT]
     return named_block(
         _EXTERNAL_LABEL,
-        [_event_phrase(event, brief) for event in brief.external_events],
+        [event_phrase(event, brief) for event in brief.external_events],
     )
 
 
@@ -268,7 +276,7 @@ def _entry_lines(
     exists to avoid.
     """
     result = entry.result
-    lines = [_entry_heading(entry)]
+    lines = [entry_heading(entry)]
     if entry is brief.entries[0]:
         rank = _rank_line(brief)
         if rank is not None:
@@ -278,7 +286,7 @@ def _entry_lines(
         lines.extend(wrap(judgement))
     event = own_event(result)
     if event is not None:
-        lines.extend(wrap(f"{_CATALYST_LABEL}{_event_phrase(event, brief)}"))
+        lines.extend(wrap(f"{_CATALYST_LABEL}{event_phrase(event, brief)}"))
     return lines
 
 
@@ -319,7 +327,7 @@ def _leads_on_conditions(brief: DailyBrief) -> bool:
     return grades[0] > max(grades[1:])
 
 
-def _entry_heading(entry: BriefEntry) -> str:
+def entry_heading(entry: BriefEntry) -> str:
     """Return the line naming one asset and where it stands.
 
     The reason is written beside the standing when there is one worth stating. Two
@@ -353,13 +361,13 @@ def _judgement(result: AnalysisResult) -> str | None:
     return opportunity_headline(opportunity.grade) + "。"
 
 
-def _event_phrase(event: CatalystEvent, brief: DailyBrief) -> str:
+def event_phrase(event: CatalystEvent, brief: DailyBrief) -> str:
     """Return one event as a short phrase: when it is and what it is."""
     name = catalyst_kind_label(event.kind, event.description)
     return f"{catalyst_when(event, brief.moment)} {name}"
 
 
-def _tail(brief: DailyBrief) -> list[str]:
+def tail_lines(brief: DailyBrief) -> list[str]:
     """Return the closing lines: who was left out, and where the data came from.
 
     A reader is owed both. The symbols that did not earn a line are named, so that

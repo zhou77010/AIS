@@ -23,10 +23,10 @@ from app.application import MORNING_BRIEF_MOMENT, Application
 from app.morning_brief import (
     BRIEF_RETRY_INTERVAL,
     MAX_BRIEF_ATTEMPTS,
-    BriefOutcome,
     MorningBrief,
 )
 from app.runtime_state import ReportDelivery, ReportName, ReportRecord, RuntimeState
+from app.scheduled_report import ReportOutcome
 from app.scheduler import IntervalSchedule, Scheduler
 from config.config import Config
 from contracts.market_data_provider import MarketDataSnapshot
@@ -316,20 +316,20 @@ def test_a_state_file_that_cannot_be_written_does_not_raise(tmp_path: Path) -> N
 # --------------------------------------------------------------------------
 
 
-def _delivered(status: CycleStatus = CycleStatus.NOTIFICATION_SENT) -> BriefOutcome:
+def _delivered(status: CycleStatus = CycleStatus.NOTIFICATION_SENT) -> ReportOutcome:
     """Return an outcome where the message reached at least one reader."""
-    return BriefOutcome(status=status, delivered=True)
+    return ReportOutcome(status=status, delivered=True)
 
 
-def _undelivered() -> BriefOutcome:
+def _undelivered() -> ReportOutcome:
     """Return an outcome where the message reached nobody."""
-    return BriefOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
+    return ReportOutcome(status=CycleStatus.EVALUATION_FAILED, delivered=False)
 
 
 def _counting_work(delivered: bool = True):
     calls: list[int] = []
 
-    def work() -> BriefOutcome:
+    def work() -> ReportOutcome:
         calls.append(1)
         return _delivered() if delivered else _undelivered()
 
@@ -942,9 +942,13 @@ def test_the_expanded_report_of_every_asset_is_still_produced(
         assert f"Asset: {ticker}" in caplog.text
 
 
-def test_the_application_schedules_both_things(
+def test_the_application_schedules_three_things(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # The cycle, and one schedule per report. The two reports are separate schedules
+    # with
+    # separate names, which is what lets either of them be owed, delivered or abandoned
+    # without the other knowing anything about it.
     analyzer = _Analyzer()
     application = _application(tmp_path, analyzer)
     ran: list[str] = []
@@ -955,7 +959,7 @@ def test_the_application_schedules_both_things(
 
     application.run()
 
-    assert ran == ["cycle", "morning-brief"]
+    assert ran == ["cycle", "morning-brief", "premarket-brief"]
 
 
 def test_the_brief_is_owed_once_a_day_at_nine_beijing() -> None:
