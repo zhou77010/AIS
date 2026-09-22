@@ -1155,6 +1155,43 @@ These are not waiting for data. They are things AIS has decided not to do:
 
 ---
 
+## Recorded during the paper-trading period, to change afterwards if the data says so
+
+The Decision Layer took over the recommendation on 2026-09-23: the report now says what
+the Decision concluded rather than what a placeholder score mapped to, and a decision can
+be favourable for one asset and not for another on the same pass. What follows was found
+while watching that happen. **None of it is being fixed now.** The period exists to
+observe, and changing a rule because one case looks wrong is how a validation turns into
+tuning. These are recorded so that they are decisions later rather than surprises.
+
+**1. The confidence a report shows is a placeholder.** Every message ends with
+`信心 100%`, carried from the assessment the Decision was reached from, and that
+assessment carries a constant. The Constitution defers the aggregation of confidence, so
+nothing here may compute one; but 100% is a claim the system has no basis for and it sits
+beside a real conclusion, which is the worst place for a number nobody earned. Options are
+to carry the inputs' confidence and coverage as they are, or to show nothing until an
+aggregation is defined. **Not to be decided by inventing a formula.**
+
+**2. The opportunity judgement's wording is confused with the Decision's.** The HPO block
+reads `当前机会一般，优先级不高`, which is about where an asset sits in the day's
+attention order, while the line beneath it now reads `结论 买入`, which is a Decision. A
+reader has no way to tell that the first sentence is not a qualification of the second,
+and "机会一般" beside "买入" reads as a contradiction. HPO's vocabulary and the Decision's
+vocabulary have to stop sounding like two opinions about one question.
+
+**3. The investment thesis is a status line, not a reason.** It currently reads
+`2 of 3 conditions hold; holds: risk, currency; does not hold: terms`, which states how a
+conclusion was reached rather than why the asset is worth a position. That is honest and
+traceable, and it is not what a reader needs. A real thesis — what is being bought and
+what would make it wrong — needs a vocabulary that does not exist yet.
+
+**4. Methodology, Policy and the Decision are frozen for the period.** One favourable
+case on one day is not evidence about a bar. Nothing in this list, and nothing observed in
+the daily statistics, changes a rule until the period has produced enough data to argue
+from.
+
+---
+
 ## Registered blockers
 
 - **AIS Standard Score direction.** Recorded in `docs/Constitution.md`. Until the
