@@ -22,6 +22,8 @@ from analysis.brief_report import render_daily_brief
 from analysis.mobile_report import render_mobile_report
 from analysis.premarket_report import render_premarket_brief
 from analysis.report import generate_report
+from app.decision_ledger import FILE_NAME as LEDGER_FILE_NAME
+from app.decision_ledger import DecisionLedger
 from app.morning_brief import MorningBrief
 from app.premarket_brief import PreMarketBrief
 from app.rating_tracker import RatingTracker
@@ -92,6 +94,11 @@ class Application:
         self._universe, self._universe_loaded = _resolve_universe(self._config)
         self._market_clock = market_clock if market_clock is not None else MarketClock()
         self._state = RuntimeState(path=self._config.state_file)
+        # What each pass concluded, kept beside the state so that a conclusion can be
+        # replayed later without being read back out of a message.
+        self._ledger = DecisionLedger(
+            path=self._config.state_file.parent / LEDGER_FILE_NAME
+        )
         # Held here rather than created inside the analyzer because the runtime is what
         # writes it down: the tracker remembers where each category stood, and a restart
         # that silently forgot it would turn every comparison into a first reading.
@@ -425,6 +432,7 @@ class Application:
 
         for line in generate_report(result).splitlines():
             self._logger.info("%s", line)
+        self._ledger.record(result, moment=datetime.now(UTC))
         return result
 
     def _notify(self, result: AnalysisResult) -> None:
