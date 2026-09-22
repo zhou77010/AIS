@@ -209,17 +209,41 @@ class Application:
             self._state.baseline(BaselineName.RECOMMENDATIONS)
         )
         self._logger.info(
-            "restored %d rating baseline(s) and %d recommendation baseline(s)",
+            "restored %d rating baseline(s) and %d recommendation baseline(s) from %s",
             ratings,
             recommendations,
+            self._state.path,
         )
 
     def _commit_baselines(self) -> None:
         """Write down what the process holds, so the next one starts where this is."""
-        self._state.record_baseline(BaselineName.RATINGS, self._ratings.snapshot())
-        self._state.record_baseline(
-            BaselineName.RECOMMENDATIONS, self._change_detector.snapshot()
+        ratings = self._ratings.snapshot()
+        recommendations = self._change_detector.snapshot()
+        # Instrumentation, and only instrumentation. A write that would leave the file
+        # holding less than it held is the shape of the fault this is here to find, so
+        # it is reported before it happens rather than discovered afterwards.
+        for name, snapshot in (
+            (BaselineName.RATINGS, ratings),
+            (BaselineName.RECOMMENDATIONS, recommendations),
+        ):
+            held = len(self._state.baseline(name))
+            if held and len(snapshot) < held:
+                self._logger.warning(
+                    "baseline shrink in %s: %s holds %d entries and this pass would "
+                    "write %d",
+                    name.value,
+                    self._state.path,
+                    held,
+                    len(snapshot),
+                )
+        self._logger.info(
+            "writing baselines to %s: %d rating(s), %d recommendation(s)",
+            self._state.path,
+            len(ratings),
+            len(recommendations),
         )
+        self._state.record_baseline(BaselineName.RATINGS, ratings)
+        self._state.record_baseline(BaselineName.RECOMMENDATIONS, recommendations)
 
     def _run_brief(self) -> ReportOutcome:
         """Produce and deliver the morning brief over the whole watch universe."""
