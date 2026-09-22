@@ -10,12 +10,76 @@
       "sets": ["core"]
     },
     {
-      "symbol": "CGDV",
-      "name": "Capital Group Dividend Value ETF",
-      "exchange": "NYSE Arca",
+      "symbol": "MSFT",
+      "name": "Microsoft Corporation",
+      "exchange": "NASDAQ",
       "currency": "USD",
-      "profile": "etf",
+      "sector": "technology",
       "sets": ["core"]
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "AVGO",
+      "name": "Broadcom Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "AMD",
+      "name": "Advanced Micro Devices, Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "MU",
+      "name": "Micron Technology, Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "ORCL",
+      "name": "Oracle Corporation",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "TSM",
+      "name": "Taiwan Semiconductor Manufacturing Company",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "PLTR",
+      "name": "Palantir Technologies Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "INTC",
+      "name": "Intel Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "technology",
+      "sets": ["growth"]
     },
     {
       "symbol": "APP",
@@ -27,12 +91,116 @@
       "sets": ["growth"]
     },
     {
+      "symbol": "GOOGL",
+      "name": "Alphabet Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "communication",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "META",
+      "name": "Meta Platforms, Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "communication",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "DIS",
+      "name": "The Walt Disney Company",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "communication",
+      "sets": ["core"]
+    },
+    {
       "symbol": "BABA",
       "name": "Alibaba Group Holding Limited",
       "exchange": "NYSE",
       "currency": "USD",
       "sector": "consumer_cyclical",
       "sets": ["growth"]
+    },
+    {
+      "symbol": "AMZN",
+      "name": "Amazon.com, Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "TSLA",
+      "name": "Tesla, Inc.",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "HD",
+      "name": "The Home Depot, Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "MCD",
+      "name": "McDonald's Corporation",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "NKE",
+      "name": "NIKE, Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "F",
+      "name": "Ford Motor Company",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_cyclical",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "MNST",
+      "name": "Monster Beverage Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "consumer_defensive",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "COST",
+      "name": "Costco Wholesale Corporation",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "consumer_defensive",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "PG",
+      "name": "The Procter & Gamble Company",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_defensive",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "WMT",
+      "name": "Walmart Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "consumer_defensive",
+      "sets": ["core"]
     },
     {
       "symbol": "HSBC",
@@ -44,11 +212,93 @@
       "sets": ["core"]
     },
     {
-      "symbol": "MNST",
-      "name": "Monster Beverage Corporation",
+      "symbol": "JPM",
+      "name": "JPMorgan Chase & Co.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "profile": "financial",
+      "sector": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "GS",
+      "name": "The Goldman Sachs Group, Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "profile": "financial",
+      "sector": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "BRK-B",
+      "name": "Berkshire Hathaway Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "V",
+      "name": "Visa Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "MA",
+      "name": "Mastercard Incorporated",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "financial",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "SOFI",
+      "name": "SoFi Technologies, Inc.",
       "exchange": "NASDAQ",
       "currency": "USD",
-      "sector": "consumer_defensive",
+      "sector": "financial",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "LLY",
+      "name": "Eli Lilly and Company",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "healthcare",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "UNH",
+      "name": "UnitedHealth Group Incorporated",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "healthcare",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "JNJ",
+      "name": "Johnson & Johnson",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "healthcare",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "MRK",
+      "name": "Merck & Co., Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "healthcare",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "ABBV",
+      "name": "AbbVie Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "healthcare",
       "sets": ["core"]
     },
     {
@@ -58,6 +308,86 @@
       "currency": "USD",
       "profile": "high_growth",
       "sector": "industrials",
+      "sets": ["growth"]
+    },
+    {
+      "symbol": "CAT",
+      "name": "Caterpillar Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "industrials",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "GE",
+      "name": "GE Aerospace",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "industrials",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "XOM",
+      "name": "Exxon Mobil Corporation",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "energy",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "CVX",
+      "name": "Chevron Corporation",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "energy",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "LIN",
+      "name": "Linde plc",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "sector": "materials",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "NEE",
+      "name": "NextEra Energy, Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "utilities",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "PLD",
+      "name": "Prologis, Inc.",
+      "exchange": "NYSE",
+      "currency": "USD",
+      "sector": "real_estate",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "SPY",
+      "name": "SPDR S&P 500 ETF Trust",
+      "exchange": "NYSE Arca",
+      "currency": "USD",
+      "profile": "etf",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "QQQ",
+      "name": "Invesco QQQ Trust",
+      "exchange": "NASDAQ",
+      "currency": "USD",
+      "profile": "etf",
+      "sets": ["core"]
+    },
+    {
+      "symbol": "XBI",
+      "name": "SPDR S&P Biotech ETF",
+      "exchange": "NYSE Arca",
+      "currency": "USD",
+      "profile": "etf",
       "sets": ["growth"]
     }
   ],
