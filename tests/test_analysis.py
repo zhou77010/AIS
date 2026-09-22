@@ -54,8 +54,16 @@ def test_analysis_preserves_evidence_traceability() -> None:
             for reference in category_score.evidence_references
         )
     )
+    decision = result.decision
 
-    assert result.recommendation.evidence_references == merged
+    assert decision is not None
+    # The recommendation expresses the Decision and adds nothing to it, so it carries
+    # the
+    # Decision's references rather than a second copy of the whole assessment's. A run
+    # with
+    # nothing to judge carries none, and says so rather than answering.
+    assert result.recommendation.evidence_references == decision.evidence_references
+    assert set(decision.evidence_references) <= set(merged)
     assert merged
 
 

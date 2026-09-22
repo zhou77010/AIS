@@ -1,66 +1,70 @@
-"""AIS recommendation engine.
+"""Expressing a Decision outward: the Recommendation.
 
-Turns an overall assessment into the recommendation for an asset. The current
-implementation is a placeholder: it maps the overall score onto a decision state
-through a temporary table and defines no investment methodology.
+A Recommendation is not a second judgement. It is the **same semantic object** as the
+Decision, under the name its consumers use, and it holds exactly what the Decision
+holds:
+the answer, the grounds for it, and the evidence it rests on. If it ever carried a
+field,
+a rule or a lifecycle of its own, it would be a second Decision Layer.
 
-Placeholder only. Real thresholds belong to Constitution.
+**What changed here.** This module used to map an overall score onto a state through a
+table of thresholds — a placeholder standing where a method would go. Measured over real
+runs it produced the same state for every asset, every time, and the score behind it was
+an average of raw measurements that treated a larger risk as a better reading. The
+Decision now reaches the conclusion, and this module does nothing but say it in the
+words
+a reader receives.
+
+**Two things here are provisional, and both are marked rather than hidden.**
+
+* **The words.** A Decision outcome is mapped onto the vocabulary that already exists,
+so
+  that no reader-facing surface has to change at the same time. Which words a Decision
+  should be said in is a naming decision that has not been taken.
+* **The confidence.** The Decision Layer carries no aggregate confidence — the
+  Constitution defers that aggregation — so the Recommendation carries the confidence it
+  was handed by the assessment the Decision was reached from. Nothing here computes one.
 """
 
 from __future__ import annotations
 
+from models.decision_result import DecisionOutcome, DecisionResult
 from models.decision_state import DecisionState
-from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 
-# Placeholder only. Real thresholds belong to Constitution.
-_PLACEHOLDER_BANDS = (
-    (80.0, DecisionState.BUY),
-    (60.0, DecisionState.ACCUMULATE),
-    (40.0, DecisionState.HOLD),
-)
-_PLACEHOLDER_FALLBACK_STATE = DecisionState.WATCH
-
-
-def _decision_state_for(score: float) -> DecisionState:
-    """Return the placeholder decision state for an overall score."""
-    for threshold, state in _PLACEHOLDER_BANDS:
-        if score >= threshold:
-            return state
-    return _PLACEHOLDER_FALLBACK_STATE
+# How each Decision outcome is said in the vocabulary the reader already knows. It
+# states
+# what the Decision concluded rather than reaching a second conclusion: an asset worth
+# becoming a standard position is said to be worth buying, one that is not is watched,
+# and
+# one whose question could not be answered is waited on.
+_WORDS: dict[DecisionOutcome, DecisionState] = {
+    DecisionOutcome.FAVOURABLE: DecisionState.BUY,
+    DecisionOutcome.NOT_FAVOURABLE: DecisionState.WATCH,
+    DecisionOutcome.CANNOT_ANSWER: DecisionState.WAIT,
+}
 
 
 class RecommendationEngine:
-    """Turns an overall assessment into a recommendation."""
+    """Turns a Decision into the object its consumers read."""
 
-    def recommend(self, assessment: OverallAssessment) -> Recommendation:
-        """Derive the recommendation from the overall assessment.
-
-        Placeholder only: the decision state comes from a temporary score table
-        and the thesis states that fact. Real thresholds belong to Constitution.
-        The evidence references of every category score are merged and carried
-        forward, so the conclusion stays explainable.
+    def recommend(
+        self, decision: DecisionResult, *, confidence: float
+    ) -> Recommendation:
+        """Return the Recommendation that expresses one Decision.
 
         Args:
-            assessment: Overall assessment of the asset.
+            decision: The Decision reached for the asset.
+            confidence: Confidence to carry, taken from the judgements the Decision was
+                reached from. It is carried, never computed here.
 
         Returns:
-            Recommendation drawn from the assessment.
+            The Recommendation, holding the Decision's answer, grounds and evidence.
         """
-        references = tuple(
-            dict.fromkeys(
-                reference
-                for category_score in assessment.category_scores
-                for reference in category_score.evidence_references
-            )
-        )
         return Recommendation(
-            decision_state=_decision_state_for(assessment.overall_score),
-            confidence=assessment.confidence,
-            investment_thesis=(
-                f"Placeholder decision from overall score "
-                f"{assessment.overall_score:.2f}; real scoring belongs to the "
-                "Constitution."
-            ),
-            evidence_references=references,
+            decision_state=_WORDS[decision.outcome],
+            confidence=confidence,
+            investment_thesis=decision.summary,
+            evidence_references=decision.evidence_references,
+            summary=decision.summary,
         )

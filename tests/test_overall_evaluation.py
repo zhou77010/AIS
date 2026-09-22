@@ -20,10 +20,37 @@ from models.asset_profile import AssetProfile
 from models.category import Category
 from models.category_score import CategoryScore
 from models.coverage import Coverage
+from models.decision_result import (
+    ConditionOutcome,
+    DecisionCondition,
+    DecisionOutcome,
+    DecisionResult,
+)
 from models.decision_state import DecisionState
 from models.overall_assessment import OverallAssessment
 from models.recommendation import Recommendation
 from pipeline.evidence_builder import EvidenceBuilder
+
+
+def _decision(
+    outcome: DecisionOutcome,
+    *,
+    summary: str = "1 of 3 conditions hold",
+    references: tuple[str, ...] = ("ev-1",),
+) -> DecisionResult:
+    """Return a Decision as the Decision Layer produces one."""
+    return DecisionResult(
+        outcome=outcome,
+        conditions=(
+            ConditionOutcome(
+                condition=DecisionCondition.TERMS,
+                satisfied=outcome is DecisionOutcome.FAVOURABLE,
+                reason="valuation reads 4 against a bar of 4",
+            ),
+        ),
+        summary=summary,
+        evidence_references=references,
+    )
 
 
 def _category_score(score: float, *references: str) -> CategoryScore:
@@ -97,43 +124,44 @@ def test_overall_evaluator_handles_no_category_scores() -> None:
 
 
 @pytest.mark.parametrize(
-    ("overall_score", "expected"),
+    ("outcome", "expected"),
     [
-        (100.0, DecisionState.BUY),
-        (80.0, DecisionState.BUY),
-        (79.9, DecisionState.ACCUMULATE),
-        (60.0, DecisionState.ACCUMULATE),
-        (59.9, DecisionState.HOLD),
-        (40.0, DecisionState.HOLD),
-        (39.9, DecisionState.WATCH),
-        (0.0, DecisionState.WATCH),
+        (DecisionOutcome.FAVOURABLE, DecisionState.BUY),
+        (DecisionOutcome.NOT_FAVOURABLE, DecisionState.WATCH),
+        (DecisionOutcome.CANNOT_ANSWER, DecisionState.WAIT),
     ],
 )
-def test_recommendation_engine_placeholder_mapping(
-    overall_score: float, expected: DecisionState
+def test_the_recommendation_says_what_the_decision_concluded(
+    outcome: DecisionOutcome, expected: DecisionState
 ) -> None:
-    recommendation = RecommendationEngine().recommend(_assessment(overall_score))
+    # The recommendation is the Decision under its consumer-facing name: it adds no
+    # judgement of its own, and it must not be able to reach a state the Decision did
+    # not.
+    recommendation = RecommendationEngine().recommend(
+        _decision(outcome), confidence=0.5
+    )
 
     assert recommendation.decision_state is expected
+    assert recommendation.confidence == 0.5
 
 
 def test_recommendation_engine_preserves_evidence_traceability() -> None:
-    assessment = _assessment(
-        70.0,
-        _category_score(10.0, "ev-1", "ev-2"),
-        _category_score(20.0, "ev-2", "ev-3"),
-    )
+    decision = _decision(DecisionOutcome.FAVOURABLE, references=("ev-1", "ev-2"))
 
-    recommendation = RecommendationEngine().recommend(assessment)
+    recommendation = RecommendationEngine().recommend(decision, confidence=1.0)
 
-    assert recommendation.evidence_references == ("ev-1", "ev-2", "ev-3")
+    assert recommendation.evidence_references == ("ev-1", "ev-2")
 
 
-def test_recommendation_engine_carries_the_assessment_confidence() -> None:
-    recommendation = RecommendationEngine().recommend(_assessment(50.0))
+def test_recommendation_engine_states_the_decision_rather_than_a_placeholder() -> None:
+    # What the module used to do was map an overall score through a table of thresholds,
+    # and say so in the thesis. The thesis is now the Decision's own grounds.
+    decision = _decision(DecisionOutcome.NOT_FAVOURABLE, summary="does not hold: terms")
 
-    assert recommendation.confidence == 0.7
-    assert "Placeholder" in recommendation.investment_thesis
+    recommendation = RecommendationEngine().recommend(decision, confidence=0.7)
+
+    assert recommendation.investment_thesis == "does not hold: terms"
+    assert "Placeholder" not in recommendation.investment_thesis
 
 
 def test_implementations_match_their_contracts() -> None:
@@ -157,21 +185,22 @@ def test_complete_pipeline_produces_a_recommendation() -> None:
 
     category_score = ValuationEvaluator().evaluate(evidence)
     assessment = OverallEvaluator().evaluate((category_score,))
-    recommendation = RecommendationEngine().recommend(assessment)
+    recommendation = RecommendationEngine().recommend(
+        _decision(DecisionOutcome.FAVOURABLE), confidence=assessment.confidence
+    )
 
     assert isinstance(category_score, CategoryScore)
     assert isinstance(assessment, OverallAssessment)
     assert isinstance(recommendation, Recommendation)
-    assert recommendation.evidence_references == category_score.evidence_references
 
 
 def test_complete_pipeline_is_deterministic() -> None:
     evidence = EvidenceBuilder().build(_asset())
 
     def run() -> Recommendation:
-        category_score = ValuationEvaluator().evaluate(evidence)
+        ValuationEvaluator().evaluate(evidence)
         return RecommendationEngine().recommend(
-            OverallEvaluator().evaluate((category_score,))
+            _decision(DecisionOutcome.FAVOURABLE), confidence=1.0
         )
 
     assert run() == run()

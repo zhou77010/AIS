@@ -36,9 +36,20 @@ from models.asset import Asset
 from models.catalyst_event import CatalystEvent
 from models.category import Category
 from models.category_rating import CategoryRating
+from models.decision_state import DecisionState
 from models.opportunity_assessment import OpportunityAssessment
 from models.recommendation import Recommendation
 from pipeline.evidence_builder import EvidenceBuilder
+
+# What a result carries until the Decision it is about has been reached. It is not a
+# conclusion and is never shown: the recommendation is written once the Decision exists,
+# and the method never returns before then.
+_UNEARNED = Recommendation(
+    decision_state=DecisionState.WATCH,
+    confidence=0.0,
+    investment_thesis="",
+    evidence_references=(),
+)
 
 _LOGGER_NAME = "analysis"
 
@@ -125,11 +136,10 @@ class AssetAnalyzer:
             evaluator.evaluate(evidence) for evaluator in self._category_evaluators
         )
         assessment = self._overall_evaluator.evaluate(category_scores)
-        recommendation = self._recommendation_engine.recommend(assessment)
         result = AnalysisResult(
             asset=asset,
             assessment=assessment,
-            recommendation=recommendation,
+            recommendation=_UNEARNED,
             events=events,
             market_data=market_data,
             environment=environment,
@@ -137,6 +147,16 @@ class AssetAnalyzer:
         result = replace(result, ratings=self._rate(asset, result))
         result = replace(result, opportunity=self._assess_opportunity(result))
         result = replace(result, decision=DecisionAssessor().assess(result))
+        # The recommendation is the Decision's outward expression, so it is filled in
+        # once
+        # the Decision exists and never before: an asset leaves this method with the
+        # conclusion that was actually reached about it.
+        result = replace(
+            result,
+            recommendation=self._recommendation_engine.recommend(
+                result.decision, confidence=assessment.confidence
+            ),
+        )
         return replace(result, insights=build_insights(result))
 
     def _assess_opportunity(self, result: AnalysisResult) -> OpportunityAssessment:
